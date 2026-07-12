@@ -1,0 +1,6 @@
+{
+  "name": "3D Furniture Configurator",
+  "description": "An interactive 3D and Augmented Reality product configurator for premium furniture brands, featuring real-time material customization, dimensional sizing, and copy-paste embedding capabilities for standard websites.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
