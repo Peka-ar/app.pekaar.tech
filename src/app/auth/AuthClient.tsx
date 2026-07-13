@@ -5,16 +5,14 @@ import { PRODUCTS } from "@/lib/types";
 import SignInForm from "@/components/auth/SignInForm";
 import SignUpForm from "@/components/auth/SignUpForm";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
-import OnboardingWizard from "@/components/auth/OnboardingWizard";
 import Link from "next/link";
 import Image from "next/image";
 import { Box, ArrowLeft } from 'lucide-react';
 
 type AuthView = 'signin' | 'signup' | 'forgot-password';
 
-export default function AuthClient({ showOnboardingInitially }: { showOnboardingInitially: boolean }) {
+export default function AuthClient() {
   const [view, setView] = useState<AuthView>('signin');
-  const [showOnboarding, setShowOnboarding] = useState(showOnboardingInitially);
 
   const visualProduct = PRODUCTS[0];
 
@@ -73,8 +71,6 @@ export default function AuthClient({ showOnboardingInitially }: { showOnboarding
           {view === 'forgot-password' && <ForgotPasswordForm onNavigate={(v) => setView(v as AuthView)} />}
         </div>
       </div>
-
-      {showOnboarding && <OnboardingWizard onClose={() => setShowOnboarding(false)} />}
     </div>
   );
 }

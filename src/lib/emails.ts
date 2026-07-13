@@ -17,6 +17,14 @@ async function sendEmail(to: string, subject: string, html: string) {
   });
 }
 
+export async function sendVerificationOtpEmail(email: string, otp: string) {
+  await sendEmail(
+    email,
+    "Your STUDIO.V verification code",
+    `<p>Welcome to STUDIO.V.</p><p>Use this one-time code to verify your email:</p><p style="font-size:24px;font-weight:700;letter-spacing:0.3em;">${otp}</p><p>This code expires in 10 minutes.</p>`
+  );
+}
+
 export async function sendVerificationEmail(email: string, token: string) {
   const verifyUrl = `${appUrl}/auth/verify?token=${token}`;
 

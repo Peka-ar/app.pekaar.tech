@@ -113,7 +113,7 @@ export async function getUserProjects() {
       assetUrls: true,
       assignedTo: true,
       createdAt: true,
-      brand: { select: { id: true, name: true, email: true, role: true } },
+      brand: { select: { id: true, name: true, email: true, role: true, productCategory: true, storefrontPlatform: true, catalogSize: true } },
     },
   });
 

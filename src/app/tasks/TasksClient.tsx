@@ -1,10 +1,11 @@
 "use client";
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useTransition } from 'react';
 import { 
   Plus, UploadCloud, CheckCircle2, AlertCircle, Loader2, Ruler, X, Check,
   Search, Filter, List as ListIcon, LayoutGrid, Clock, Edit3, Eye, Box as BoxIcon
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import type { Product } from "@/lib/types";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
@@ -15,6 +16,37 @@ import { UploadDropzone } from "@/lib/uploadthing";
 import { ProjectStatus } from "@prisma/client";
 import { useRouter } from "next/navigation";
 
+type TaskBrand = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  productCategory?: string | null;
+  storefrontPlatform?: string | null;
+  catalogSize?: string | null;
+};
+
+type AssignedUser = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
+type TaskJob = {
+  id: string;
+  name: string;
+  sku: string | null;
+  instructions: string | null;
+  dimensions: unknown;
+  status: ProjectStatus;
+  referenceUrls: string[];
+  assetUrls: unknown;
+  assignedTo: string | null;
+  createdAt: Date | string;
+  brand: TaskBrand;
+  assignedUser?: AssignedUser | null;
+};
+
 const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] = [
   { id: 'PENDING', label: 'Queued', icon: Clock },
   { id: 'IN_PROGRESS', label: 'Processing', icon: Loader2 },
@@ -22,14 +54,17 @@ const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] =
   { id: 'PUBLISHED', label: 'Published', icon: CheckCircle2 },
 ];
 
-const getThumbnail = (project: any) => project.referenceUrls?.[0] || '';
-const getSku = (project: any) => project.sku || 'No SKU';
-const getAssigneeName = (project: any) => project.assignedUser?.name || project.assignedUser?.email || 'Unassigned';
+const getThumbnail = (project: TaskJob) => project.referenceUrls?.[0] || '';
+const getSku = (project: TaskJob) => project.sku || 'No SKU';
+const getAssigneeName = (project: TaskJob) => project.assignedUser?.name || project.assignedUser?.email || 'Unassigned';
+const getProductCategory = (project: TaskJob) => project.brand?.productCategory?.trim() || 'Not specified';
+const getStorefrontPlatform = (project: TaskJob) => project.brand?.storefrontPlatform?.trim() || 'Not specified';
+const getCatalogSize = (project: TaskJob) => project.brand?.catalogSize?.trim() || 'Not specified';
 const getInitials = (name: string) => name === 'Unassigned' ? 'UN' : name.slice(0, 2).toUpperCase();
-const getCreatedDate = (project: any) => new Date(project.createdAt).toLocaleDateString();
-const getAssets = (project: any) => (project.assetUrls && typeof project.assetUrls === 'object' ? project.assetUrls : {}) as { glb?: string; usdz?: string };
-const getDimensions = (project: any) => (project.dimensions && typeof project.dimensions === 'object' ? project.dimensions : {}) as { width?: number; height?: number; depth?: number; length?: number; unit?: string };
-const getViewerProduct = (project: any): Product | null => {
+const getCreatedDate = (project: TaskJob) => new Date(project.createdAt).toLocaleDateString();
+const getAssets = (project: TaskJob) => (project.assetUrls && typeof project.assetUrls === 'object' ? project.assetUrls : {}) as { glb?: string; usdz?: string };
+const getDimensions = (project: TaskJob) => (project.dimensions && typeof project.dimensions === 'object' ? project.dimensions : {}) as { width?: number; height?: number; depth?: number; length?: number; unit?: string };
+const getViewerProduct = (project: TaskJob): Product | null => {
   const glb = getAssets(project).glb;
   if (!glb) return null;
 
@@ -51,27 +86,22 @@ const getViewerProduct = (project: any): Product | null => {
   };
 };
 
-export default function TasksClient({ initialJobs, role }: { initialJobs: any[], role: string }) {
+export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJob[], role: string }) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
-  const [jobs, setJobs] = useState<any[]>(initialJobs);
-
-  useEffect(() => {
-    setJobs(initialJobs);
-  }, [initialJobs]);
+  const [, startTransition] = useTransition();
   const [viewMode, setViewMode] = useState<'board' | 'list'>('board');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
-  const [reviewJob, setReviewJob] = useState<any | null>(null);
+  const [reviewJob, setReviewJob] = useState<TaskJob | null>(null);
   const [isRevisionModalOpen, setIsRevisionModalOpen] = useState(false);
-  const [viewJobParams, setViewJobParams] = useState<any | null>(null);
+  const [viewJobParams, setViewJobParams] = useState<TaskJob | null>(null);
   const [uploadedImageUrls, setUploadedImageUrls] = useState<string[]>([]);
   const [uploadedAssetUrls, setUploadedAssetUrls] = useState<{glb?: string; usdz?: string}>({});
-  const [viewPublishedJob, setViewPublishedJob] = useState<any | null>(null);
+  const [viewPublishedJob, setViewPublishedJob] = useState<TaskJob | null>(null);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<any | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
 
-  const filteredJobs = jobs.filter(job => {
+  const filteredJobs = initialJobs.filter(job => {
     const matchesSearch = job.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                           getSku(job).toLowerCase().includes(searchQuery.toLowerCase()) ||
                           job.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -229,8 +259,8 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                         tabIndex={0}
                       >
                         {getThumbnail(job) && (
-                          <div className="w-full h-32 bg-[#F9F8F6] rounded-xl mb-3 overflow-hidden border border-[#E5E2DD]">
-                            <img src={getThumbnail(job)} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                          <div className="relative w-full h-32 bg-[#F9F8F6] rounded-xl mb-3 overflow-hidden border border-[#E5E2DD]">
+                            <Image src={getThumbnail(job)} alt="" fill sizes="320px" className="object-cover group-hover:scale-105 transition-transform duration-700" />
                           </div>
                         )}
                         <div className="flex justify-between items-start mb-2">
@@ -238,6 +268,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                           {getStatusIndicator(job.status)}
                         </div>
                         <h4 className="text-sm font-medium text-[#1A1A1A] mb-1.5 leading-tight">{job.name}</h4>
+                        {role === 'ADMIN' && (
+                          <p className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670]">
+                            Category: {getProductCategory(job)}
+                          </p>
+                        )}
                         
                         <div className="flex justify-between items-center mt-4">
                           <div className="flex items-center gap-2">
@@ -303,7 +338,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
                         {getThumbnail(job) ? (
-                          <img src={getThumbnail(job)} alt="" className="w-10 h-10 rounded-lg object-cover border border-[#E5E2DD]" />
+                          <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[#E5E2DD]">
+                            <Image src={getThumbnail(job)} alt="" fill sizes="40px" className="object-cover" />
+                          </div>
                         ) : (
                           <div className="w-10 h-10 rounded-lg bg-[#EFEDEA] border border-[#E5E2DD] flex items-center justify-center">
                             <BoxIcon className="w-4 h-4 text-[#A3A3A3]" />
@@ -312,6 +349,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                         <div>
                           <div className="text-sm font-medium text-[#1A1A1A]">{job.name}</div>
                           <div className="text-[10px] font-mono text-[#7A7670]">{getSku(job)}</div>
+                          {role === 'ADMIN' && (
+                            <div className="text-[10px] font-mono text-[#7A7670]">Category: {getProductCategory(job)}</div>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -451,8 +491,8 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                   {uploadedImageUrls.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-3">
                       {uploadedImageUrls.map((url, i) => (
-                        <div key={i} className="w-16 h-16 rounded-xl overflow-hidden border border-[#E5E2DD] bg-white shadow-sm">
-                          <img src={url} alt={`Uploaded ${i + 1}`} className="w-full h-full object-cover" />
+                        <div key={url} className="relative w-16 h-16 rounded-xl overflow-hidden border border-[#E5E2DD] bg-white shadow-sm">
+                          <Image src={url} alt={`Uploaded ${i + 1}`} fill sizes="64px" className="object-cover" />
                         </div>
                       ))}
                     </div>
@@ -604,6 +644,28 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                   </div>
                 </section>
 
+                {role === 'ADMIN' && (
+                  <section>
+                    <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
+                       Brand Context
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Category</span>
+                        <p className="text-sm font-medium text-[#1A1A1A]">{getProductCategory(viewJobParams)}</p>
+                      </div>
+                      <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Platform</span>
+                        <p className="text-sm font-medium text-[#1A1A1A]">{getStorefrontPlatform(viewJobParams)}</p>
+                      </div>
+                      <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Catalog Size</span>
+                        <p className="text-sm font-medium text-[#1A1A1A]">{getCatalogSize(viewJobParams)}</p>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
                 <section>
                   <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
                      Physical Dimensions (CM)
@@ -654,7 +716,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: any[],
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                     {(viewJobParams.referenceUrls || []).map((url: string, index: number) => (
                       <div key={url} className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-[#F9F8F6] aspect-square flex flex-col relative">
-                        <img src={url} alt={`Reference ${index + 1}`} className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-multiply" />
+                        <Image src={url} alt={`Reference ${index + 1}`} fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover opacity-80 mix-blend-multiply" />
                         <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm border-t border-[#E5E2DD] py-1.5 px-2">
                           <span className="text-[9px] font-medium text-[#1A1A1A] uppercase tracking-wider">Reference {index + 1}</span>
                         </div>

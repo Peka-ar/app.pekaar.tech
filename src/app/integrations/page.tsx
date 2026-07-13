@@ -13,11 +13,18 @@ interface IntegrationProject {
 export default async function IntegrationsPage() {
   let apiKey = "pk_live_placeholder";
   let projects: IntegrationProject[] = [];
+  let storefrontPlatform: string | null = null;
 
   try {
     const session = await auth();
     if (session?.user?.id) {
       apiKey = `pk_live_${createHash("sha256").update(session.user.id).digest("hex").slice(0, 24)}`;
+
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { storefrontPlatform: true },
+      });
+      storefrontPlatform = user?.storefrontPlatform ?? null;
 
       projects = await prisma.project.findMany({
         where: { brandId: session.user.id, status: "PUBLISHED" },
@@ -32,5 +39,5 @@ export default async function IntegrationsPage() {
     console.error("Failed to fetch integration data:", error);
   }
 
-  return <IntegrationsClient apiKey={apiKey} projects={projects} />;
+  return <IntegrationsClient apiKey={apiKey} projects={projects} storefrontPlatform={storefrontPlatform} />;
 }

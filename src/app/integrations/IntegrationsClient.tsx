@@ -10,7 +10,13 @@ interface IntegrationProject {
   embedCode: string;
 }
 
-export default function IntegrationsClient({ apiKey, projects }: { apiKey: string; projects: IntegrationProject[] }) {
+type IntegrationsClientProps = {
+  apiKey: string;
+  projects: IntegrationProject[];
+  storefrontPlatform: string | null;
+};
+
+export default function IntegrationsClient({ apiKey, projects, storefrontPlatform }: IntegrationsClientProps) {
   const [copied, setCopied] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState(projects[0]?.id ?? "");
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -18,6 +24,15 @@ export default function IntegrationsClient({ apiKey, projects }: { apiKey: strin
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
   const embedCode = selectedProject?.embedCode ?? "Publish a project to generate an iframe embed code.";
+  const normalizedPlatform = storefrontPlatform?.trim().toLowerCase();
+  const platformGuidance =
+    normalizedPlatform === "shopify"
+      ? "For Shopify, paste this iframe into a custom liquid block or product template section. It loads the published STUDIO.V viewer automatically."
+      : normalizedPlatform === "custom"
+        ? "For a custom storefront, paste this iframe into your product detail page where the 3D viewer should appear."
+        : storefrontPlatform
+          ? `For ${storefrontPlatform}, paste this iframe into the product page area that supports custom HTML or embeds.`
+          : "Paste this iframe into your product page. If your storefront supports custom HTML, no additional SDK setup is required.";
 
   const handleCopy = (text: string, id: string) => {
     void navigator.clipboard.writeText(text);
@@ -46,7 +61,7 @@ export default function IntegrationsClient({ apiKey, projects }: { apiKey: strin
               </div>
               <div className="p-6 space-y-4">
                 <p className="text-sm text-[#4A4742]">
-                  Paste this iframe into your product page. It loads the published STUDIO.V viewer and records views, interactions, and AR launches automatically.
+                  {platformGuidance}
                 </p>
                 <div className="rounded-2xl border border-[#E5E2DD] bg-[#F9F8F6] p-4">
                   <h3 className="text-sm font-medium text-[#1A1A1A] mb-2">Requirements</h3>

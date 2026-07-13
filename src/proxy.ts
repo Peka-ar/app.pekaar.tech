@@ -8,6 +8,9 @@ export const { auth } = NextAuth(authConfig);
 const protectedRoutes = {
   "/dashboard": ["BRAND", "ADMIN"],
   "/tasks": ["BRAND", "ADMIN"],
+  "/notifications": ["BRAND", "ADMIN"],
+  "/integrations": ["BRAND", "ADMIN"],
+  "/analytics": ["BRAND", "ADMIN"],
   "/billing": ["BRAND", "ADMIN"],
 };
 
@@ -15,6 +18,20 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const userRole = (req.auth?.user as { role?: string } | undefined)?.role;
+  const onboarded = (req.auth?.user as { onboarded?: boolean } | undefined)?.onboarded;
+  const isOnboardingRoute = nextUrl.pathname.startsWith("/onboarding");
+
+  if (isLoggedIn && nextUrl.pathname === "/auth" && onboarded) {
+    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+  }
+
+  if (isOnboardingRoute && !isLoggedIn) {
+    return NextResponse.redirect(new URL("/auth", nextUrl));
+  }
+
+  if (isOnboardingRoute && onboarded) {
+    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+  }
 
   // Public routes — skip auth checks
   if (nextUrl.pathname === '/' || nextUrl.pathname.startsWith('/auth') || nextUrl.pathname.startsWith('/embed')) {
@@ -37,15 +54,13 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
   }
 
-  // 3. If logged in, redirect away from the auth page
-  if (isLoggedIn && nextUrl.pathname === "/auth") {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+  if (requiredRoles && isLoggedIn && onboarded === false) {
+    return NextResponse.redirect(new URL("/onboarding", nextUrl));
   }
-
   return NextResponse.next();
 });
 
 // Optionally, don't invoke Middleware on some paths
 export const config = {
-  matcher: ["/dashboard/:path*", "/tasks/:path*", "/billing/:path*", "/auth/:path*", "/embed/:path*"],
+  matcher: ["/dashboard/:path*", "/tasks/:path*", "/notifications/:path*", "/integrations/:path*", "/analytics/:path*", "/billing/:path*", "/auth/:path*", "/onboarding/:path*", "/embed/:path*"],
 };

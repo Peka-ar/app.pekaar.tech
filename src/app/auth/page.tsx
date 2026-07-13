@@ -1,13 +1,14 @@
 import { auth } from "@/auth";
 import AuthClient from "./AuthClient";
-
-type SessionUserWithOnboarding = {
-  onboarded?: boolean;
-};
+import { redirect } from "next/navigation";
 
 export default async function AuthPage() {
   const session = await auth();
-  const user = session?.user as SessionUserWithOnboarding | undefined;
+  const user = session?.user as { onboarded?: boolean } | undefined;
 
-  return <AuthClient showOnboardingInitially={Boolean(user && !user.onboarded)} />;
+  if (user && !user.onboarded) {
+    redirect("/onboarding");
+  }
+
+  return <AuthClient />;
 }

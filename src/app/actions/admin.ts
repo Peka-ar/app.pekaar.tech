@@ -5,15 +5,19 @@ import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import { ProjectStatus, Prisma, Role } from "@prisma/client";
 
+type SessionUserWithRole = {
+  role?: Role;
+};
+
 export async function getAllTasks() {
   const session = await auth();
-  if (!session?.user?.id || (session.user as any).role !== Role.ADMIN) {
+  if (!session?.user?.id || (session.user as SessionUserWithRole).role !== Role.ADMIN) {
     throw new Error("Unauthorized");
   }
 
   const tasks = await prisma.project.findMany({
     orderBy: { createdAt: "desc" },
-    include: { brand: { select: { id: true, name: true, email: true, role: true } } },
+    include: { brand: { select: { id: true, name: true, email: true, role: true, productCategory: true, storefrontPlatform: true, catalogSize: true } } },
   });
 
   const assignedUserIds = tasks.flatMap((task) => task.assignedTo ? [task.assignedTo] : []);
@@ -31,7 +35,7 @@ export async function getAllTasks() {
 
 export async function claimProject(projectId: string) {
   const session = await auth();
-  if (!session?.user?.id || (session.user as any).role !== Role.ADMIN) {
+  if (!session?.user?.id || (session.user as SessionUserWithRole).role !== Role.ADMIN) {
     throw new Error("Unauthorized");
   }
 
@@ -50,7 +54,7 @@ export async function claimProject(projectId: string) {
 
 export async function submitForReview(projectId: string, assetUrls: Prisma.InputJsonValue) {
   const session = await auth();
-  if (!session?.user?.id || (session.user as any).role !== Role.ADMIN) {
+  if (!session?.user?.id || (session.user as SessionUserWithRole).role !== Role.ADMIN) {
     throw new Error("Unauthorized");
   }
 

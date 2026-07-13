@@ -29,7 +29,7 @@ export default function OnboardingWizard({ onClose }: OnboardingWizardProps) {
     } else {
       setLoading(true);
       try {
-        await completeOnboarding(companyName);
+        await completeOnboarding({ companyName });
         onClose();
         navigate.push('/tasks');
       } catch (err) {

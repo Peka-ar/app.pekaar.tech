@@ -18,6 +18,9 @@ model User {
   usageLimits     Int              @default(10)
   name            String?
   onboarded       Boolean          @default(false)
+  productCategory String?
+  storefrontPlatform String?
+  catalogSize     String?
   hashedPassword  String?
   projects        Project[]
   analyticsEvents AnalyticsEvent[]

@@ -1,7 +1,9 @@
 "use client";
 import React, { useState } from 'react';
-import { Mail, Lock } from 'lucide-react';
+import { CheckCircle2, Lock, Mail } from 'lucide-react';
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { preflightLogin, resendVerificationOtp, verifyEmailOtp } from "@/app/actions/auth";
 
 
 interface SignInFormProps {
@@ -10,15 +12,15 @@ interface SignInFormProps {
 
 export default function SignInForm({ onNavigate }: SignInFormProps) {
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [submittedPassword, setSubmittedPassword] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+  const [showOtp, setShowOtp] = useState(false);
+  const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError(null);
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-
+  const finishSignIn = async (email: string, password: string, onboarded?: boolean) => {
     const result = await signIn("credentials", {
       email,
       password,
@@ -26,9 +28,89 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
     });
 
     if (result?.error) {
-      setError("Invalid email or password");
-    } else {
-      window.location.href = "/dashboard";
+      throw new Error("Sign-in failed. Please try again.");
+    }
+
+    router.push(onboarded === false ? "/onboarding" : "/dashboard");
+    router.refresh();
+  };
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    setNotice(null);
+    setShowOtp(false);
+    setLoading(true);
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const email = formData.get("email") as string;
+    const password = formData.get("password") as string;
+
+    try {
+      const preflight = await preflightLogin(email, password);
+
+      if (preflight.status === "not_registered") {
+        setError("No account found. Create an account first.");
+        return;
+      }
+
+      if (preflight.status === "invalid_password") {
+        setError("That password is incorrect.");
+        return;
+      }
+
+      if (preflight.status === "unverified") {
+        setSubmittedEmail(email);
+        setSubmittedPassword(password);
+        setNotice("Verify your email to continue. We can send a fresh 6-digit code.");
+        return;
+      }
+
+      await finishSignIn(email, password, preflight.onboarded);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Sign-in failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendCode = async () => {
+    if (!submittedEmail) return;
+
+    setError(null);
+    setNotice(null);
+    setLoading(true);
+
+    try {
+      const result = await resendVerificationOtp(submittedEmail);
+      if (!result.success) {
+        throw new Error(result.status === "already_verified" ? "This email is already verified. Please sign in again." : "No account found. Create an account first.");
+      }
+
+      setShowOtp(true);
+      setNotice(`We sent a new verification code to ${submittedEmail}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to send verification code");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!submittedEmail || !submittedPassword) return;
+
+    setError(null);
+    setNotice(null);
+    setLoading(true);
+
+    try {
+      await verifyEmailOtp(submittedEmail, otp);
+      await finishSignIn(submittedEmail, submittedPassword, false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -92,13 +174,60 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
           </div>
         )}
 
+        {notice && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800" role="status">
+            {notice}
+          </div>
+        )}
+
+        {submittedEmail && !showOtp && (
+          <button
+            type="button"
+            onClick={handleSendCode}
+            disabled={loading}
+            className="w-full flex justify-center py-3 px-4 border border-[#E5E2DD] rounded-xl text-sm font-medium text-[#1A1A1A] bg-white hover:bg-[#F9F8F6] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Sending code...' : 'Send Verification Code'}
+          </button>
+        )}
+
         <button
           type="submit"
-          className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#1A1A1A] hover:bg-[#2A2825] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A]"
+          disabled={loading}
+          className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#1A1A1A] hover:bg-[#2A2825] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Sign In
+          {loading ? 'Checking...' : 'Sign In'}
         </button>
       </form>
+
+      {showOtp && (
+        <form className="mt-5 space-y-4" onSubmit={handleVerifyOtp}>
+          <div className="flex items-center gap-2 text-sm font-medium text-[#1A1A1A]">
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" /> Enter your verification code
+          </div>
+          <label htmlFor="signin-otp" className="sr-only">Verification code</label>
+          <input
+            type="text"
+            id="signin-otp"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            required
+            value={otp}
+            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            className="block w-full px-4 py-3 border border-[#E5E2DD] rounded-xl text-center text-2xl tracking-[0.35em] font-mono placeholder-[#A3A3A3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] bg-[#F9F8F6] hover:bg-[#EFEDEA] transition-colors"
+            placeholder="000000"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#1A1A1A] hover:bg-[#2A2825] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Verifying...' : 'Verify and Continue'}
+          </button>
+        </form>
+      )}
 
       <div className="mt-8 text-center text-sm text-[#4A4742]">
         Don&apos;t have an account?{' '}

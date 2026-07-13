@@ -1,7 +1,9 @@
 "use client";
 import React, { useState } from 'react';
 import { Mail, Lock, CheckCircle2 } from 'lucide-react';
-import { registerUser } from "@/app/actions/auth";
+import { registerUser, verifyEmailOtp } from "@/app/actions/auth";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface SignUpFormProps {
   onNavigate: (view: string) => void;
@@ -13,6 +15,8 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
+  const [otp, setOtp] = useState('');
+  const router = useRouter();
   
   const getPasswordStrength = () => {
     if (password.length === 0) return 0;
@@ -33,9 +37,37 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
       const email = (form.elements.namedItem("email") as HTMLInputElement).value;
       await registerUser(new FormData(form));
       setSubmittedEmail(email);
-      onSuccess();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!submittedEmail) return;
+
+    setError(null);
+    setLoading(true);
+
+    try {
+      await verifyEmailOtp(submittedEmail, otp);
+      const result = await signIn("credentials", {
+        email: submittedEmail,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        throw new Error("Email verified, but automatic sign-in failed. Please sign in manually.");
+      }
+
+      onSuccess();
+      router.push("/onboarding");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Verification failed");
     } finally {
       setLoading(false);
     }
@@ -47,13 +79,45 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
         <div className="w-16 h-16 bg-[#EFEDEA] rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="w-8 h-8 text-emerald-500" />
         </div>
-        <h2 className="text-3xl font-serif text-[#1A1A1A] mb-3">Check your email</h2>
+        <h2 className="text-3xl font-serif text-[#1A1A1A] mb-3">Enter your code</h2>
         <p className="text-[#4A4742] text-sm mb-8">
-          We sent a verification link to {submittedEmail}. Verify your email before signing in.
+          We sent a 6-digit verification code to {submittedEmail}.
         </p>
+        <form className="space-y-5" onSubmit={handleVerifyOtp}>
+          <div>
+            <label htmlFor="signup-otp" className="sr-only">Verification code</label>
+            <input
+              type="text"
+              id="signup-otp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              className="block w-full px-4 py-3 border border-[#E5E2DD] rounded-xl text-center text-2xl tracking-[0.35em] font-mono placeholder-[#A3A3A3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] bg-[#F9F8F6] hover:bg-[#EFEDEA] transition-colors"
+              placeholder="000000"
+            />
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700" role="alert">
+              {error}
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#1A1A1A] hover:bg-[#2A2825] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Verifying...' : 'Verify and Sign In'}
+          </button>
+        </form>
         <button
           onClick={() => onNavigate('signin')}
-          className="text-sm font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          className="mt-6 text-sm font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
         >
           Back to Sign In
         </button>
