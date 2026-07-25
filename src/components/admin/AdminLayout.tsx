@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { LayoutDashboard, Users, ListTodo, BarChart2, Box, Menu } from 'lucide-react';
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
+import { SessionProvider } from "next-auth/react";
 import NotificationBell from '../dashboard/NotificationBell';
 import { AdminMobileNavDrawer } from './AdminMobileNavDrawer';
 import { Button } from '../ui/Button';
@@ -16,7 +17,15 @@ interface AdminLayoutProps {
   user?: { name: string | null; email: string; role: string };
 }
 
-export default function AdminLayout({ children, title, action, user }: AdminLayoutProps) {
+export default function AdminLayout(props: AdminLayoutProps) {
+  return (
+    <SessionProvider>
+      <AdminLayoutInner {...props} />
+    </SessionProvider>
+  );
+}
+
+function AdminLayoutInner({ children, title, action, user }: AdminLayoutProps) {
   const pathname = usePathname();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
