@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Box, LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, Menu } from 'lucide-react';
 import Link from "next/link";
+import { SessionProvider, useSession } from "next-auth/react";
 import NotificationBell from './NotificationBell';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Button } from '../ui/Button';
@@ -15,9 +16,27 @@ interface DashboardLayoutProps {
 }
 import { usePathname } from 'next/navigation';
 
-export default function DashboardLayout({ children, title, action }: DashboardLayoutProps) {
+export default function DashboardLayout(props: DashboardLayoutProps) {
+  return (
+    <SessionProvider>
+      <DashboardLayoutInner {...props} />
+    </SessionProvider>
+  );
+}
+
+function DashboardLayoutInner({ children, title, action }: DashboardLayoutProps) {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  const userName = session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Brand";
+  const userEmail = session?.user?.email || "";
+  const initials = userName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase() || "")
+    .join("") || "BR";
 
   const navItems = [
     { name: 'Overview', path: '/dashboard', icon: LayoutDashboard },
@@ -112,14 +131,14 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
                 border: '1px solid var(--border-default)',
               }}
             >
-              PM
+              {initials}
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                Product Manager
+            <div className="flex flex-col min-w-0">
+              <span className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }} title={userName}>
+                {userName}
               </span>
-              <span className="text-[9px] font-mono" style={{ color: 'var(--text-muted)' }}>
-                D2C Brand Co.
+              <span className="text-[9px] font-mono truncate" style={{ color: 'var(--text-muted)' }} title={userEmail}>
+                {userEmail || "Brand workspace"}
               </span>
             </div>
           </div>

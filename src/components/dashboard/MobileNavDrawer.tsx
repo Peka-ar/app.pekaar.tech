@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
+import { useSession } from "next-auth/react";
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
@@ -26,6 +27,16 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
   const drawerRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<Element | null>(null);
   const [mounted, setMounted] = React.useState(false);
+  const { data: session } = useSession();
+
+  const userName = session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Brand";
+  const userEmail = session?.user?.email || "";
+  const initials = userName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase() || "")
+    .join("") || "BR";
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -199,20 +210,22 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
                   border: '1px solid var(--border-default)',
                 }}
               >
-                PM
+                {initials}
               </div>
-              <div className="flex flex-col">
+              <div className="flex flex-col min-w-0">
                 <span
-                  className="text-xs font-medium"
+                  className="text-xs font-medium truncate"
                   style={{ color: 'var(--text-primary)' }}
+                  title={userName}
                 >
-                  Product Manager
+                  {userName}
                 </span>
                 <span
-                  className="text-[9px] font-mono"
+                  className="text-[9px] font-mono truncate"
                   style={{ color: 'var(--text-muted)' }}
+                  title={userEmail}
                 >
-                  D2C Brand Co.
+                  {userEmail || "Brand workspace"}
                 </span>
               </div>
             </div>
