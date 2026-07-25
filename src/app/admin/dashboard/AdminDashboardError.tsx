@@ -17,7 +17,7 @@ export default function AdminDashboardError() {
           action={
             <button
               onClick={() => router.refresh()}
-              className="px-4 py-2 bg-[#1A1A1A] text-white rounded-full text-[10px] uppercase tracking-widest font-bold hover:bg-[#3A3A3A] transition-colors"
+              className="px-4 py-2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-bold hover:opacity-90 transition-opacity"
             >
               Retry
             </button>

@@ -130,7 +130,7 @@ export default function AdminTasksClient({
   const handleGlbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const asset = await uploadGlb(file, "MODEL_GLB");
+    const asset = await uploadGlb(file);
     if (asset) setGlbAsset(asset);
     if (e.target) e.target.value = "";
   };
@@ -138,7 +138,7 @@ export default function AdminTasksClient({
   const handleUsdzUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const asset = await uploadUsdz(file, "MODEL_USDZ");
+    const asset = await uploadUsdz(file);
     if (asset) setUsdzAsset(asset);
     if (e.target) e.target.value = "";
   };
@@ -388,7 +388,7 @@ export default function AdminTasksClient({
                 </h3>
                 <div className="space-y-3">
                   {selectedTask.revisionRequests.map((req) => (
-                    <div key={req.id} className="bg-white border border-amber-200 rounded-xl p-4">
+                    <div key={req.id} className="bg-[var(--color-surface)] border border-amber-200 rounded-xl p-4">
                       <div className="flex justify-between items-center mb-2">
                         <span className="text-[10px] font-mono uppercase tracking-widest text-amber-900">
                           {req.requester?.name || req.requester?.email || 'Brand'}

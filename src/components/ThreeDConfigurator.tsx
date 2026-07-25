@@ -76,7 +76,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
   };
 
   return (
-    <div className="bg-[#F9F8F6] border border-[#E5E2DD] rounded-2xl sm:rounded-3xl overflow-hidden w-full">
+    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl sm:rounded-3xl overflow-hidden w-full">
       <Script
         src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.2.0/dist/model-viewer.min.js"
         type="module"
@@ -99,16 +99,16 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
           style={{ width: '100%', height: '100%', position: 'absolute', inset: 0, outline: 'none' }}
         >
           {!loaded && !error && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#F9F8F6]" slot="poster">
-              <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-[#7A7670] animate-spin mb-3" />
-              <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-[#7A7670]">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--color-canvas)]" slot="poster">
+              <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--color-text-muted)] animate-spin mb-3" />
+              <span className="text-[10px] sm:text-xs font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
                 {progress > 0 ? `Loading... ${progress}%` : 'Loading 3D Model...'}
               </span>
             </div>
           )}
 
           {error && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#F9F8F6] p-6" slot="poster">
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--color-canvas)] p-6" slot="poster">
               <span className="text-xs font-mono text-red-500 text-center max-w-md">{error}</span>
             </div>
           )}
@@ -117,8 +117,8 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
         {/* Product info overlay */}
         <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-20 pointer-events-none">
           <div className="flex flex-col gap-1">
-            <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.25em] text-[#7A7670] font-semibold">{product.brand}</span>
-            <h2 className="text-xl sm:text-2xl font-light font-serif italic text-[#1A1A1A]">{product.name}</h2>
+            <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.25em] text-[var(--color-text-muted)] font-semibold">{product.brand}</span>
+            <h2 className="text-xl sm:text-2xl font-light font-serif italic text-[var(--color-text-primary)]">{product.name}</h2>
           </div>
         </div>
 
@@ -127,14 +127,14 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
             <button
               onClick={() => setAutoRotate(!autoRotate)}
               aria-label="Toggle auto rotation"
-              className={`p-2.5 sm:p-3 rounded-full border shadow-sm transition-colors duration-200 ${autoRotate ? 'bg-[#1A1A1A] text-white border-[#1A1A1A]' : 'bg-white border-[#E5E2DD] text-[#7A7670] hover:bg-[#EFEDEA]'}`}
+              className={`p-2.5 sm:p-3 rounded-full border shadow-sm transition-colors duration-200 ${autoRotate ? 'bg-[var(--color-canvas-inverted)] text-[var(--color-canvas)] border-[var(--color-canvas-inverted)]' : 'bg-[var(--color-surface)] border-[var(--color-border-default)] text-[var(--color-text-muted)] hover:bg-[var(--color-canvas-secondary)]'}`}
             >
               <RotateCcw className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${autoRotate ? 'animate-spin' : ''}`} style={{ animationDuration: '8s' }} />
             </button>
             <button
               onClick={handleResetCamera}
               aria-label="Reset camera"
-              className="p-2.5 sm:p-3 rounded-full border border-[#E5E2DD] bg-white hover:bg-[#EFEDEA] text-[#7A7670] shadow-sm transition-colors duration-200"
+              className="p-2.5 sm:p-3 rounded-full border border-[var(--color-border-default)] bg-[var(--color-surface)] hover:bg-[var(--color-canvas-secondary)] text-[var(--color-text-muted)] shadow-sm transition-colors duration-200"
             >
               <Compass className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>

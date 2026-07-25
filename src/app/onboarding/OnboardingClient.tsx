@@ -49,11 +49,11 @@ export default function OnboardingClient() {
   };
 
   const selectButtonClass = (selected: boolean) =>
-    `rounded-2xl border px-4 py-3 text-left text-sm transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] ${selected ? "border-[#1A1A1A] bg-[#1A1A1A] text-white" : "border-[#E5E2DD] bg-white text-[#1A1A1A] hover:border-[#1A1A1A]"}`;
+    `rounded-2xl border px-4 py-3 text-left text-sm transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] ${selected ? "border-[var(--color-text-primary)] bg-[var(--color-text-primary)] text-[var(--color-canvas)]" : "border-[var(--color-border-default)] bg-[var(--color-surface)] text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)]"}`;
 
   return (
-    <main className="min-h-screen bg-[#F9F8F6] text-[#1A1A1A] px-4 py-6 sm:px-8 lg:px-12">
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col rounded-[2rem] border border-[#E5E2DD] bg-white shadow-sm overflow-hidden lg:grid lg:grid-cols-[0.9fr_1.1fr]">
+    <main className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)] px-4 py-6 sm:px-8 lg:px-12">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col rounded-[2rem] border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-sm overflow-hidden lg:grid lg:grid-cols-[0.9fr_1.1fr]">
         <aside className="relative bg-[#1A1A1A] p-8 text-white lg:p-12">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_36%)]" />
           <div className="relative flex h-full flex-col justify-between gap-12">
@@ -80,34 +80,34 @@ export default function OnboardingClient() {
           <div className="mb-10 flex items-center justify-between gap-4">
             <div className="flex gap-2" aria-label="Onboarding progress">
               {[1, 2, 3, 4, 5].map((idx) => (
-                <div key={idx} className={`h-1.5 rounded-full transition-all ${idx === step ? "w-10 bg-[#1A1A1A]" : idx < step ? "w-6 bg-[#7A7670]" : "w-6 bg-[#E5E2DD]"}`} />
+                <div key={idx} className={`h-1.5 rounded-full transition-all ${idx === step ? "w-10 bg-[var(--color-text-primary)]" : idx < step ? "w-6 bg-[var(--color-text-muted)]" : "w-6 bg-[var(--color-border-default)]"}`} />
               ))}
             </div>
-            <span className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670]">Step {step} of 5</span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">Step {step} of 5</span>
           </div>
 
           <div className="flex flex-1 items-center">
             <div className="w-full animate-in fade-in slide-in-from-bottom-3 duration-300">
               {step === 1 && (
                 <div className="max-w-xl">
-                  <Building2 className="mb-6 h-8 w-8 text-[#7A7670]" />
+                  <Building2 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />
                   <h2 className="text-4xl font-serif">What should we call your brand?</h2>
-                  <p className="mt-3 text-sm leading-6 text-[#4A4742]">This name appears across your dashboard and task pipeline.</p>
-                  <label htmlFor="companyName" className="mt-8 block text-[11px] font-mono font-bold uppercase tracking-widest text-[#7A7670]">Company name</label>
-                  <input id="companyName" value={companyName} onChange={(event) => setCompanyName(event.target.value)} className="mt-2 block w-full rounded-2xl border border-[#E5E2DD] bg-[#F9F8F6] px-4 py-3 text-sm outline-none transition-colors hover:bg-[#EFEDEA] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A]" placeholder="Acme Furniture Co." />
+                  <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">This name appears across your dashboard and task pipeline.</p>
+                  <label htmlFor="companyName" className="mt-8 block text-[11px] font-mono font-bold uppercase tracking-widest text-[var(--color-text-muted)]">Company name</label>
+                  <input id="companyName" value={companyName} onChange={(event) => setCompanyName(event.target.value)} className="mt-2 block w-full rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-4 py-3 text-sm outline-none transition-colors hover:bg-[var(--color-canvas-secondary)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)]" placeholder="Acme Furniture Co." />
                 </div>
               )}
 
               {step === 2 && (
                 <div className="max-w-2xl">
-                  <Layers3 className="mb-6 h-8 w-8 text-[#7A7670]" />
+                  <Layers3 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />
                   <h2 className="text-4xl font-serif">From product photos to embeddable 3D.</h2>
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
                     {[{ icon: Camera, title: "Upload", body: "Send multi-angle product photography and dimensions." }, { icon: RefreshCw, title: "Generate", body: "STUDIO.V prepares web-ready GLB and USDZ assets." }, { icon: Code2, title: "Embed", body: "Publish an iframe viewer into your storefront." }].map(({ icon: Icon, title, body }) => (
-                      <div key={title} className="rounded-3xl border border-[#E5E2DD] bg-[#F9F8F6] p-5">
-                        <Icon className="mb-4 h-5 w-5 text-[#1A1A1A]" />
+                      <div key={title} className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5">
+                        <Icon className="mb-4 h-5 w-5 text-[var(--color-text-primary)]" />
                         <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest">{title}</h3>
-                        <p className="mt-3 text-sm leading-6 text-[#4A4742]">{body}</p>
+                        <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">{body}</p>
                       </div>
                     ))}
                   </div>
@@ -115,22 +115,22 @@ export default function OnboardingClient() {
               )}
 
               {step === 3 && (
-                <ChoiceStep icon={<Boxes className="mb-6 h-8 w-8 text-[#7A7670]" />} title="What kind of products do you sell?" subtitle="Optional, but useful for admin production context." options={categoryOptions} value={productCategory} onChange={setProductCategory} buttonClass={selectButtonClass} />
+                <ChoiceStep icon={<Boxes className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />} title="What kind of products do you sell?" subtitle="Optional, but useful for admin production context." options={categoryOptions} value={productCategory} onChange={setProductCategory} buttonClass={selectButtonClass} />
               )}
 
               {step === 4 && (
-                <ChoiceStep icon={<Store className="mb-6 h-8 w-8 text-[#7A7670]" />} title="Where will you embed your 3D viewers?" subtitle="We use this to tailor integration guidance." options={platformOptions} value={storefrontPlatform} onChange={setStorefrontPlatform} buttonClass={selectButtonClass} />
+                <ChoiceStep icon={<Store className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />} title="Where will you embed your 3D viewers?" subtitle="We use this to tailor integration guidance." options={platformOptions} value={storefrontPlatform} onChange={setStorefrontPlatform} buttonClass={selectButtonClass} />
               )}
 
               {step === 5 && (
-                <ChoiceStep icon={<Layers3 className="mb-6 h-8 w-8 text-[#7A7670]" />} title="How large is your catalog?" subtitle="Optional. This helps frame production volume later." options={catalogSizeOptions} value={catalogSize} onChange={setCatalogSize} buttonClass={selectButtonClass} />
+                <ChoiceStep icon={<Layers3 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />} title="How large is your catalog?" subtitle="Optional. This helps frame production volume later." options={catalogSizeOptions} value={catalogSize} onChange={setCatalogSize} buttonClass={selectButtonClass} />
               )}
             </div>
           </div>
 
           {error && <Alert tone="error" className="mt-6">{error}</Alert>}
 
-          <div className="mt-10 flex items-center justify-between gap-4 border-t border-[#E5E2DD] pt-6">
+          <div className="mt-10 flex items-center justify-between gap-4 border-t border-[var(--color-border-default)] pt-6">
             <Button
               type="button"
               variant="ghost"
@@ -176,7 +176,7 @@ function ChoiceStep({ icon, title, subtitle, options, value, onChange, buttonCla
     <div className="max-w-2xl">
       {icon}
       <h2 className="text-4xl font-serif">{title}</h2>
-      <p className="mt-3 text-sm leading-6 text-[#4A4742]">{subtitle}</p>
+      <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">{subtitle}</p>
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {options.map((option) => (
           <button key={option} type="button" onClick={() => onChange(value === option ? "" : option)} className={buttonClass(value === option)}>
@@ -184,7 +184,7 @@ function ChoiceStep({ icon, title, subtitle, options, value, onChange, buttonCla
           </button>
         ))}
       </div>
-      <p className="mt-4 text-xs text-[#7A7670]">You can skip this and still finish setup.</p>
+      <p className="mt-4 text-xs text-[var(--color-text-muted)]">You can skip this and still finish setup.</p>
     </div>
   );
 }

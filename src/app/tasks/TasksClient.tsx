@@ -13,8 +13,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 const ThreeDConfigurator = dynamic(() => import('@/components/ThreeDConfigurator'), { ssr: false });
 import { createProject, brandPublishProject, brandSendForRevisions } from "@/app/actions/project";
-import { AssetType } from "@/generated/prisma/client";
-import { usePresignedUpload } from "@/lib/hooks/use-presigned-upload";
+import { usePresignedUpload, type Asset as UploadedAsset } from "@/lib/hooks/use-presigned-upload";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -77,8 +76,6 @@ const BOARD_STATUSES: ProjectStatus[] = COLUMNS.map((c) => c.id);
 const getThumbnail = (project: TaskJob) => project.assets?.find((a) => a.type === 'REFERENCE_IMAGE')?.url || '';
 const getSku = (project: TaskJob) => project.sku || 'No SKU';
 const getProductCategory = (project: TaskJob) => project.brand?.productCategory?.trim() || 'Not specified';
-const getStorefrontPlatform = (project: TaskJob) => project.brand?.storefrontPlatform?.trim() || 'Not specified';
-const getCatalogSize = (project: TaskJob) => project.brand?.catalogSize?.trim() || 'Not specified';
 const getInitials = (name: string) => name === 'Unassigned' ? 'UN' : name.slice(0, 2).toUpperCase();
 const getCreatedDate = (project: TaskJob) => new Date(project.createdAt).toLocaleDateString();
 const getAssets = (project: TaskJob) => {
@@ -124,7 +121,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const [showRequestChangesForm, setShowRequestChangesForm] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [uploadedAssets, setUploadedAssets] = useState<any[]>([]);
+  const [uploadedAssets, setUploadedAssets] = useState<UploadedAsset[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
@@ -260,7 +257,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       return;
     }
 
-    const asset = await uploadFile(file, "REFERENCE_IMAGE" as AssetType);
+    const asset = await uploadFile(file);
     if (asset) {
       setUploadedAssets((prev) => [...prev, asset]);
       setUploadSuccess(true);
@@ -272,7 +269,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const actionButton = (
     <button
       onClick={() => setIsWizardOpen(true)}
-      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-[10px] uppercase tracking-widest font-medium flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A]"
+      className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full text-[10px] uppercase tracking-widest font-medium flex items-center gap-1.5 shadow-sm active:scale-95 transition-transform duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
     >
       <Plus className="w-4 h-4" aria-hidden="true" />
       New Task
@@ -307,16 +304,16 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           </div>
         </div>
 
-        <div className="flex items-center p-1 bg-[#EFEDEA] rounded-full border border-[#E5E2DD] shrink-0">
+        <div className="flex items-center p-1 bg-[var(--color-canvas-secondary)] rounded-full border border-[var(--color-border-default)] shrink-0">
           <button
             onClick={() => setViewMode('list')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-mono font-medium transition-all duration-200 ${viewMode === 'list' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-[#7A7670] hover:text-[#1A1A1A]'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-mono font-medium transition-all duration-200 ${viewMode === 'list' ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
           >
             <ListIcon className="w-3.5 h-3.5" /> List
           </button>
           <button
             onClick={() => setViewMode('board')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-mono font-medium transition-all duration-200 ${viewMode === 'board' ? 'bg-white text-[#1A1A1A] shadow-sm' : 'text-[#7A7670] hover:text-[#1A1A1A]'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-mono font-medium transition-all duration-200 ${viewMode === 'board' ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
           >
             <LayoutGrid className="w-3.5 h-3.5" /> Board
           </button>
@@ -330,15 +327,15 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               const columnJobs = filteredJobs.filter(j => j.status === col.id);
               const ColIcon = col.icon;
               return (
-                <div key={col.id} className="w-80 flex flex-col bg-[#F9F8F6] rounded-3xl p-4 border border-[#E5E2DD] shadow-sm max-h-full">
-                  <div className="flex items-center justify-between mb-4 px-2 border-b border-[#E5E2DD] pb-3">
+                <div key={col.id} className="w-80 flex flex-col bg-[var(--color-canvas)] rounded-3xl p-4 border border-[var(--color-border-default)] shadow-sm max-h-full">
+                  <div className="flex items-center justify-between mb-4 px-2 border-b border-[var(--color-border-default)] pb-3">
                     <div className="flex items-center gap-2">
-                      <ColIcon className={`w-4 h-4 ${col.id === 'PENDING' ? 'text-amber-500' : col.id === 'REVISIONS' ? 'text-amber-500' : col.id === 'COMPLETED' ? 'text-[#1A1A1A]' : 'text-emerald-500'}`} />
-                      <h3 className="text-[11px] font-mono uppercase tracking-widest font-bold text-[#1A1A1A]">
+                      <ColIcon className={`w-4 h-4 ${col.id === 'PENDING' ? 'text-amber-500' : col.id === 'REVISIONS' ? 'text-amber-500' : col.id === 'COMPLETED' ? 'text-[var(--color-text-primary)]' : 'text-emerald-500'}`} />
+                      <h3 className="text-[11px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-primary)]">
                         {col.label}
                       </h3>
                     </div>
-                    <span className="text-[10px] font-mono text-[#7A7670] bg-[#EFEDEA] px-2 py-0.5 rounded-full border border-[#E5E2DD]">
+                    <span className="text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-canvas-secondary)] px-2 py-0.5 rounded-full border border-[var(--color-border-default)]">
                       {columnJobs.length}
                     </span>
                   </div>
@@ -347,7 +344,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                     {columnJobs.map(job => (
                       <div
                         key={job.id}
-                        className="bg-white p-4 rounded-2xl border border-[#E5E2DD] shadow-sm hover:border-[#1A1A1A] hover:shadow-md transition-all cursor-pointer group shrink-0"
+                        className="bg-[var(--color-surface)] p-4 rounded-2xl border border-[var(--color-border-default)] shadow-sm hover:border-[var(--color-text-primary)] hover:shadow-md transition-all cursor-pointer group shrink-0"
                         onClick={() => handleCardClick(job)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -359,12 +356,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         tabIndex={0}
                       >
                         {getThumbnail(job) && (
-                          <div className="relative w-full h-32 bg-[#F9F8F6] rounded-xl mb-3 overflow-hidden border border-[#E5E2DD]">
+                          <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
                             <Image src={getThumbnail(job)} alt="" fill sizes="320px" className="object-cover group-hover:scale-105 transition-transform duration-700" />
                           </div>
                         )}
                         <div className="flex justify-between items-start mb-2">
-                          <span className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670] bg-[#EFEDEA] px-2 py-0.5 rounded-md">{job.id}</span>
+                          <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] bg-[var(--color-canvas-secondary)] px-2 py-0.5 rounded-md">{job.id}</span>
                           <span className="shrink-0">
                             {(() => {
                               const meta = PROJECT_STATUS_META[job.status];
@@ -373,31 +370,31 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                             })()}
                           </span>
                         </div>
-                        <h4 className="text-sm font-medium text-[#1A1A1A] mb-1.5 leading-tight">{job.name}</h4>
+                        <h4 className="text-sm font-medium text-[var(--color-text-primary)] mb-1.5 leading-tight">{job.name}</h4>
                         {role === "ADMIN" && (
-                          <p className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670]">
+                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
                             Category: {getProductCategory(job)}
                           </p>
                         )}
 
                         <div className="flex justify-between items-center mt-4">
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-[#1A1A1A] text-white flex items-center justify-center text-[8px] font-bold tracking-widest">
+                            <div className="w-6 h-6 rounded-full bg-[var(--color-text-primary)] text-[var(--color-canvas)] flex items-center justify-center text-[8px] font-bold tracking-widest">
                               {getInitials(job.brand?.name || 'UB')}
                             </div>
-                            <span className="text-[10px] font-mono text-[#7A7670]">{getSku(job)}</span>
+                            <span className="text-[10px] font-mono text-[var(--color-text-muted)]">{getSku(job)}</span>
                           </div>
-                          <span className="text-[9px] text-[#7A7670] uppercase">{getCreatedDate(job)}</span>
+                          <span className="text-[9px] text-[var(--color-text-muted)] uppercase">{getCreatedDate(job)}</span>
                         </div>
 
                         {(job.status === 'COMPLETED') && (
-                          <div className="mt-4 pt-3 border-t border-[#E5E2DD]">
+                          <div className="mt-4 pt-3 border-t border-[var(--color-border-default)]">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setReviewJob(job);
                               }}
-                              className="w-full py-2 bg-[#1A1A1A] text-white text-[10px] uppercase tracking-widest rounded-xl font-medium hover:bg-[#2A2825] active:scale-95 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
+                              className="w-full py-2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[10px] uppercase tracking-widest rounded-xl font-medium hover:opacity-90 active:scale-95 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
                             >
                               <Eye className="w-3.5 h-3.5" /> Review Model
                             </button>
@@ -406,9 +403,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                       </div>
                     ))}
                     {columnJobs.length === 0 && (
-                      <div className="flex-1 border-2 border-dashed border-[#E5E2DD] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-white/50">
-                        <BoxIcon className="w-6 h-6 text-[#E5E2DD] mb-2" />
-                        <span className="text-[11px] text-[#A3A3A3] font-mono tracking-widest uppercase">Empty</span>
+                      <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-white/50">
+                        <BoxIcon className="w-6 h-6 text-[var(--color-border-default)] mb-2" />
+                        <span className="text-[11px] text-[var(--color-text-muted)] font-mono tracking-widest uppercase">Empty</span>
                       </div>
                     )}
                   </div>
@@ -418,47 +415,47 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           </div>
         </div>
       ) : (
-        <div className="bg-white border border-[#E5E2DD] rounded-3xl shadow-sm overflow-hidden animate-in fade-in duration-300">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-3xl shadow-sm overflow-hidden animate-in fade-in duration-300">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-[#E5E2DD] bg-[#F9F8F6]">
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Job ID</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Product</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Status</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Created</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold text-right">Actions</th>
+                <tr className="border-b border-[var(--color-border-default)] bg-[var(--color-canvas)]">
+                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Job ID</th>
+                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Product</th>
+                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Status</th>
+                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Created</th>
+                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#E5E2DD]">
+              <tbody className="divide-y divide-[var(--color-border-default)]">
                 {filteredJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-[#7A7670] font-serif italic text-sm">
+                    <td colSpan={5} className="px-6 py-12 text-center text-[var(--color-text-muted)] font-serif italic text-sm">
                       No tasks match your search or filter.
                     </td>
                   </tr>
                 ) : (
                   filteredJobs.map(job => (
-                    <tr key={job.id} className="hover:bg-[#F9F8F6] transition-colors group">
+                    <tr key={job.id} className="hover:bg-[var(--color-canvas)] transition-colors group">
                       <td className="px-6 py-4">
-                        <span className="text-[11px] font-mono font-medium text-[#1A1A1A] bg-[#EFEDEA] px-2 py-1 rounded-md border border-[#E5E2DD]">
+                        <span className="text-[11px] font-mono font-medium text-[var(--color-text-primary)] bg-[var(--color-canvas-secondary)] px-2 py-1 rounded-md border border-[var(--color-border-default)]">
                           {job.id}
                         </span>
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           {getThumbnail(job) ? (
-                            <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[#E5E2DD]">
+                            <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[var(--color-border-default)]">
                               <Image src={getThumbnail(job)} alt="" fill sizes="40px" className="object-cover" />
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-[#EFEDEA] border border-[#E5E2DD] flex items-center justify-center">
-                              <BoxIcon className="w-4 h-4 text-[#A3A3A3]" />
+                            <div className="w-10 h-10 rounded-lg bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)] flex items-center justify-center">
+                              <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" />
                             </div>
                           )}
                           <div>
-                            <div className="text-sm font-medium text-[#1A1A1A]">{job.name}</div>
-                            <div className="text-[10px] font-mono text-[#7A7670]">{getSku(job)}</div>
+                            <div className="text-sm font-medium text-[var(--color-text-primary)]">{job.name}</div>
+                            <div className="text-[10px] font-mono text-[var(--color-text-muted)]">{getSku(job)}</div>
                           </div>
                         </div>
                       </td>
@@ -473,28 +470,28 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 text-xs text-[#7A7670] font-mono">
+                      <td className="px-6 py-4 text-xs text-[var(--color-text-muted)] font-mono">
                         {getCreatedDate(job)}
                       </td>
                       <td className="px-6 py-4 text-right">
                         {job.status === 'COMPLETED' ? (
                           <button
                             onClick={() => setReviewJob(job)}
-                            className="px-4 py-1.5 bg-[#1A1A1A] text-white rounded-full text-[10px] uppercase tracking-widest font-medium hover:bg-[#2A2825] active:scale-95 transition-all duration-200"
+                            className="px-4 py-1.5 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:opacity-90 active:scale-95 transition-all duration-200"
                           >
                             Review
                           </button>
                         ) : job.status === 'PUBLISHED' ? (
                           <button
                             onClick={() => setPublishedJob(job)}
-                            className="px-4 py-1.5 bg-white border border-[#E5E2DD] text-[#4A4742] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[#1A1A1A] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
+                            className="px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             View 3D
                           </button>
                         ) : (
                           <button
                             onClick={() => handleCardClick(job)}
-                            className="px-4 py-1.5 bg-white border border-[#E5E2DD] text-[#4A4742] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[#1A1A1A] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
+                            className="px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             Details
                           </button>
@@ -547,12 +544,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
           <div className="space-y-8">
             <section>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
-                <Edit3 className="w-4 h-4 text-[#7A7670]" /> Product Details
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
+                <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Product Details
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-[#4A4742] mb-1.5" htmlFor="productName">Product Name <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="productName">Product Name <span className="text-red-500">*</span></label>
                   <Input
                     id="productName"
                     name="productName"
@@ -562,7 +559,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#4A4742] mb-1.5" htmlFor="productSku">SKU <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="productSku">SKU <span className="text-red-500">*</span></label>
                   <Input
                     id="productSku"
                     name="productSku"
@@ -572,11 +569,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#4A4742] mb-1.5" htmlFor="additionalInstructions">Additional Instructions (Optional)</label>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="additionalInstructions">Additional Instructions (Optional)</label>
                   <textarea
                     id="additionalInstructions"
                     name="additionalInstructions"
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[#E5E2DD] bg-[#F9F8F6] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none transition-colors text-sm font-sans resize-none h-24"
+                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-24"
                     placeholder="Specific notes on material finish, stitching, hidden details..."
                   />
                 </div>
@@ -584,13 +581,13 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             </section>
 
             <section>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
-                <Ruler className="w-4 h-4 text-[#7A7670]" /> Physical Dimensions (CM)
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
+                <Ruler className="w-4 h-4 text-[var(--color-text-muted)]" /> Physical Dimensions (CM)
               </h3>
-              <p className="text-[11px] text-[#7A7670] mb-4">Required for exact 1:1 scale in AR rendering.</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] mb-4">Required for exact 1:1 scale in AR rendering.</p>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-[#4A4742] mb-1.5" htmlFor="dimWidth">Width</label>
+                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimWidth">Width</label>
                   <Input
                     id="dimWidth"
                     name="dimWidth"
@@ -601,7 +598,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#4A4742] mb-1.5" htmlFor="dimHeight">Height</label>
+                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimHeight">Height</label>
                   <Input
                     id="dimHeight"
                     name="dimHeight"
@@ -612,7 +609,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[#4A4742] mb-1.5" htmlFor="dimDepth">Depth</label>
+                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimDepth">Depth</label>
                   <Input
                     id="dimDepth"
                     name="dimDepth"
@@ -626,12 +623,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             </section>
           </div>
 
-          <div className="space-y-6 bg-[#F9F8F6] p-6 rounded-2xl border border-[#E5E2DD]">
+          <div className="space-y-6 bg-[var(--color-canvas)] p-6 rounded-2xl border border-[var(--color-border-default)]">
             <div>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-1 flex items-center gap-2">
-                <UploadCloud className="w-4 h-4 text-[#7A7670]" /> Reference Images
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-1 flex items-center gap-2">
+                <UploadCloud className="w-4 h-4 text-[var(--color-text-muted)]" /> Reference Images
               </h3>
-              <p className="text-[11px] text-[#7A7670] mb-4">Upload standard JPG/PNG photos from the required angles.</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] mb-4">Upload standard JPG/PNG photos from the required angles.</p>
             </div>
 
             <input
@@ -647,7 +644,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
-              className="w-full border border-dashed border-[#E5E2DD] rounded-xl py-8 flex flex-col items-center gap-3 text-[#7A7670] hover:border-[#1A1A1A] hover:text-[#1A1A1A] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[#E5E2DD] disabled:hover:text-[#7A7670] bg-white"
+              className="w-full border border-dashed border-[var(--color-border-default)] rounded-xl py-8 flex flex-col items-center gap-3 text-[var(--color-text-muted)] hover:border-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--color-border-default)] disabled:hover:text-[var(--color-text-muted)] bg-[var(--color-surface)]"
             >
               {isUploading ? (
                 <>
@@ -664,7 +661,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   <ImageIcon className="w-6 h-6" />
                   <div className="text-center">
                     <span className="text-[12px] font-medium">Select Image</span>
-                    <p className="text-[10px] text-[#A3A3A3] mt-1">JPG, PNG, WebP · max 16MB · {uploadedAssets.length}/{MAX_IMAGES}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">JPG, PNG, WebP · max 16MB · {uploadedAssets.length}/{MAX_IMAGES}</p>
                   </div>
                 </>
               )}
@@ -687,7 +684,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             {uploadedAssets.length > 0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670]">
+                  <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
                     Uploaded Images ({uploadedAssets.length})
                   </p>
                 </div>
@@ -695,7 +692,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   {uploadedAssets.map((asset, i) => (
                     <div
                       key={asset.id}
-                      className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[#E5E2DD] bg-white shadow-sm cursor-pointer hover:border-[#1A1A1A] transition-colors"
+                      className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-sm cursor-pointer hover:border-[var(--color-text-primary)] transition-colors"
                       onClick={() => setLightboxUrl(asset.url)}
                       title="Click to enlarge"
                     >
@@ -720,9 +717,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               </div>
             )}
 
-            <div className="bg-white border border-[#E5E2DD] rounded-xl p-3 flex gap-3 items-start">
-              <AlertCircle className="w-4 h-4 text-[#7A7670] shrink-0 mt-0.5" />
-              <p className="text-[10px] text-[#7A7670] leading-relaxed">
+            <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3 flex gap-3 items-start">
+              <AlertCircle className="w-4 h-4 text-[var(--color-text-muted)] shrink-0 mt-0.5" />
+              <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
                 For best results, ensure images have flat lighting (no harsh shadows) and the product is fully visible within the frame.
               </p>
             </div>
@@ -743,23 +740,23 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         {processingJob && (
           <div className="space-y-6">
             <section>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
                 Product Info
               </h3>
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Name</span>
-                  <p className="text-sm font-medium text-[#1A1A1A]">{processingJob.name}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">{processingJob.name}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Status</span>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Status</span>
                   <Badge tone="warning" icon={<Clock className="w-3 h-3" />}>Processing</Badge>
                 </div>
               </div>
             </section>
 
             <section>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
                 Physical Dimensions (CM)
               </h3>
               <div className="grid grid-cols-3 gap-4">
@@ -767,17 +764,17 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   const dimensions = getDimensions(processingJob);
                   const unit = dimensions.unit || 'cm';
                   return (<>
-                    <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Width</span>
-                      <p className="text-sm font-mono text-[#1A1A1A]">{dimensions.width ?? '-'} {unit}</p>
+                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
+                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Width</span>
+                      <p className="text-sm font-mono text-[var(--color-text-primary)]">{dimensions.width ?? '-'} {unit}</p>
                     </div>
-                    <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Height</span>
-                      <p className="text-sm font-mono text-[#1A1A1A]">{dimensions.height ?? '-'} {unit}</p>
+                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
+                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Height</span>
+                      <p className="text-sm font-mono text-[var(--color-text-primary)]">{dimensions.height ?? '-'} {unit}</p>
                     </div>
-                    <div className="bg-[#F9F8F6] border border-[#E5E2DD] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Depth</span>
-                      <p className="text-sm font-mono text-[#1A1A1A]">{dimensions.depth ?? dimensions.length ?? '-'} {unit}</p>
+                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
+                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Depth</span>
+                      <p className="text-sm font-mono text-[var(--color-text-primary)]">{dimensions.depth ?? dimensions.length ?? '-'} {unit}</p>
                     </div>
                   </>);
                 })()}
@@ -785,21 +782,21 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             </section>
 
             <section>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
                 Reference Images
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {(processingJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index: number) => (
-                  <div key={asset.id} className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-[#F9F8F6] aspect-square flex flex-col relative">
+                  <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex flex-col relative">
                     <Image src={asset.url} alt={`Reference ${index + 1}`} fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover opacity-80 mix-blend-multiply" />
-                    <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm border-t border-[#E5E2DD] py-1.5 px-2">
-                      <span className="text-[9px] font-medium text-[#1A1A1A] uppercase tracking-wider">Reference {index + 1}</span>
+                    <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm border-t border-[var(--color-border-default)] py-1.5 px-2">
+                      <span className="text-[9px] font-medium text-[var(--color-text-primary)] uppercase tracking-wider">Reference {index + 1}</span>
                     </div>
                   </div>
                 ))}
                 {(!processingJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                  <div className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-[#F9F8F6] aspect-square flex items-center justify-center">
-                    <BoxIcon className="w-6 h-6 text-[#E5E2DD]" />
+                  <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center">
+                    <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
                   </div>
                 )}
               </div>
@@ -840,19 +837,19 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
             {revisionsJob.revisionRequests && revisionsJob.revisionRequests.length > 0 && (
               <section>
-                <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4 flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
-                  <Edit3 className="w-4 h-4 text-[#7A7670]" /> Your Revision Notes
+                <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
+                  <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Your Revision Notes
                 </h3>
                 <div className="space-y-3">
                   {revisionsJob.revisionRequests.map((req) => (
-                    <div key={req.id} className="bg-[#F9F8F6] border border-[#E5E2DD] rounded-xl p-4">
+                    <div key={req.id} className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-4">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[#7A7670]">You</span>
-                        <span className="text-[9px] text-[#A3A3A3] font-mono">
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">You</span>
+                        <span className="text-[9px] text-[var(--color-text-muted)] font-mono">
                           {new Date(req.createdAt).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap leading-relaxed">{req.note}</p>
+                      <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{req.note}</p>
                     </div>
                   ))}
                 </div>
@@ -896,34 +893,34 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       >
         <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] h-full min-h-0">
           {reviewJob && (
-            <aside className="border-r border-[#E5E2DD] overflow-y-auto px-6 py-5 space-y-5 bg-[#F9F8F6]">
-              <h3 className="text-[10px] font-mono uppercase tracking-widest font-bold text-[#1A1A1A] flex items-center gap-2">
-                <BoxIcon className="w-4 h-4 text-[#7A7670]" /> Project Details
+            <aside className="border-r border-[var(--color-border-default)] overflow-y-auto px-6 py-5 space-y-5 bg-[var(--color-canvas)]">
+              <h3 className="text-[10px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
               </h3>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Name</span>
-                  <p className="font-medium text-[#1A1A1A]">{reviewJob.name}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
+                  <p className="font-medium text-[var(--color-text-primary)]">{reviewJob.name}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">SKU</span>
-                  <p className="font-mono text-[#1A1A1A]">{getSku(reviewJob)}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">SKU</span>
+                  <p className="font-mono text-[var(--color-text-primary)]">{getSku(reviewJob)}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Created</span>
-                  <p className="text-[#1A1A1A]">{getCreatedDate(reviewJob)}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Created</span>
+                  <p className="text-[var(--color-text-primary)]">{getCreatedDate(reviewJob)}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Brand</span>
-                  <p className="text-[#1A1A1A]">{reviewJob.brand?.name || 'Unknown'}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Brand</span>
+                  <p className="text-[var(--color-text-primary)]">{reviewJob.brand?.name || 'Unknown'}</p>
                 </div>
               </div>
 
               {reviewJob.instructions && (
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Additional Instructions</span>
-                  <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap leading-relaxed">{reviewJob.instructions}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Additional Instructions</span>
+                  <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{reviewJob.instructions}</p>
                 </div>
               )}
 
@@ -932,19 +929,19 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 const unit = dims.unit || 'cm';
                 return (
                   <div>
-                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-2">Physical Dimensions</span>
+                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Physical Dimensions</span>
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">W</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.width ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">W</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.width ?? '-'} {unit}</p>
                       </div>
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">H</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.height ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">H</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.height ?? '-'} {unit}</p>
                       </div>
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">D</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">D</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
                       </div>
                     </div>
                   </div>
@@ -952,19 +949,19 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               })()}
 
               <div>
-                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-2">Reference Images</span>
+                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Reference Images</span>
                 <div className="grid grid-cols-2 gap-2">
                   {(reviewJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index) => (
                     failedRefImages.has(asset.id) ? (
-                      <div key={asset.id} className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square flex items-center justify-center" title="Image unavailable">
-                        <ImageIcon className="w-5 h-5 text-[#7A7670]" />
+                      <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square flex items-center justify-center" title="Image unavailable">
+                        <ImageIcon className="w-5 h-5 text-[var(--color-text-muted)]" />
                       </div>
                     ) : (
                       <button
                         key={asset.id}
                         type="button"
                         onClick={() => setLightboxUrl(asset.url)}
-                        className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square relative cursor-zoom-in hover:border-[#1A1A1A] transition-colors"
+                        className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
                       >
                         <Image
                           src={asset.url}
@@ -978,26 +975,26 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                     )
                   ))}
                   {(!reviewJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                    <div className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square flex items-center justify-center">
-                      <BoxIcon className="w-6 h-6 text-[#E5E2DD]" />
+                    <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square flex items-center justify-center">
+                      <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
                     </div>
                   )}
                 </div>
               </div>
 
               {role !== "ADMIN" && showRequestChangesForm && (
-                <div className="bg-white border border-[#E5E2DD] rounded-2xl p-5 space-y-3">
+                <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-3">
                   <div>
-                    <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
-                      <Edit3 className="w-4 h-4 text-[#7A7670]" /> Request Changes
+                    <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
+                      <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Request Changes
                     </h4>
-                    <p className="text-[11px] text-[#7A7670] mt-2">Describe what should be changed. Your note will be sent to the production team.</p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-2">Describe what should be changed. Your note will be sent to the production team.</p>
                   </div>
                   <textarea
                     value={requestChangesNote}
                     onChange={(e) => setRequestChangesNote(e.target.value)}
                     placeholder="e.g. The cushion is too thin — please increase the height by ~3cm."
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[#E5E2DD] bg-[#F9F8F6] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none transition-colors text-sm font-sans resize-none h-28"
+                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-28"
                   />
                   <div className="flex justify-end gap-2">
                     <Button
@@ -1023,11 +1020,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             </aside>
           )}
 
-          <main className="overflow-y-auto bg-white min-h-0">
+          <main className="overflow-y-auto bg-[var(--color-surface)] min-h-0">
             {reviewViewerProduct ? (
               <ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />
             ) : (
-              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[#7A7670]">No GLB asset is available for review.</div>
+              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for review.</div>
             )}
           </main>
         </div>
@@ -1058,34 +1055,34 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       >
         <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] h-full min-h-0">
           {publishedJob && (
-            <aside className="border-r border-[#E5E2DD] overflow-y-auto px-6 py-5 space-y-5 bg-[#F9F8F6]">
-              <h3 className="text-[10px] font-mono uppercase tracking-widest font-bold text-[#1A1A1A] flex items-center gap-2">
-                <BoxIcon className="w-4 h-4 text-[#7A7670]" /> Project Details
+            <aside className="border-r border-[var(--color-border-default)] overflow-y-auto px-6 py-5 space-y-5 bg-[var(--color-canvas)]">
+              <h3 className="text-[10px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-primary)] flex items-center gap-2">
+                <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
               </h3>
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Name</span>
-                  <p className="font-medium text-[#1A1A1A]">{publishedJob.name}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
+                  <p className="font-medium text-[var(--color-text-primary)]">{publishedJob.name}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">SKU</span>
-                  <p className="font-mono text-[#1A1A1A]">{getSku(publishedJob)}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">SKU</span>
+                  <p className="font-mono text-[var(--color-text-primary)]">{getSku(publishedJob)}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Created</span>
-                  <p className="text-[#1A1A1A]">{getCreatedDate(publishedJob)}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Created</span>
+                  <p className="text-[var(--color-text-primary)]">{getCreatedDate(publishedJob)}</p>
                 </div>
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Brand</span>
-                  <p className="text-[#1A1A1A]">{publishedJob.brand?.name || 'Unknown'}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Brand</span>
+                  <p className="text-[var(--color-text-primary)]">{publishedJob.brand?.name || 'Unknown'}</p>
                 </div>
               </div>
 
               {publishedJob.instructions && (
                 <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-1">Additional Instructions</span>
-                  <p className="text-sm text-[#1A1A1A] whitespace-pre-wrap leading-relaxed">{publishedJob.instructions}</p>
+                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Additional Instructions</span>
+                  <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{publishedJob.instructions}</p>
                 </div>
               )}
 
@@ -1094,19 +1091,19 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 const unit = dims.unit || 'cm';
                 return (
                   <div>
-                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-2">Physical Dimensions</span>
+                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Physical Dimensions</span>
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">W</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.width ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">W</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.width ?? '-'} {unit}</p>
                       </div>
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">H</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.height ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">H</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.height ?? '-'} {unit}</p>
                       </div>
-                      <div className="bg-white border border-[#E5E2DD] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670]">D</span>
-                        <p className="text-sm font-mono text-[#1A1A1A]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
+                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
+                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">D</span>
+                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
                       </div>
                     </div>
                   </div>
@@ -1114,19 +1111,19 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               })()}
 
               <div>
-                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[#7A7670] mb-2">Reference Images</span>
+                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Reference Images</span>
                 <div className="grid grid-cols-2 gap-2">
                   {(publishedJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index) => (
                     failedRefImages.has(asset.id) ? (
-                      <div key={asset.id} className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square flex items-center justify-center" title="Image unavailable">
-                        <ImageIcon className="w-5 h-5 text-[#7A7670]" />
+                      <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square flex items-center justify-center" title="Image unavailable">
+                        <ImageIcon className="w-5 h-5 text-[var(--color-text-muted)]" />
                       </div>
                     ) : (
                       <button
                         key={asset.id}
                         type="button"
                         onClick={() => setLightboxUrl(asset.url)}
-                        className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square relative cursor-zoom-in hover:border-[#1A1A1A] transition-colors"
+                        className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
                       >
                         <Image
                           src={asset.url}
@@ -1140,26 +1137,26 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                     )
                   ))}
                   {(!publishedJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                    <div className="border border-[#E5E2DD] rounded-xl overflow-hidden bg-white aspect-square flex items-center justify-center">
-                      <BoxIcon className="w-6 h-6 text-[#E5E2DD]" />
+                    <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square flex items-center justify-center">
+                      <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
                     </div>
                   )}
                 </div>
               </div>
 
               {role !== "ADMIN" && showRequestChangesForm && (
-                <div className="bg-white border border-[#E5E2DD] rounded-2xl p-5 space-y-3">
+                <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-3">
                   <div>
-                    <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] flex items-center gap-2 border-b border-[#E5E2DD] pb-2">
-                      <Edit3 className="w-4 h-4 text-[#7A7670]" /> Send for Revisions
+                    <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
+                      <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Send for Revisions
                     </h4>
-                    <p className="text-[11px] text-[#7A7670] mt-2">This will remove the model from your live embed. The production team will make the requested changes and resubmit.</p>
+                    <p className="text-[11px] text-[var(--color-text-muted)] mt-2">This will remove the model from your live embed. The production team will make the requested changes and resubmit.</p>
                   </div>
                   <textarea
                     value={requestChangesNote}
                     onChange={(e) => setRequestChangesNote(e.target.value)}
                     placeholder="e.g. The handle is positioned too low — please adjust by 2cm."
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[#E5E2DD] bg-[#F9F8F6] focus:border-[#1A1A1A] focus:ring-1 focus:ring-[#1A1A1A] outline-none transition-colors text-sm font-sans resize-none h-28"
+                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-28"
                   />
                   <div className="flex justify-end gap-2">
                     <Button
@@ -1185,11 +1182,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             </aside>
           )}
 
-          <main className="overflow-y-auto bg-white min-h-0">
+          <main className="overflow-y-auto bg-[var(--color-surface)] min-h-0">
             {publishedViewerProduct ? (
               <ThreeDConfigurator key="published-viewer" product={publishedViewerProduct} />
             ) : (
-              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[#7A7670]">No GLB asset is available for this project.</div>
+              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for this project.</div>
             )}
           </main>
         </div>

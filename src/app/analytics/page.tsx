@@ -205,18 +205,18 @@ export default async function AnalyticsPage({
             const Icon = metric.icon;
             return (
               <Card key={i}>
-                <CardBody className="flex flex-col hover:border-[#1A1A1A] transition-colors">
+                <CardBody className="flex flex-col hover:border-[var(--color-text-primary)] transition-colors">
                   <div className="flex justify-between items-start mb-4">
-                    <div className="w-8 h-8 rounded-full bg-[#F9F8F6] border border-[#E5E2DD] flex items-center justify-center group-hover:bg-[#EFEDEA] transition-colors">
-                      <Icon className="w-4 h-4 text-[#7A7670]" aria-hidden="true" />
+                    <div className="w-8 h-8 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center group-hover:bg-[var(--color-canvas-secondary)] transition-colors">
+                      <Icon className="w-4 h-4 text-[var(--color-text-muted)]" aria-hidden="true" />
                     </div>
                     <div className={`flex items-center gap-1 text-[10px] font-mono tracking-widest px-2 py-0.5 rounded-full border ${metric.trend === 'up' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-red-600 bg-red-50 border-red-100'}`}>
                       {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                       {metric.change}
                     </div>
                   </div>
-                  <div className="text-[#7A7670] text-[10px] uppercase tracking-widest font-mono mb-1">{metric.label}</div>
-                  <div className="text-3xl font-serif italic text-[#1A1A1A]">{metric.value}</div>
+                  <div className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono mb-1">{metric.label}</div>
+                  <div className="text-3xl font-serif italic text-[var(--color-text-primary)]">{metric.value}</div>
                 </CardBody>
               </Card>
             );
@@ -228,10 +228,10 @@ export default async function AnalyticsPage({
             <CardBody className="pt-6">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                 <div>
-                  <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-1">Views vs. Interactions</h3>
-                  <p className="text-xs text-[#7A7670]">Over the selected time period.</p>
+                  <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-1">Views vs. Interactions</h3>
+                  <p className="text-xs text-[var(--color-text-muted)]">Over the selected time period.</p>
                 </div>
-                <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest font-mono text-[#7A7670]">
+                <div className="flex items-center gap-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)]">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" />
                     <span>Interactions</span>
@@ -241,19 +241,19 @@ export default async function AnalyticsPage({
                     <span>AR</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-[#E5E2DD]" />
+                    <div className="w-2 h-2 rounded-full bg-[var(--color-border-default)]" />
                     <span>Views</span>
                   </div>
                 </div>
               </div>
 
               <div className="h-72 w-full flex items-end gap-2 sm:gap-4 relative pt-10">
-                <div className="absolute inset-x-0 top-10 border-t border-dashed border-[#E5E2DD] w-full" />
-                <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#E5E2DD] w-full" />
-                <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[#1A1A1A] w-full" />
+                <div className="absolute inset-x-0 top-10 border-t border-dashed border-[var(--color-border-default)] w-full" />
+                <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--color-border-default)] w-full" />
+                <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[var(--color-text-primary)] w-full" />
 
-                <div className="absolute top-8 left-0 -translate-y-1/2 text-[9px] font-mono text-[#A3A3A3]">{formatCount(yAxisTop)}</div>
-                <div className="absolute top-1/2 left-0 -translate-y-1/2 text-[9px] font-mono text-[#A3A3A3]">{formatCount(yAxisMid)}</div>
+                <div className="absolute top-8 left-0 -translate-y-1/2 text-[9px] font-mono text-[var(--color-text-muted)]">{formatCount(yAxisTop)}</div>
+                <div className="absolute top-1/2 left-0 -translate-y-1/2 text-[9px] font-mono text-[var(--color-text-muted)]">{formatCount(yAxisMid)}</div>
 
                 {periods.map((period) => {
                   const viewHeight = (period.counts.VIEW / maxChartCount) * 100;
@@ -264,7 +264,7 @@ export default async function AnalyticsPage({
                   return (
                     <div key={period.start.toISOString()} className="flex-1 flex flex-col justify-end h-full z-10 group cursor-crosshair relative ml-6">
                       <div
-                        className="w-full bg-[#E5E2DD] rounded-t-sm absolute bottom-6 transition-colors"
+                        className="w-full bg-[var(--color-border-default)] rounded-t-sm absolute bottom-6 transition-colors"
                         style={{ height: barHeight(viewHeight) }}
                       />
                       <div
@@ -276,9 +276,9 @@ export default async function AnalyticsPage({
                         style={{ height: barHeight(arHeight) }}
                       />
 
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white text-[9px] font-mono px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 flex flex-col gap-1 shadow-lg">
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[9px] font-mono px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 flex flex-col gap-1 shadow-lg">
                         <div className="flex justify-between gap-4">
-                          <span className="text-[#A3A3A3]">Views:</span>
+                          <span className="text-[var(--color-text-muted)]">Views:</span>
                           <span className="font-bold">{period.counts.VIEW.toLocaleString()}</span>
                         </div>
                         <div className="flex justify-between gap-4">
@@ -294,7 +294,7 @@ export default async function AnalyticsPage({
                   );
                 })}
               </div>
-              <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[#A3A3A3] pl-6">
+              <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[var(--color-text-muted)] pl-6">
                 {periods.map((period) => (
                   <span key={period.start.toISOString()}>{period.label}</span>
                 ))}
@@ -304,17 +304,17 @@ export default async function AnalyticsPage({
 
         {/* Top Performing Products Table */}
         <Card>
-          <div className="px-6 py-5 border-b border-[#E5E2DD]">
-            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A]">Top Performing Models</h3>
+          <div className="px-6 py-5 border-b border-[var(--color-border-default)]">
+            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Top Performing Models</h3>
           </div>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">Product Name</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">Views</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">Avg. Time Spent Interacting</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">AR Launches</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">Last Seen</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Product Name</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Views</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Avg. Time Spent Interacting</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">AR Launches</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Last Seen</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -334,27 +334,27 @@ export default async function AnalyticsPage({
                   <TableRow key={product.projectId}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#F9F8F6] border border-[#E5E2DD] flex items-center justify-center">
-                          <Box className="w-4 h-4 text-[#7A7670]" />
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center">
+                          <Box className="w-4 h-4 text-[var(--color-text-muted)]" />
                         </div>
-                        <span className="text-sm font-medium text-[#1A1A1A]">{product.name}</span>
+                        <span className="text-sm font-medium text-[var(--color-text-primary)]">{product.name}</span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-lg font-serif italic text-[#1A1A1A]">{product.views.toLocaleString()}</span>
+                      <span className="text-lg font-serif italic text-[var(--color-text-primary)]">{product.views.toLocaleString()}</span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-[12px] font-mono text-[#4A4742]">--</span>
+                      <span className="text-[12px] font-mono text-[var(--color-text-secondary)]">--</span>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-lg font-serif italic text-[#1A1A1A]">{product.arLaunches.toLocaleString()}</span>
+                        <span className="text-lg font-serif italic text-[var(--color-text-primary)]">{product.arLaunches.toLocaleString()}</span>
                         <ArrowUpRight className="w-3 h-3 text-emerald-500" />
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <span className="text-[12px] font-mono text-[#4A4742]">{formatLastSeen(product.lastEventAt)}</span>
+                        <span className="text-[12px] font-mono text-[var(--color-text-secondary)]">{formatLastSeen(product.lastEventAt)}</span>
                         {badgeLabel && (
                           <span className={`flex items-center gap-1 text-[10px] font-mono tracking-widest px-2 py-0.5 rounded-full border ${badgeClasses}`}>
                             <AlertTriangle className="w-3 h-3" aria-hidden="true" />

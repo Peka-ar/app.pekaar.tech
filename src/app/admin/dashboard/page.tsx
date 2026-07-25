@@ -92,10 +92,10 @@ async function AdminDashboardContent() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h2 className="text-3xl font-serif italic text-[#1A1A1A] mb-2">
+        <h2 className="text-3xl font-serif italic text-[var(--color-text-primary)] mb-2">
           Welcome to your Dashboard
         </h2>
-        <p className="text-sm text-[#4A4742]">
+        <p className="text-sm text-[var(--color-text-secondary)]">
           Platform overview at a glance.
         </p>
       </div>
@@ -105,19 +105,19 @@ async function AdminDashboardContent() {
           const Icon = metric.icon;
           return (
             <Card key={i}>
-              <CardBody className="flex flex-col hover:border-[#1A1A1A] transition-colors">
+              <CardBody className="flex flex-col hover:border-[var(--color-text-primary)] transition-colors">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="w-8 h-8 rounded-full bg-[#F9F8F6] border border-[#E5E2DD] flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center">
                     <Icon
-                      className="w-4 h-4 text-[#7A7670]"
+                      className="w-4 h-4 text-[var(--color-text-muted)]"
                       aria-hidden="true"
                     />
                   </div>
                 </div>
-                <div className="text-[#7A7670] text-[10px] uppercase tracking-widest font-mono mb-1">
+                <div className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono mb-1">
                   {metric.label}
                 </div>
-                <div className="text-3xl font-serif italic text-[#1A1A1A]">
+                <div className="text-3xl font-serif italic text-[var(--color-text-primary)]">
                   {metric.value}
                 </div>
               </CardBody>
@@ -129,33 +129,33 @@ async function AdminDashboardContent() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <Card>
           <CardBody className="pt-6">
-            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-6">
+            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-6">
               Projects by Month
             </h3>
             <div className="h-64 w-full flex items-end gap-2 sm:gap-4 relative pt-10">
-              <div className="absolute inset-x-0 top-10 border-t border-dashed border-[#E5E2DD] w-full" />
-              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#E5E2DD] w-full" />
-              <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[#1A1A1A] w-full" />
+              <div className="absolute inset-x-0 top-10 border-t border-dashed border-[var(--color-border-default)] w-full" />
+              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--color-border-default)] w-full" />
+              <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[var(--color-text-primary)] w-full" />
               {projectsByMonth.counts.map((count, i) => (
                 <div
                   key={i}
                   className="flex-1 flex flex-col justify-end h-full z-10 group cursor-crosshair"
                 >
                   <div
-                    className="w-full bg-[#EFEDEA] rounded-t-sm group-hover:bg-[#1A1A1A] transition-colors relative"
+                    className="w-full bg-[var(--color-canvas-secondary)] rounded-t-sm group-hover:bg-[var(--color-text-primary)] transition-colors relative"
                     style={{
                       height: `${(count / maxProjectCount) * 100}%`,
                       maxHeight: "calc(100% - 24px)",
                     }}
                   >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                       {count.toLocaleString()} Projects
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[#A3A3A3]">
+            <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[var(--color-text-muted)]">
               {monthLabelsProjects.map((label, i) => (
                 <span key={i}>{label}</span>
               ))}
@@ -165,33 +165,33 @@ async function AdminDashboardContent() {
 
         <Card>
           <CardBody className="pt-6">
-            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-6">
+            <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-6">
               Signups by Month
             </h3>
             <div className="h-64 w-full flex items-end gap-2 sm:gap-4 relative pt-10">
-              <div className="absolute inset-x-0 top-10 border-t border-dashed border-[#E5E2DD] w-full" />
-              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#E5E2DD] w-full" />
-              <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[#1A1A1A] w-full" />
+              <div className="absolute inset-x-0 top-10 border-t border-dashed border-[var(--color-border-default)] w-full" />
+              <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--color-border-default)] w-full" />
+              <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[var(--color-text-primary)] w-full" />
               {signups.counts.map((count, i) => (
                 <div
                   key={i}
                   className="flex-1 flex flex-col justify-end h-full z-10 group cursor-crosshair"
                 >
                   <div
-                    className="w-full bg-[#EFEDEA] rounded-t-sm group-hover:bg-[#1A1A1A] transition-colors relative"
+                    className="w-full bg-[var(--color-canvas-secondary)] rounded-t-sm group-hover:bg-[var(--color-text-primary)] transition-colors relative"
                     style={{
                       height: `${(count / maxSignupCount) * 100}%`,
                       maxHeight: "calc(100% - 24px)",
                     }}
                   >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                       {count.toLocaleString()} Signups
                     </div>
                   </div>
                 </div>
               ))}
             </div>
-            <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[#A3A3A3]">
+            <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[var(--color-text-muted)]">
               {monthLabels.map((label, i) => (
                 <span key={i}>{label}</span>
               ))}
@@ -207,16 +207,16 @@ async function AdminDashboardContent() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">
+              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">
                 Brand Name
               </TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">
+              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">
                 Email
               </TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">
+              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">
                 Projects
               </TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-normal">
+              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">
                 Status
               </TableCell>
             </TableRow>
@@ -230,21 +230,21 @@ async function AdminDashboardContent() {
                   <TableRow key={brand.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[#F9F8F6] border border-[#E5E2DD] flex items-center justify-center">
-                          <Users className="w-4 h-4 text-[#7A7670]" />
+                        <div className="w-8 h-8 rounded-lg bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center">
+                          <Users className="w-4 h-4 text-[var(--color-text-muted)]" />
                         </div>
-                        <span className="text-sm font-medium text-[#1A1A1A]">
+                        <span className="text-sm font-medium text-[var(--color-text-primary)]">
                           {brand.name ?? "Unnamed"}
                         </span>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className="text-sm text-[#7A7670]">
+                      <span className="text-sm text-[var(--color-text-muted)]">
                         {brand.email}
                       </span>
                     </TableCell>
                     <TableCell>
-                      <span className="text-lg font-serif italic text-[#1A1A1A]">
+                      <span className="text-lg font-serif italic text-[var(--color-text-primary)]">
                         {brand._count.projects.toLocaleString()}
                       </span>
                     </TableCell>

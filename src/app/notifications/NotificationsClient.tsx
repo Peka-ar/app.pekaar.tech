@@ -43,23 +43,23 @@ export default function NotificationsClient({ initialJobs }: { initialJobs: Job[
 
         <div className="flex flex-col sm:flex-row justify-between gap-4">
           <div className="relative max-w-md w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A7670]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
             <input
               type="text"
               placeholder="Search by Product Name or Job ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[#E5E2DD] bg-white text-sm focus:outline-none focus:border-[#1A1A1A] transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface)] text-sm focus:outline-none focus:border-[var(--color-text-primary)] transition-colors"
             />
           </div>
 
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#7A7670]" />
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as ProjectStatus | 'All')}
-                className="pl-10 pr-8 py-2.5 rounded-xl border border-[#E5E2DD] bg-white text-sm focus:outline-none focus:border-[#1A1A1A] transition-colors appearance-none cursor-pointer"
+                className="pl-10 pr-8 py-2.5 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-surface)] text-sm focus:outline-none focus:border-[var(--color-text-primary)] transition-colors appearance-none cursor-pointer"
               >
                 <option value="All">All Statuses</option>
                 {statusOptions.map(status => (
@@ -72,25 +72,25 @@ export default function NotificationsClient({ initialJobs }: { initialJobs: Job[
           </div>
         </div>
 
-        <div className="bg-white border border-[#E5E2DD] rounded-3xl overflow-hidden shadow-sm">
+        <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-3xl overflow-hidden shadow-sm">
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Job ID</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Product Name</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Initiated Date</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Completion Time</TableCell>
-                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[#7A7670] font-bold">Status</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Job ID</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Product Name</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Initiated Date</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Completion Time</TableCell>
+                <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Status</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {filteredJobs.length > 0 ? (
                 filteredJobs.map((job) => (
                   <TableRow key={job.id}>
-                    <TableCell className="text-xs font-mono text-[#1A1A1A]">{job.id}</TableCell>
-                    <TableCell className="text-sm text-[#1A1A1A] font-medium">{job.product}</TableCell>
-                    <TableCell className="text-xs text-[#4A4742]">{job.date}</TableCell>
-                    <TableCell className="text-xs text-[#4A4742]">{job.completed}</TableCell>
+                    <TableCell className="text-xs font-mono text-[var(--color-text-primary)]">{job.id}</TableCell>
+                    <TableCell className="text-sm text-[var(--color-text-primary)] font-medium">{job.product}</TableCell>
+                    <TableCell className="text-xs text-[var(--color-text-secondary)]">{job.date}</TableCell>
+                    <TableCell className="text-xs text-[var(--color-text-secondary)]">{job.completed}</TableCell>
                     <TableCell>
                       {getStatusBadge(job.status)}
                     </TableCell>

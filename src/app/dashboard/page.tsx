@@ -155,8 +155,8 @@ async function DashboardContent() {
     <div className="space-y-8 animate-in fade-in duration-500">
 
       <div>
-        <h2 className="text-3xl font-serif italic text-[#1A1A1A] mb-2">Welcome back.</h2>
-        <p className="text-sm text-[#4A4742]">Here is what&apos;s happening with your 3D assets today.</p>
+        <h2 className="text-3xl font-serif italic text-[var(--color-text-primary)] mb-2">Welcome back.</h2>
+        <p className="text-sm text-[var(--color-text-secondary)]">Here is what&apos;s happening with your 3D assets today.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -164,18 +164,18 @@ async function DashboardContent() {
           const Icon = metric.icon;
           return (
             <Card key={i}>
-              <CardBody className="flex flex-col hover:border-[#1A1A1A] transition-colors">
+              <CardBody className="flex flex-col hover:border-[var(--color-text-primary)] transition-colors">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="w-8 h-8 rounded-full bg-[#F9F8F6] border border-[#E5E2DD] flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-[#7A7670]" aria-hidden="true" />
+                  <div className="w-8 h-8 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center">
+                    <Icon className="w-4 h-4 text-[var(--color-text-muted)]" aria-hidden="true" />
                   </div>
                   <div className={`flex items-center gap-1 text-[10px] font-mono tracking-widest px-2 py-0.5 rounded-full border ${metric.trend === 'up' ? 'text-emerald-600 bg-emerald-50 border-emerald-100' : 'text-red-600 bg-red-50 border-red-100'}`}>
                     {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                     {metric.change}
                   </div>
                 </div>
-                <div className="text-[#7A7670] text-[10px] uppercase tracking-widest font-mono mb-1">{metric.label}</div>
-                <div className="text-3xl font-serif italic text-[#1A1A1A]">{metric.value}</div>
+                <div className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono mb-1">{metric.label}</div>
+                <div className="text-3xl font-serif italic text-[var(--color-text-primary)]">{metric.value}</div>
               </CardBody>
             </Card>
           );
@@ -187,26 +187,26 @@ async function DashboardContent() {
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardBody className="pt-6">
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-6">Interaction Trends</h3>
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-6">Interaction Trends</h3>
               <div className="h-64 w-full flex items-end gap-2 sm:gap-4 relative pt-10">
-                <div className="absolute inset-x-0 top-10 border-t border-dashed border-[#E5E2DD] w-full" />
-                <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[#E5E2DD] w-full" />
-                <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[#1A1A1A] w-full" />
+                <div className="absolute inset-x-0 top-10 border-t border-dashed border-[var(--color-border-default)] w-full" />
+                <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-[var(--color-border-default)] w-full" />
+                <div className="absolute inset-x-0 bottom-6 border-t border-dashed border-[var(--color-text-primary)] w-full" />
 
                 {monthlyViewCounts.map((count, i) => (
                   <div key={i} className="flex-1 flex flex-col justify-end h-full z-10 group cursor-crosshair">
                     <div
-                      className="w-full bg-[#EFEDEA] rounded-t-sm group-hover:bg-[#1A1A1A] transition-colors relative"
+                      className="w-full bg-[var(--color-canvas-secondary)] rounded-t-sm group-hover:bg-[var(--color-text-primary)] transition-colors relative"
                       style={{ height: `${(count / maxCount) * 100}%`, maxHeight: 'calc(100% - 24px)' }}
                     >
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[#1A1A1A] text-white text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[9px] font-mono px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                         {count.toLocaleString()} Views
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[#A3A3A3]">
+              <div className="flex justify-between mt-2 text-[9px] font-mono tracking-widest text-[var(--color-text-muted)]">
                 {monthLabels.map((label, i) => (
                   <span key={i}>{label}</span>
                 ))}
@@ -216,25 +216,25 @@ async function DashboardContent() {
 
           <Card>
             <CardHeader className="flex justify-between items-center">
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A]">Recent Tasks</h3>
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Recent Tasks</h3>
               <LinkButton href="/tasks" variant="ghost" size="sm">
                 View All
               </LinkButton>
             </CardHeader>
-            <div className="divide-y divide-[#E5E2DD]">
+            <div className="divide-y divide-[var(--color-border-default)]">
               {recentProjects.length === 0 ? (
-                <div className="p-6 text-sm text-[#7A7670] text-center italic">No recent tasks. Get started by deploying a new model!</div>
+                <div className="p-6 text-sm text-[var(--color-text-muted)] text-center italic">No recent tasks. Get started by deploying a new model!</div>
               ) : (
                 recentProjects.map((job) => {
                   const meta = PROJECT_STATUS_META[job.status];
                   const Icon = meta.icon;
                   return (
-                    <div key={job.id} className="px-6 py-4 flex items-center justify-between hover:bg-[#F9F8F6] transition-colors">
+                    <div key={job.id} className="px-6 py-4 flex items-center justify-between hover:bg-[var(--color-canvas)] transition-colors">
                       <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-[#EFEDEA] border border-[#E5E2DD]" />
+                        <div className="w-10 h-10 rounded-xl bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)]" />
                         <div>
-                          <div className="text-sm font-medium text-[#1A1A1A]">{job.name}</div>
-                          <div className="text-[10px] font-mono text-[#7A7670] mt-0.5">{formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}</div>
+                          <div className="text-sm font-medium text-[var(--color-text-primary)]">{job.name}</div>
+                          <div className="text-[10px] font-mono text-[var(--color-text-muted)] mt-0.5">{formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}</div>
                         </div>
                       </div>
                       <Badge tone={meta.tone} icon={<Icon className="w-3 h-3" />}>
@@ -254,7 +254,7 @@ async function DashboardContent() {
               <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none" />
               <Box className="w-6 h-6 text-emerald-400 mb-4" />
               <h3 className="text-xl font-serif italic mb-2">Deploy New Model</h3>
-              <p className="text-xs text-[#A3A3A3] mb-6 leading-relaxed">
+              <p className="text-xs text-[var(--color-text-muted)] mb-6 leading-relaxed">
                 Transform standard product photography into an interactive AR experience.
               </p>
               <LinkButton href="/tasks" variant="secondary" size="sm" rightIcon={<ArrowUpRight className="w-3 h-3" />}>
@@ -265,7 +265,7 @@ async function DashboardContent() {
 
           <Card>
             <CardBody>
-              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[#1A1A1A] mb-4">Quick Links</h3>
+              <h3 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-4">Quick Links</h3>
               <div className="space-y-2">
                 <LinkButton href="/integrations" variant="secondary" size="sm" className="w-full justify-between">
                   SDK Documentation <ArrowUpRight className="w-4 h-4" />
