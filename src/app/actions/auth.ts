@@ -41,7 +41,17 @@ async function issueVerificationOtp(email: string) {
     },
   });
 
-  await sendVerificationOtpEmail(email, otp);
+  try {
+    await sendVerificationOtpEmail(email, otp);
+  } catch (emailError) {
+    console.error(
+      `[auth] Failed to send verification OTP email to ${email}:`,
+      emailError instanceof Error ? emailError.message : emailError
+    );
+    throw new Error(
+      "Account created, but we couldn't send the verification email. Please use the resend code option to try again."
+    );
+  }
 }
 
 function optionalText(value?: string) {
