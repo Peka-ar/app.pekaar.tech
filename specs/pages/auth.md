@@ -79,7 +79,7 @@ The redirect target is decided **after** NextAuth issues the JWT and only using 
 ### Stage 1 — registration form (`:117`)
 - Email + password `Input`s. Password is controlled (`useState`) to drive the live strength meter.
 - **Password strength meter** (`:26`): 0 = empty, 1 = `<6` (Weak, amber), 2 = `<10` (Good, amber), 3 = `≥10` (Strong, emerald). 3-bar visual + mono label.
-- Calls `registerUser(new FormData(form))` (`auth.ts:82`) on submit.
+- Calls `registerUser(new FormData(form))` (`auth.ts:97`) on submit.
 - On success → `setSubmittedEmail(email)` → swaps to Stage 2.
 - Errors surface in an `Alert` ("Email and password are required", "Password must be at least 6 characters", "Email already registered").
 - Links to `/terms` + `/privacy` (open in new tab). "Sign In" link swaps to signin.
@@ -87,7 +87,7 @@ The redirect target is decided **after** NextAuth issues the JWT and only using 
 ### Stage 2 — OTP verification (`:81`)
 - Centered card with a checkmark, "Enter your code" heading, "We sent a 6-digit verification code to {email}."
 - `<OtpInput value={otp} onChange={setOtp} id="signup-otp" />` (6 boxes, auto-advance, paste-to-fill).
-- Calls `verifyEmailOtp(submittedEmail, otp)` (`auth.ts:190`) → on success immediately `signIn("credentials", { email: submittedEmail, password, redirect: false })`.
+- Calls `verifyEmailOtp(submittedEmail, otp)` (`auth.ts:205`) → on success immediately `signIn("credentials", { email: submittedEmail, password, redirect: false })`.
 - If `signIn` errors → "Email verified, but automatic sign-in failed. Please sign in manually." (verification still succeeded).
 - On full success → `onSuccess()` (swaps AuthClient to signin view) + `router.push("/onboarding")` + `router.refresh()`.
 - "Back to Sign In" link (`onNavigate('signin')`).
@@ -96,7 +96,7 @@ The redirect target is decided **after** NextAuth issues the JWT and only using 
 
 ## 4. Forgot Password — `ForgotPasswordForm` (`src/components/auth/ForgotPasswordForm.tsx:1`)
 
-**Props:** `{ onNavigate }`. Single email field; calls `requestPasswordReset(email)` (`auth.ts:144`) on submit. Always returns `{ success: true }` (the action returns success even if no user exists — no enumeration), so the form swaps to a "Check your inbox" confirmation state regardless. Includes a "Back" link to signin.
+**Props:** `{ onNavigate }`. Single email field; calls `requestPasswordReset(email)` (`auth.ts:159`) on submit. Always returns `{ success: true }` (the action returns success even if no user exists — no enumeration), so the form swaps to a "Check your inbox" confirmation state regardless. Includes a "Back" link to signin.
 
 ---
 
@@ -106,7 +106,7 @@ The redirect target is decided **after** NextAuth issues the JWT and only using 
 Reads `token` from `searchParams` and passes it to the client: `<ResetPasswordForm token={token} />`. (If `token` is missing, the form shows an error up-front.)
 
 ### `ResetPasswordForm` (`src/components/auth/ResetPasswordForm.tsx:1`) — client
-**Props:** `{ token: string }`. New-password form inside a `Card` → `CardBody`. Calls `resetPassword(token, password)` (`auth.ts:167`) on submit. Enforces password ≥ 6 chars (server side too). On success → success state with a "Sign In" link to `/auth`. Errors: "Password must be at least 6 characters", "Reset link is invalid or expired".
+**Props:** `{ token: string }`. New-password form inside a `Card` → `CardBody`. Calls `resetPassword(token, password)` (`auth.ts:182`) on submit. Enforces password ≥ 6 chars (server side too). On success → success state with a "Sign In" link to `/auth`. Errors: "Password must be at least 6 characters", "Reset link is invalid or expired".
 
 ---
 
@@ -122,7 +122,7 @@ export default async function VerifyEmailPage({ searchParams }) {
   return (/* centered card: "Email verified" or "Unable to verify" + Sign In link */);
 }
 ```
-Calls `verifyEmail(token)` (`auth.ts:125`) directly during render. If the `email_verification` token is missing/expired, the action throws "Verification link is invalid or expired", which becomes the error message. On success the user is verified and the token is deleted; the page shows a success card linking to `/auth`.
+Calls `verifyEmail(token)` (`auth.ts:140`) directly during render. If the `email_verification` token is missing/expired, the action throws "Verification link is invalid or expired", which becomes the error message. On success the user is verified and the token is deleted; the page shows a success card linking to `/auth`.
 
 > **Two verification paths exist:** the OTP path (primary, used by `SignUpForm` Stage 2) and the magic-link path (`/auth/verify`). Both mark `emailVerified` and delete their tokens. The OTP path is wired into the signup flow; the magic-link path is a fallback — currently no UI sends `email_verification` UUID tokens (only `email_verification_otp`), so `/auth/verify` is reached only if you manually construct the link. Keep it for email-client deep-link fallback.
 
@@ -156,7 +156,7 @@ All in `src/app/actions/auth.ts:1` (`"use server"`). Public unless noted.
 ### Helpers (private, same file)
 - `normalizeEmail(email)` — trim + lowercase.
 - `generateOtp()` — `crypto.getRandomValues(Uint32Array(1))[0]` padded to 10 digits, sliced to 6.
-- `issueVerificationOtp(email)` — deletes any existing `email_verification`/`email_verification_otp` tokens, hashes the OTP with `hashPassword` (bcrypt 12 rounds), stores with 10-min expiry, emails it.
+- `issueVerificationOtp(email)` — deletes any existing `email_verification`/`email_verification_otp` tokens, hashes the OTP with `hashPassword` (bcrypt 12 rounds), stores with 10-min expiry, then calls `sendVerificationOtpEmail`. **The Resend send is wrapped in try/catch** — on email failure, the user record (already in the DB at this point) is left untouched and a clear error is thrown ("Account created, but we couldn't send the verification email. Please use the resend code option to try again.") which the form's `<Alert>` surfaces to the user. The throw is recoverable: re-submitting signup hits the "existing unverified user" branch and re-issues the OTP, or the user clicks the existing resend-code button.
 - `optionalText(value)` — trim or `null`.
 
 ---
@@ -271,13 +271,15 @@ Built on Resend via `getResend()` (`src/lib/resend.ts:1`). `sendEmail` **no-ops 
 | `ResetPasswordForm` | `src/components/auth/ResetPasswordForm.tsx:1` |
 | `OtpInput` | `src/components/auth/OtpInput.tsx:1` |
 | Auth server actions | `src/app/actions/auth.ts:1` |
-| `preflightLogin` | `auth.ts:51` |
-| `registerUser` | `auth.ts:82` |
-| `verifyEmail` (magic link) | `auth.ts:125` |
-| `requestPasswordReset` | `auth.ts:144` |
-| `resetPassword` | `auth.ts:167` |
-| `verifyEmailOtp` | `auth.ts:190` |
-| `completeOnboarding` | `auth.ts:225` |
+| `preflightLogin` | `auth.ts:66` |
+| `resendVerificationOtp` | `auth.ts:82` |
+| `registerUser` | `auth.ts:97` |
+| `verifyEmail` (magic link) | `auth.ts:140` |
+| `requestPasswordReset` | `auth.ts:159` |
+| `resetPassword` | `auth.ts:182` |
+| `verifyEmailOtp` | `auth.ts:205` |
+| `completeOnboarding` | `auth.ts:240` |
+| `logout` | `auth.ts:271` |
 | NextAuth instance | `src/auth.ts:1` |
 | Edge callbacks | `src/auth.config.ts:1` |
 | Middleware (proxy) | `src/proxy.ts:1` |

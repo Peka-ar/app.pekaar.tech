@@ -17,7 +17,7 @@ The admin panel provides platform-wide management tools for ADMIN users. Four pa
 
 **Proxy gating:** `/admin` → `["ADMIN"]` (`src/proxy.ts:8`). All four routes are protected by `requirePrincipalOrRedirect()` in the server entry, and each server action calls `requirePrincipal({ roles: [Role.ADMIN] })`.
 
-**Layout:** All four pages are wrapped in `AdminLayout` (`src/components/admin/AdminLayout.tsx:19`), which provides a left sidebar navigation (Overview, Users, Tasks Management, Analytics), a sticky header with title + action slot + ThemeToggle + NotificationBell, and an `AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`).
+**Layout:** All four pages are wrapped in `AdminLayout` (`src/components/admin/AdminLayout.tsx:19`), which is split into an outer wrapper that mounts `<SessionProvider>` and an inner `AdminLayoutInner` that consumes the session. This mirrors the `DashboardLayout` pattern (`src/components/dashboard/DashboardLayout.tsx:19`) and is required because `AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`) re-uses the dashboard `MobileNavDrawer`, which calls `useSession()`. Without the provider, the admin pages would throw `TypeError: Cannot destructure property 'data' of useSession() as it is undefined` on every SSR. The layout provides a left sidebar navigation (Overview, Users, Tasks Management, Analytics), a sticky header with title + action slot + ThemeToggle + NotificationBell, and the mobile nav drawer.
 
 ---
 
