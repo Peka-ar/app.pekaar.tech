@@ -44,14 +44,14 @@
 
 /* ─── Dark mode overrides ─── */
 .dark {
-  --canvas:          #181715;
+  --canvas:          #141413;
   --canvas-secondary:#252320;
   --surface:         #1f1e1b;
-  --canvas-inverted: #faf9f5;
+  --canvas-inverted: #f5f3ee;
 
-  --text-primary:    #faf9f5;
-  --text-secondary:  #a09d96;
-  --text-muted:      #8e8b82;
+  --text-primary:    #f5f3ee;
+  --text-secondary:  #c4c0b6;
+  --text-muted:      #9a968d;
   --border-default:  #3d3d3a;
 
   --primary:         #cc785c;
@@ -101,6 +101,9 @@
     border-radius: 1.5rem;
     border: 1px solid var(--border-default);
     box-shadow: 0 1px 3px rgba(20,20,19,0.08);
+  }
+  .dark .card {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
   }
 
   .btn-primary {
