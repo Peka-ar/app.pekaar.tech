@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Box } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
-const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin'];
+const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin', '/auth'];
 
 export function TopNav() {
   const pathname = usePathname();
