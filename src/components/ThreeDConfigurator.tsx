@@ -10,6 +10,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mvRef = useRef<any>(null);
+  const hasInteractedRef = useRef(false);
   const [loaded, setLoaded] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -38,10 +39,12 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
     setProgress(0);
     setError(null);
 
-    mv.cameraOrbit = '0deg 75deg 105%';
-    mv.cameraTarget = '0m 0.4m 0m';
-    mv.interpolationDecay = 200;
-    mv.autoRotate = true;
+    if (!hasInteractedRef.current) {
+      mv.cameraOrbit = '0deg 75deg 105%';
+      mv.cameraTarget = '0m 0.4m 0m';
+      mv.interpolationDecay = 200;
+      mv.autoRotate = true;
+    }
 
     const onLoad = () => { setLoaded(true); setProgress(100); };
     const onProgress = (e: CustomEvent) => {
@@ -50,15 +53,18 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
       }
     };
     const onError = () => setError('Failed to load model');
+    const onCameraChange = () => { hasInteractedRef.current = true; };
 
     mv.addEventListener('load', onLoad);
     mv.addEventListener('progress', onProgress);
     mv.addEventListener('error', onError);
+    mv.addEventListener('camera-change', onCameraChange);
 
     return () => {
       mv.removeEventListener('load', onLoad);
       mv.removeEventListener('progress', onProgress);
       mv.removeEventListener('error', onError);
+      mv.removeEventListener('camera-change', onCameraChange);
     };
   }, [product.src]);
 

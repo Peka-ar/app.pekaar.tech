@@ -1,31 +1,39 @@
 generator client {
-  provider = "prisma-client-js"
-  engineType = "library"
+  provider = "prisma-client"
+  output   = "../prisma/generated/client"
 }
 
 datasource db {
-  provider = "mongodb"
-  url      = env("DATABASE_URL")
+  provider = "postgresql"
 }
 
 model User {
-  id              String           @id @default(auto()) @map("_id") @db.ObjectId
-  email           String           @unique
-  emailVerified   DateTime?
-  role            Role             @default(BRAND)
-  stripeCustomerId String?
+  id               String           @id @default(cuid())
+  email            String           @unique
+  emailVerified    DateTime?
+  role             Role             @default(BRAND)
   subscriptionTier String?
-  usageLimits     Int              @default(10)
-  name            String?
-  onboarded       Boolean          @default(false)
-  productCategory String?
+  usageLimits      Int              @default(10)
+  name             String?
+  onboarded        Boolean          @default(false)
+  productCategory  String?
   storefrontPlatform String?
-  catalogSize     String?
-  hashedPassword  String?
-  projects        Project[]
-  analyticsEvents AnalyticsEvent[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  catalogSize      String?
+  hashedPassword   String?
+  status           UserStatus @default(ACTIVE)
+  suspendedAt      DateTime?
+  statusReason     String?
+  projects         Project[]
+  assets           Asset[]
+  analyticsEvents  AnalyticsEvent[]
+  revisionRequests RevisionRequest[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
 }
 
 enum Role {
@@ -34,19 +42,18 @@ enum Role {
 }
 
 model Project {
-  id            String           @id @default(auto()) @map("_id") @db.ObjectId
+  id            String           @id @default(cuid())
   name          String
   sku           String?
   instructions  String?
   dimensions    Json?
   status        ProjectStatus    @default(PENDING)
-  referenceUrls String[]         // R2 URLs for JPGs
-  assetUrls     Json?            // { glb: string, usdz: string }
-  sdkConfig     Json?            // { scale: [1,1,1], autoRotate: true, shadow: 0.8, etc }
-  brandId       String           @db.ObjectId
+  sdkConfig     Json?
+  brandId       String
   brand         User             @relation(fields: [brandId], references: [id])
-  assignedTo    String?          @db.ObjectId
   analytics     AnalyticsEvent[]
+  assets        Asset[]
+  revisionRequests RevisionRequest[]
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -55,13 +62,26 @@ model Project {
 
 enum ProjectStatus {
   PENDING
-  IN_PROGRESS
-  REVIEW
+  REVISIONS
+  COMPLETED
   PUBLISHED
 }
 
+model RevisionRequest {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  note        String
+  requestedBy String
+  requester   User     @relation(fields: [requestedBy], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([projectId])
+  @@index([createdAt])
+}
+
 model Token {
-  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  id         String   @id @default(cuid())
   identifier String
   token      String   @unique
   type       String
@@ -70,12 +90,12 @@ model Token {
 }
 
 model AnalyticsEvent {
-  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  id        String   @id @default(cuid())
   eventType EventType
   sessionId String
-  projectId String   @db.ObjectId
+  projectId String
   project   Project  @relation(fields: [projectId], references: [id])
-  brandId   String   @db.ObjectId
+  brandId   String
   brand     User     @relation(fields: [brandId], references: [id])
   createdAt DateTime @default(now())
 
@@ -87,4 +107,43 @@ enum EventType {
   VIEW
   INTERACTION
   AR_LAUNCH
+}
+
+enum AssetType {
+  REFERENCE_IMAGE
+  MODEL_GLB
+  MODEL_USDZ
+}
+
+enum AssetStatus {
+  UPLOADING
+  READY
+  PUBLISHED
+  ARCHIVED
+  DELETED
+}
+
+model Asset {
+  id            String      @id @default(cuid())
+  projectId     String?
+  ownerId       String
+  type          AssetType
+  status        AssetStatus @default(UPLOADING)
+  provider      String      @default("uploadthing")
+  key           String
+  url           String
+  originalName  String
+  mimeType      String
+  size          Int
+  checksum      String?
+  backupSynced  Boolean     @default(false)
+  gdriveFileId  String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  project       Project?    @relation(fields: [projectId], references: [id])
+  owner         User        @relation(fields: [ownerId], references: [id])
+
+  @@index([projectId])
+  @@index([ownerId])
 }

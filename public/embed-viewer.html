@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>3D Viewer</title>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js"></script>
+  <style>
+    :root {
+      --bg: #F9F8F6;
+      --border: #E5E2DD;
+      --text-muted: #7A7670;
+      --text-primary: #1A1A1A;
+      --hover: #EFEDEA;
+    }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    .grid-floor {
+      position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, #E5E2DD 100%),
+        repeating-linear-gradient(90deg, transparent 0 60px, rgba(26,26,26,0.08) 60px 61px),
+        repeating-linear-gradient(0deg, transparent 0 60px, rgba(26,26,26,0.08) 60px 61px);
+      transform: perspective(800px) rotateX(62deg);
+      transform-origin: center 100%;
+      mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 72%, transparent 100%);
+      -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 72%, transparent 100%);
+      border-radius: 16px;
+    }
+    #frame {
+      position: absolute; inset: 0;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: transparent;
+    }
+    #stage { position: absolute; inset: 0; z-index: 1; background: transparent; }
+    #stage model-viewer {
+      display: block; width: 100%; height: 100%;
+      --poster-color: transparent;
+      background-color: transparent;
+      background: transparent;
+    }
+    .loader {
+      position: absolute; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: transparent;
+    }
+    .loader[hidden] { display: none; }
+    .loader-spin {
+      width: 20px; height: 20px; color: var(--text-muted);
+      animation: spin 1.2s linear infinite;
+    }
+    .loader-text {
+      margin-top: 12px;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em;
+      color: var(--text-muted);
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .err {
+      position: absolute; inset: 0; z-index: 10;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      background: transparent; padding: 24px;
+    }
+    .err[data-shown] { display: flex; }
+    .err-text {
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 12px; color: #dc2626; text-align: center; max-width: 28rem;
+    }
+    .controls {
+      position: absolute; top: 16px; right: 16px; z-index: 20;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .controls[hidden] { display: none; }
+    .ctrl-btn {
+      width: 40px; height: 40px; border-radius: 9999px;
+      display: flex; align-items: center; justify-content: center;
+      background: #fff; border: 1px solid var(--border); color: var(--text-muted);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      cursor: pointer; padding: 0;
+      transition: background-color 200ms, color 200ms, border-color 200ms;
+    }
+    .ctrl-btn:hover { background: var(--hover); }
+    .ctrl-btn[aria-pressed="true"] {
+      background: var(--text-primary); color: #fff; border-color: var(--text-primary);
+    }
+    .ctrl-btn:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+    .ctrl-btn svg { width: 16px; height: 16px; display: block; }
+    .ctrl-btn[data-spin] svg { animation: spin 8s linear infinite; }
+    :focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+  </style>
+</head>
+<body>
+  <div class="grid-floor" aria-hidden="true"></div>
+  <div id="frame">
+    <div id="stage" role="img" aria-label="Loading 3D model">
+      <div class="loader" id="loader">
+        <svg class="loader-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
+        </svg>
+        <span class="loader-text" id="loader-text">Loading 3D Model…</span>
+      </div>
+      <div class="err" id="err" role="status">
+        <span class="err-text" id="err-text">Failed to load model</span>
+      </div>
+    </div>
+    <div class="controls" id="controls" hidden>
+      <button type="button" class="ctrl-btn" id="btn-rotate" aria-label="Toggle auto rotation" aria-pressed="true" data-spin>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+      </button>
+      <button type="button" class="ctrl-btn" id="btn-reset" aria-label="Reset camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/>
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <script type="module">
+    (function () {
+      var projectId = "{PROJECT_ID}";
+      var sessionId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2));
+      var APP_URL = "";
+
+      function send(eventType) {
+        try {
+          fetch(APP_URL + "/api/sdk/v1/events", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ eventType: eventType, sessionId: sessionId, projectId: projectId }),
+            keepalive: true
+          }).catch(function () {});
+        } catch (_) {}
+      }
+
+      function showError(message) {
+        var loader = document.getElementById("loader");
+        var err = document.getElementById("err");
+        var errText = document.getElementById("err-text");
+        var controls = document.getElementById("controls");
+        if (loader) loader.hidden = true;
+        if (errText) errText.textContent = message || "Failed to load model";
+        if (err) err.setAttribute("data-shown", "");
+        if (controls) controls.hidden = true;
+      }
+
+      function showControls() {
+        var loader = document.getElementById("loader");
+        var controls = document.getElementById("controls");
+        if (loader) loader.hidden = true;
+        if (controls) controls.hidden = false;
+      }
+
+      fetch(APP_URL + "/api/sdk/v1/config/" + encodeURIComponent(projectId), { headers: { "Accept": "application/json" } })
+        .then(function (res) { if (!res.ok) throw new Error("not-found"); return res.json(); })
+        .then(function (cfg) {
+          if (!cfg || !cfg.assetUrls || !cfg.assetUrls.glb) { showError("This 3D model is not currently available."); return; }
+
+          var mv = document.createElement("model-viewer");
+          mv.setAttribute("src", cfg.assetUrls.glb);
+          mv.setAttribute("camera-controls", "");
+          mv.setAttribute("disable-pan", "");
+          mv.setAttribute("loading", "eager");
+          mv.setAttribute("reveal", "auto");
+          mv.setAttribute("shadow-intensity", "0.6");
+          mv.setAttribute("shadow-softness", "0.8");
+          mv.setAttribute("exposure", "1");
+          mv.setAttribute("tone-mapping", "aces");
+          mv.setAttribute("environment-image", "neutral");
+          mv.setAttribute("background-color", "transparent");
+          mv.setAttribute("alt", "Interactive 3D model");
+          mv.style.width = "100%";
+          mv.style.height = "100%";
+          mv.style.position = "absolute";
+          mv.style.inset = "0";
+          mv.style.outline = "none";
+          mv.style.backgroundColor = "transparent";
+          mv.style.background = "transparent";
+
+          var stage = document.getElementById("stage");
+          stage.removeAttribute("aria-label");
+          stage.appendChild(mv);
+
+          function applyInitial() {
+            mv.cameraOrbit = "0deg 75deg 105%";
+            mv.cameraTarget = "0m 0.4m 0m";
+            mv.interpolationDecay = 200;
+            mv.autoRotate = true;
+            try { mv.jumpCameraToGoal(); } catch (_) {}
+          }
+          if (typeof customElements !== "undefined" && customElements.whenDefined) {
+            customElements.whenDefined("model-viewer").then(applyInitial);
+          } else {
+            mv.addEventListener("load", applyInitial);
+          }
+
+          mv.addEventListener("progress", function (e) {
+            var p = e && e.detail && e.detail.totalProgress;
+            var t = document.getElementById("loader-text");
+            if (t && typeof p === "number" && p > 0 && p < 1) {
+              t.textContent = "Loading… " + Math.round(p * 100) + "%";
+            }
+          });
+
+          mv.addEventListener("load", function () { showControls(); });
+
+          mv.addEventListener("error", function () { showError("Failed to load model"); });
+
+          var btnRotate = document.getElementById("btn-rotate");
+          btnRotate.addEventListener("click", function () {
+            var next = !mv.autoRotate;
+            mv.autoRotate = next;
+            btnRotate.setAttribute("aria-pressed", String(next));
+            if (next) btnRotate.setAttribute("data-spin", ""); else btnRotate.removeAttribute("data-spin");
+          });
+
+          document.getElementById("btn-reset").addEventListener("click", function () {
+            mv.cameraOrbit = "0deg 75deg 105%";
+            mv.cameraTarget = "0m 0.4m 0m";
+          });
+
+          send("VIEW");
+
+          var interacted = false;
+          mv.addEventListener("camera-change", function () {
+            if (interacted) return;
+            interacted = true;
+            send("INTERACTION");
+          });
+        })
+        .catch(function () { showError("This 3D model is not currently available."); });
+    })();
+  </script>
+</body>
+</html>

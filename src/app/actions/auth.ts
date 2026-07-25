@@ -2,8 +2,10 @@
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import { sendPasswordResetEmail, sendVerificationOtpEmail } from "@/lib/emails";
-import { auth } from "@/auth";
+import { unstable_update } from "@/auth";
 import { revalidatePath } from "next/cache";
+import { requirePrincipal } from "@/lib/auth-guards";
+import { Role } from "@/generated/prisma/client";
 
 const EMAIL_VERIFICATION_TYPE = "email_verification";
 const EMAIL_VERIFICATION_OTP_TYPE = "email_verification_otp";
@@ -47,28 +49,24 @@ function optionalText(value?: string) {
   return trimmed ? trimmed : null;
 }
 
-export async function preflightLogin(email: string, password: string) {
+type PreflightResult =
+  | { status: "invalid_credentials" }
+  | { status: "valid"; onboarded: boolean; role: Role };
+
+export async function preflightLogin(email: string, password: string): Promise<PreflightResult> {
   const normalizedEmail = normalizeEmail(email);
 
   if (!normalizedEmail || !password) {
-    return { status: "invalid_password" as const };
+    return { status: "invalid_credentials" };
   }
 
   const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user) {
-    return { status: "not_registered" as const };
+  if (!user || !user.emailVerified || !user.hashedPassword || !(await verifyPassword(password, user.hashedPassword))) {
+    return { status: "invalid_credentials" };
   }
 
-  if (!user.emailVerified) {
-    return { status: "unverified" as const };
-  }
-
-  if (!user.hashedPassword || !(await verifyPassword(password, user.hashedPassword))) {
-    return { status: "invalid_password" as const };
-  }
-
-  return { status: "valid" as const, onboarded: user.onboarded };
+  return { status: "valid", onboarded: user.onboarded, role: user.role };
 }
 
 export async function resendVerificationOtp(email: string) {
@@ -78,12 +76,8 @@ export async function resendVerificationOtp(email: string) {
     select: { email: true, emailVerified: true },
   });
 
-  if (!user) {
-    return { success: false, status: "not_registered" as const };
-  }
-
-  if (user.emailVerified) {
-    return { success: false, status: "already_verified" as const };
+  if (!user || user.emailVerified) {
+    return { success: false, status: "invalid" as const };
   }
 
   await issueVerificationOtp(normalizedEmail);
@@ -234,10 +228,7 @@ export async function verifyEmailOtp(email: string, otp: string) {
 }
 
 export async function completeOnboarding(input: CompleteOnboardingInput) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    throw new Error("Unauthorized");
-  }
+  const principal = await requirePrincipal();
 
   const companyName = input.companyName.trim();
 
@@ -246,7 +237,7 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
   }
 
   await prisma.user.update({
-    where: { id: session.user.id },
+    where: { id: principal.userId },
     data: {
       name: companyName,
       productCategory: optionalText(input.productCategory),
@@ -256,6 +247,8 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
     },
   });
 
+  await unstable_update({ user: { onboarded: true } });
+
   revalidatePath("/auth");
   revalidatePath("/onboarding");
   revalidatePath("/dashboard");
@@ -263,4 +256,9 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
   revalidatePath("/integrations");
 
   return { success: true };
+}
+
+export async function logout() {
+  const { signOut } = await import("@/auth");
+  await signOut({ redirectTo: "/" });
 }

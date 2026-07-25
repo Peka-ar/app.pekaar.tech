@@ -8,6 +8,7 @@ import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
 import Link from "next/link";
 import Image from "next/image";
 import { Box, ArrowLeft } from 'lucide-react';
+import { LinkButton } from "@/components/ui/LinkButton";
 
 type AuthView = 'signin' | 'signup' | 'forgot-password';
 
@@ -52,18 +53,24 @@ export default function AuthClient() {
       </div>
 
       <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 sm:px-12 xl:px-24 bg-[#FFFFFF] relative">
-        <Link
+        <LinkButton
           href="/"
-          className="absolute top-8 left-6 sm:left-12 lg:hidden flex items-center gap-2 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] hover:text-[#1A1A1A] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          variant="ghost"
+          size="sm"
+          leftIcon={<ArrowLeft className="w-4 h-4" />}
+          className="absolute top-8 left-6 sm:left-12 lg:hidden"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Home
-        </Link>
-        <Link
+          Back to Home
+        </LinkButton>
+        <LinkButton
           href="/"
-          className="absolute top-8 right-6 sm:right-12 hidden lg:flex items-center gap-2 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] hover:text-[#1A1A1A] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          variant="ghost"
+          size="sm"
+          rightIcon={<ArrowLeft className="w-4 h-4 rotate-180" />}
+          className="absolute top-8 right-6 sm:right-12 hidden lg:flex"
         >
-          Back to Home <ArrowLeft className="w-4 h-4 rotate-180" />
-        </Link>
+          Back to Home
+        </LinkButton>
 
         <div className="max-w-md w-full mx-auto">
           {view === 'signin' && <SignInForm onNavigate={(v) => setView(v as AuthView)} />}

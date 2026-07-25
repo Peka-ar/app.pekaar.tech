@@ -1,0 +1,15 @@
+import { PrismaClient } from "./prisma/generated/client/client.ts";
+const prisma = new PrismaClient();
+const id = "cmrxm8uiu00012styo3hqo7c9";
+const proj = await prisma.project.findUnique({ where: { id }, select: { id: true, name: true, status: true, publishedAt: true } });
+console.log("PROJECT:", JSON.stringify(proj));
+const events = await prisma.event.findMany({ where: { projectId: id }, orderBy: { createdAt: "desc" }, take: 10, select: { eventType: true, createdAt: true, sessionId: true } });
+console.log("RECENT EVENTS:");
+for (const e of events) console.log(" -", e.eventType, e.createdAt.toISOString(), e.sessionId);
+const grouped = await prisma.event.groupBy({ by: ["eventType"], where: { projectId: id }, _count: { _all: true } });
+console.log("COUNTS:", JSON.stringify(grouped));
+const lastSeen = await prisma.event.findFirst({ where: { projectId: id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
+console.log("LAST SEEN:", lastSeen ? lastSeen.createdAt.toISOString() : null);
+const noBadge = await prisma.event.findFirst({ where: { projectId: id, eventType: "ERROR" } });
+console.log("ANY ERROR EVENTS:", noBadge ? JSON.stringify(noBadge) : "none");
+await prisma.$disconnect();

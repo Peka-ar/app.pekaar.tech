@@ -11,8 +11,12 @@ const protectedRoutes = {
   "/notifications": ["BRAND", "ADMIN"],
   "/integrations": ["BRAND", "ADMIN"],
   "/analytics": ["BRAND", "ADMIN"],
-  "/billing": ["BRAND", "ADMIN"],
+  "/admin": ["ADMIN"],
 };
+
+function homeForRole(role: string | undefined): string {
+  return role === "ADMIN" ? "/admin/dashboard" : "/dashboard";
+}
 
 export default auth((req) => {
   const { nextUrl } = req;
@@ -22,7 +26,7 @@ export default auth((req) => {
   const isOnboardingRoute = nextUrl.pathname.startsWith("/onboarding");
 
   if (isLoggedIn && nextUrl.pathname === "/auth" && onboarded) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
   }
 
   if (isOnboardingRoute && !isLoggedIn) {
@@ -30,7 +34,7 @@ export default auth((req) => {
   }
 
   if (isOnboardingRoute && onboarded) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
   }
 
   // Public routes — skip auth checks
@@ -50,8 +54,7 @@ export default auth((req) => {
 
   // 2. If logged in but accessing a route without the required role
   if (requiredRoles && isLoggedIn && (!userRole || !requiredRoles.includes(userRole))) {
-    // Redirect to unauthorized or fallback to their main dashboard
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
+    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
   }
 
   if (requiredRoles && isLoggedIn && onboarded === false) {
@@ -62,5 +65,5 @@ export default auth((req) => {
 
 // Optionally, don't invoke Middleware on some paths
 export const config = {
-  matcher: ["/dashboard/:path*", "/tasks/:path*", "/notifications/:path*", "/integrations/:path*", "/analytics/:path*", "/billing/:path*", "/auth/:path*", "/onboarding/:path*", "/embed/:path*"],
+  matcher: ["/dashboard/:path*", "/tasks/:path*", "/notifications/:path*", "/integrations/:path*", "/analytics/:path*", "/admin/:path*", "/auth/:path*", "/onboarding/:path*", "/embed/:path*"],
 };

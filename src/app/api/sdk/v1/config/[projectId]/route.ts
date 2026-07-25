@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-
+import { ProjectStatus } from "@/generated/prisma/client";
 
 export async function GET(
   request: Request,
@@ -10,32 +9,31 @@ export async function GET(
   try {
     const { projectId } = await params;
 
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, status: ProjectStatus.PUBLISHED },
       select: {
-        status: true,
-        assetUrls: true,
+        assets: { select: { type: true, url: true } },
         sdkConfig: true,
       },
     });
 
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (project.status !== "PUBLISHED") {
-      return NextResponse.json({ error: "Project is not published yet" }, { status: 403 });
-    }
+    const glbUrl = project.assets.find((a) => a.type === "MODEL_GLB")?.url;
+    const usdzUrl = project.assets.find((a) => a.type === "MODEL_USDZ")?.url;
 
     return NextResponse.json(
       {
-        assetUrls: project.assetUrls,
+        assetUrls: { glb: glbUrl, usdz: usdzUrl },
         sdkConfig: project.sdkConfig,
       },
       {
         status: 200,
         headers: {
-          "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=86400",
+          "Vary": "Accept-Encoding",
         },
       }
     );

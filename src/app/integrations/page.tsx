@@ -1,5 +1,4 @@
-import { createHash } from "crypto";
-import { auth } from "@/auth";
+import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 import { generateEmbedCode } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
 import IntegrationsClient from "./IntegrationsClient";
@@ -11,33 +10,28 @@ interface IntegrationProject {
 }
 
 export default async function IntegrationsPage() {
-  let apiKey = "pk_live_placeholder";
+  const principal = await requirePrincipalOrRedirect();
   let projects: IntegrationProject[] = [];
   let storefrontPlatform: string | null = null;
 
   try {
-    const session = await auth();
-    if (session?.user?.id) {
-      apiKey = `pk_live_${createHash("sha256").update(session.user.id).digest("hex").slice(0, 24)}`;
+    const user = await prisma.user.findUnique({
+      where: { id: principal.userId },
+      select: { storefrontPlatform: true },
+    });
+    storefrontPlatform = user?.storefrontPlatform ?? null;
 
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { storefrontPlatform: true },
-      });
-      storefrontPlatform = user?.storefrontPlatform ?? null;
-
-      projects = await prisma.project.findMany({
-        where: { brandId: session.user.id, status: "PUBLISHED" },
-        select: { id: true, name: true },
-        orderBy: { createdAt: "desc" },
-      }).then((items) => items.map((project) => ({
-        ...project,
-        embedCode: generateEmbedCode(project.id).iframe,
-      })));
-    }
+    projects = await prisma.project.findMany({
+      where: { brandId: principal.userId, status: "PUBLISHED" },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "desc" },
+    }).then((items) => items.map((project) => ({
+      ...project,
+      embedCode: generateEmbedCode(project.id).iframe,
+    })));
   } catch (error) {
     console.error("Failed to fetch integration data:", error);
   }
 
-  return <IntegrationsClient apiKey={apiKey} projects={projects} storefrontPlatform={storefrontPlatform} />;
+  return <IntegrationsClient projects={projects} storefrontPlatform={storefrontPlatform} />;
 }

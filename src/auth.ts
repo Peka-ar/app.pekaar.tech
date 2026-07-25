@@ -1,14 +1,12 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
 
-import { PrismaAdapter } from "@auth/prisma-adapter"
 import { prisma } from "@/lib/prisma"
 import { authConfig } from "./auth.config"
 import { verifyPassword } from "@/lib/password"
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
   ...authConfig,
-  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   providers: [
     CredentialsProvider({
@@ -25,6 +23,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         });
 
         if (!user || !user.hashedPassword || !user.emailVerified) return null;
+        if (user.status === 'SUSPENDED') return null;
 
         const isValid = await verifyPassword(credentials.password as string, user.hashedPassword);
         if (!isValid) return null;

@@ -1,18 +1,11 @@
-import { auth } from "@/auth";
-import { redirect } from "next/navigation";
-import OnboardingClient from "./OnboardingClient";
+import { requirePrincipalOrRedirect } from "@/lib/auth-guards"
+import { redirect } from "next/navigation"
+import OnboardingClient from "./OnboardingClient"
 
 export default async function OnboardingPage() {
-  const session = await auth();
-  const user = session?.user as { onboarded?: boolean } | undefined;
-
-  if (!session?.user?.id) {
-    redirect("/auth");
+  const principal = await requirePrincipalOrRedirect()
+  if (principal.onboarded) {
+    redirect("/dashboard")
   }
-
-  if (user?.onboarded) {
-    redirect("/dashboard");
-  }
-
-  return <OnboardingClient />;
+  return <OnboardingClient />
 }

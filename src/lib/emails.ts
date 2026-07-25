@@ -25,16 +25,6 @@ export async function sendVerificationOtpEmail(email: string, otp: string) {
   );
 }
 
-export async function sendVerificationEmail(email: string, token: string) {
-  const verifyUrl = `${appUrl}/auth/verify?token=${token}`;
-
-  await sendEmail(
-    email,
-    "Verify your STUDIO.V account",
-    `<p>Welcome to STUDIO.V.</p><p>Verify your email to activate your account:</p><p><a href="${verifyUrl}">Verify email</a></p>`
-  );
-}
-
 export async function sendPasswordResetEmail(email: string, token: string) {
   const resetUrl = `${appUrl}/auth/reset-password?token=${token}`;
 

@@ -6,15 +6,215 @@
   --font-mono: var(--font-mono-loaded), ui-monospace, monospace;
 }
 
+/* ─── Semantic design tokens (light mode defaults) ─── */
+:root {
+  --canvas:          #faf9f5;
+  --canvas-secondary:#efe9de;
+  --surface:         #ffffff;
+  --canvas-inverted: #181715;
+
+  --text-primary:    #141413;
+  --text-secondary:  #3d3d3a;
+  --text-muted:      #6c6a64;
+  --border-default:  #e6dfd8;
+
+  --primary:         #cc785c;
+  --primary-hover:   #a9583e;
+  --on-primary:      #ffffff;
+
+  /* ── Aliases so --color-* references resolve (fixes undefined-token bug) ── */
+  --color-canvas:           var(--canvas);
+  --color-canvas-secondary: var(--canvas-secondary);
+  --color-surface:          var(--surface);
+  --color-canvas-inverted:  var(--canvas-inverted);
+  --color-text-primary:     var(--text-primary);
+  --color-text-secondary:   var(--text-secondary);
+  --color-text-muted:       var(--text-muted);
+  --color-border-default:   var(--border-default);
+  --color-primary:          var(--primary);
+  --color-on-primary:       var(--on-primary);
+
+  /* ── Bold accent palette (light mode only) ── */
+  --accent-1: #ff5a3c;
+  --accent-2: #5b5bd6;
+  --accent-3: #1fb6a6;
+  --accent-gradient: linear-gradient(120deg, #ff5a3c 0%, #ff8a3c 28%, #5b5bd6 70%, #1fb6a6 100%);
+  --accent-gradient-soft: linear-gradient(120deg, rgba(255,90,60,0.16) 0%, rgba(91,91,214,0.16) 60%, rgba(31,182,166,0.16) 100%);
+}
+
+/* ─── Dark mode overrides ─── */
+.dark {
+  --canvas:          #181715;
+  --canvas-secondary:#252320;
+  --surface:         #1f1e1b;
+  --canvas-inverted: #faf9f5;
+
+  --text-primary:    #faf9f5;
+  --text-secondary:  #a09d96;
+  --text-muted:      #8e8b82;
+  --border-default:  #3d3d3a;
+
+  --primary:         #cc785c;
+  --primary-hover:   #a9583e;
+  --on-primary:      #ffffff;
+
+  /* Slightly punchier gradient for dark mode contrast */
+  --accent-1: #ff6b4a;
+  --accent-2: #7575e8;
+  --accent-3: #2dd4c0;
+  --accent-gradient: linear-gradient(120deg, #ff6b4a 0%, #ff9650 28%, #7575e8 70%, #2dd4c0 100%);
+}
+
+/* ─── Global base styles ─── */
 @layer base {
-  /* Enforce focus-visible globally for Vercel accessibility compliance */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    background-color: var(--canvas);
+    color: var(--text-primary);
+  }
+
+  body {
+    background-color: var(--canvas);
+    color: var(--text-primary);
+    transition: background-color 0s, color 0s;
+  }
+
   :focus-visible {
-    outline: 2px solid #1A1A1A;
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 
-  /* Remove default focus if focus-visible is supported to avoid double rings */
   :focus:not(:focus-visible) {
     outline: none;
   }
+}
+
+/* ─── Reusable component classes ─── */
+@layer components {
+  .card {
+    background-color: var(--surface);
+    border-radius: 1.5rem;
+    border: 1px solid var(--border-default);
+    box-shadow: 0 1px 3px rgba(20,20,19,0.08);
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: var(--primary);
+    color: var(--on-primary);
+    border-radius: 0.5rem;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0 1.25rem;
+    height: 40px;
+    transition: opacity 0.2s;
+    outline: none;
+  }
+  .btn-primary:hover { opacity: 0.9; }
+  .btn-primary:active { transform: scale(0.95); }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: var(--canvas);
+    color: var(--text-primary);
+    border: 1px solid var(--border-default);
+    border-radius: 0.5rem;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 0 1.25rem;
+    height: 40px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .btn-secondary:hover { border-color: var(--text-primary); }
+
+  .label-mono {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--font-mono);
+  }
+
+  .pill {
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 9px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .input-base {
+    border: 1px solid var(--border-default);
+    border-radius: 0.75rem;
+    background-color: var(--canvas);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .input-base:focus { border-color: var(--text-primary); }
+
+  .th-mono {
+    padding: 1rem 1.5rem;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+  }
+
+  /* ─── Bold / fancy helper classes (light mode) ─── */
+  .gradient-text {
+    background-image: var(--accent-gradient);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .mesh-bg {
+    background-color: var(--canvas);
+    background-image:
+      radial-gradient(40rem 40rem at 12% -10%, rgba(255,90,60,0.18), transparent 60%),
+      radial-gradient(38rem 38rem at 88% 0%, rgba(91,91,214,0.16), transparent 60%),
+      radial-gradient(42rem 42rem at 70% 90%, rgba(31,182,166,0.14), transparent 60%);
+  }
+
+  .glow-border {
+    position: relative;
+    border-radius: 1rem;
+  }
+  .glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: var(--accent-gradient);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0.55;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .glow-border:hover::before { opacity: 0.9; }
+
+  .accent-ring { box-shadow: 0 0 0 1px rgba(255,90,60,0.4), 0 12px 40px -12px rgba(91,91,214,0.35); }
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
 }

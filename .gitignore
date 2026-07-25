@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# secrets
+gdrive-service-account.json
+
 # vercel
 .vercel
 
@@ -41,3 +44,6 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# prisma generated client (v7)
+/prisma/generated/client

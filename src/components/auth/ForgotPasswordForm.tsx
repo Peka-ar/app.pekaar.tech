@@ -2,6 +2,10 @@
 import React, { useState } from 'react';
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { requestPasswordReset } from "@/app/actions/auth";
+import { Button } from "@/components/ui/Button";
+import { FormField } from "@/components/ui/FormField";
+import { Input } from "@/components/ui/Input";
+import { Alert } from "@/components/ui/Alert";
 
 interface ForgotPasswordFormProps {
   onNavigate: (view: string) => void;
@@ -40,7 +44,7 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
         <p className="text-[#4A4742] text-sm mb-8">
           We&apos;ve sent password reset instructions to your email.
         </p>
-        <button 
+        <button
           onClick={() => onNavigate('signin')}
           className="text-sm font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
         >
@@ -53,7 +57,7 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8">
-        <button 
+        <button
           onClick={() => onNavigate('signin')}
           className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-mono text-[#7A7670] hover:text-[#1A1A1A] transition-colors mb-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
         >
@@ -64,38 +68,29 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
-        
-        <div className="space-y-1.5">
-          <label htmlFor="reset-email" className="block text-[11px] font-mono tracking-widest uppercase text-[#7A7670] font-bold">Email Address</label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <Mail className="h-4 w-4 text-[#7A7670]" aria-hidden="true" />
-            </div>
-            <input
-              type="email"
-              id="reset-email"
-              name="email"
-              autoComplete="email"
-              required
-              className="block w-full pl-10 pr-3 py-3 border border-[#E5E2DD] rounded-xl text-sm placeholder-[#A3A3A3] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] bg-[#F9F8F6] hover:bg-[#EFEDEA] transition-colors"
-              placeholder="you@company.com"
-            />
-          </div>
-        </div>
 
-        {error && (
-          <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700" role="alert">
-            {error}
-          </div>
-        )}
+        <FormField label="Email Address" htmlFor="reset-email">
+          <Input
+            type="email"
+            id="reset-email"
+            name="email"
+            autoComplete="email"
+            required
+            placeholder="you@company.com"
+            leftIcon={<Mail className="h-4 w-4" />}
+          />
+        </FormField>
 
-        <button
+        {error && <Alert tone="error">{error}</Alert>}
+
+        <Button
           type="submit"
-          disabled={loading}
-          className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-sm text-sm font-medium text-white bg-[#1A1A1A] hover:bg-[#2A2825] active:scale-95 transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] disabled:opacity-50 disabled:cursor-not-allowed"
+          variant="primary"
+          size="lg"
+          isLoading={loading}
         >
           {loading ? "Sending..." : "Send Reset Link"}
-        </button>
+        </Button>
       </form>
     </div>
   );

@@ -2,9 +2,10 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { ArrowLeft, ArrowRight, Boxes, Building2, Camera, Code2, Layers3, RefreshCw, Store } from "lucide-react";
 import { completeOnboarding } from "@/app/actions/auth";
+import { Button } from "@/components/ui/Button";
+import { Alert } from "@/components/ui/Alert";
 
 const categoryOptions = ["Furniture", "Home decor", "Fashion", "Beauty", "Electronics", "Other"];
 const platformOptions = ["Shopify", "WooCommerce", "Webflow", "Custom", "Other"];
@@ -12,7 +13,6 @@ const catalogSizeOptions = ["1-10 products", "11-50 products", "51-200 products"
 
 export default function OnboardingClient() {
   const router = useRouter();
-  const { update } = useSession();
   const [step, setStep] = useState(1);
   const [companyName, setCompanyName] = useState("");
   const [productCategory, setProductCategory] = useState("");
@@ -39,7 +39,6 @@ export default function OnboardingClient() {
     setLoading(true);
     try {
       await completeOnboarding({ companyName, productCategory, storefrontPlatform, catalogSize });
-      await update({ onboarded: true });
       router.replace("/dashboard");
       router.refresh();
     } catch (err) {
@@ -129,21 +128,41 @@ export default function OnboardingClient() {
             </div>
           </div>
 
-          {error && <div className="mt-6 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</div>}
+          {error && <Alert tone="error" className="mt-6">{error}</Alert>}
 
           <div className="mt-10 flex items-center justify-between gap-4 border-t border-[#E5E2DD] pt-6">
-            <button type="button" onClick={() => setStep((current) => Math.max(1, current - 1))} disabled={step === 1 || loading} className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-mono font-bold uppercase tracking-widest text-[#7A7670] transition-colors hover:text-[#1A1A1A] disabled:cursor-not-allowed disabled:opacity-40">
-              <ArrowLeft className="h-4 w-4" /> Back
-            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="md"
+              leftIcon={<ArrowLeft className="h-4 w-4" />}
+              onClick={() => setStep((current) => Math.max(1, current - 1))}
+              disabled={step === 1 || loading}
+            >
+              Back
+            </Button>
             <div className="flex items-center gap-3">
               {step > 2 && !isLastStep && (
-                <button type="button" onClick={() => setStep((current) => current + 1)} className="rounded-full px-4 py-2 text-[11px] font-mono font-bold uppercase tracking-widest text-[#7A7670] transition-colors hover:text-[#1A1A1A]">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  onClick={() => setStep((current) => current + 1)}
+                >
                   Skip
-                </button>
+                </Button>
               )}
-              <button type="button" onClick={handleNext} disabled={loading} className="inline-flex items-center gap-2 rounded-full bg-[#1A1A1A] px-6 py-3 text-[11px] font-mono font-bold uppercase tracking-widest text-white transition-transform hover:bg-[#2A2825] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50">
-                {loading ? "Saving..." : isLastStep ? "Go to dashboard" : "Continue"} <ArrowRight className="h-4 w-4" />
-              </button>
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                rightIcon={!isLastStep ? <ArrowRight className="h-4 w-4" /> : undefined}
+                onClick={handleNext}
+                disabled={loading}
+                isLoading={loading}
+              >
+                {loading ? "Saving..." : isLastStep ? "Go to dashboard" : "Continue"}
+              </Button>
             </div>
           </div>
         </section>

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-
+import { ProjectStatus } from "@/generated/prisma/client";
 
 export async function POST(request: Request) {
   try {
@@ -17,13 +16,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
     }
 
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
+    const project = await prisma.project.findFirst({
+      where: { id: projectId, status: ProjectStatus.PUBLISHED },
       select: { brandId: true },
     });
 
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const event = await prisma.analyticsEvent.create({

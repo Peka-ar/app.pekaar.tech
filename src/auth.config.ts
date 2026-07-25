@@ -1,10 +1,5 @@
 import type { NextAuthConfig } from "next-auth"
 
-type AuthUserFields = {
-  role?: string;
-  onboarded?: boolean;
-};
-
 export const authConfig = {
   pages: {
     signIn: "/auth",
@@ -12,20 +7,21 @@ export const authConfig = {
   callbacks: {
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        token.role = (user as AuthUserFields).role;
+        token.sub = user.id;
+        token.role = user.role;
         token.id = user.id;
-        token.onboarded = (user as AuthUserFields).onboarded;
+        token.onboarded = user.onboarded;
       }
-      if (trigger === "update" && typeof (session as AuthUserFields | undefined)?.onboarded === "boolean") {
-        token.onboarded = (session as AuthUserFields).onboarded;
+      if (trigger === "update" && typeof session?.user?.onboarded === "boolean") {
+        token.onboarded = session.user.onboarded;
       }
       return token;
     },
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
-        (session.user as AuthUserFields).role = token.role as string | undefined;
-        (session.user as AuthUserFields).onboarded = token.onboarded as boolean | undefined;
+        session.user.role = token.role;
+        session.user.onboarded = token.onboarded;
       }
       return session;
     }

@@ -1,7 +1,8 @@
 import TasksClient from "./TasksClient";
 import { getUserProjects } from "@/app/actions/project";
 import { getAllTasks } from "@/app/actions/admin";
-import { auth } from "@/auth";
+import { Role } from "@/generated/prisma/client";
+import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 
 import { Suspense } from 'react';
 
@@ -21,12 +22,10 @@ export default async function TasksPage() {
 }
 
 async function TasksContent() {
-  const session = await auth();
-  const role = (session?.user as any)?.role || "BRAND";
-  
-  let jobs: any[] = [];
+  const principal = await requirePrincipalOrRedirect();
+  let jobs: Awaited<ReturnType<typeof getUserProjects>> = [];
   try {
-    if (role === "ADMIN") {
+    if (principal.role === Role.ADMIN) {
       jobs = await getAllTasks();
     } else {
       jobs = await getUserProjects();
@@ -35,5 +34,5 @@ async function TasksContent() {
     console.error("Failed to fetch jobs:", error);
   }
 
-  return <TasksClient initialJobs={jobs} role={role} />;
+  return <TasksClient initialJobs={jobs} role={principal.role} />;
 }
