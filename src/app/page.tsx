@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import Hero from "@/components/Hero";
 import BentoFeatures from "@/components/BentoFeatures";
 import LandingPageClient from "@/components/LandingPageClient";
@@ -33,6 +34,10 @@ export default function LandingPage() {
             <span className="transition-colors hover:opacity-100 opacity-70" title="CORS Assets Approved">CORS Assets Approved</span>
             <span aria-hidden="true">&bull;</span>
             <span className="transition-colors hover:opacity-100 opacity-70" title="Model-Viewer 4.0">Model-Viewer 4.0</span>
+            <span aria-hidden="true">&bull;</span>
+            <Link href="/privacy" className="transition-colors hover:opacity-100 opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded">Privacy</Link>
+            <span aria-hidden="true">&bull;</span>
+            <Link href="/terms" className="transition-colors hover:opacity-100 opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded">Terms</Link>
           </div>
         </div>
       </footer>
