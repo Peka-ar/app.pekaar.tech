@@ -81,11 +81,11 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
   if (submittedEmail) {
     return (
       <div className="w-full text-center animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-16 h-16 bg-[#EFEDEA] rounded-full flex items-center justify-center mx-auto mb-6">
+        <div className="w-16 h-16 bg-[var(--color-canvas-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="w-8 h-8 text-emerald-500" />
         </div>
-        <h2 className="text-3xl font-serif text-[#1A1A1A] mb-3">Enter your code</h2>
-        <p className="text-[#4A4742] text-sm mb-8">
+        <h2 className="text-3xl font-serif text-[var(--color-text-primary)] mb-3">Enter your code</h2>
+        <p className="text-[var(--color-text-secondary)] text-sm mb-8">
           We sent a 6-digit verification code to {submittedEmail}.
         </p>
         <form className="space-y-5" onSubmit={handleVerifyOtp}>
@@ -106,7 +106,7 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
         </form>
         <button
           onClick={() => onNavigate('signin')}
-          className="mt-6 text-sm font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          className="mt-6 text-sm font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
         >
           Back to Sign In
         </button>
@@ -117,8 +117,8 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8">
-        <h1 className="text-4xl font-serif text-[#1A1A1A] mb-2">Join STUDIO.V</h1>
-        <p className="text-[#4A4742] text-sm">Create your brand&apos;s interactive showroom today.</p>
+        <h1 className="text-4xl font-serif text-[var(--color-text-primary)] mb-2">Join STUDIO.V</h1>
+        <p className="text-[var(--color-text-secondary)] text-sm">Create your brand&apos;s interactive showroom today.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
@@ -152,11 +152,11 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
         {password.length > 0 && (
           <div className="pt-1 flex items-center gap-2" aria-live="polite">
             <div className="flex-1 flex gap-1 h-1">
-              <div className={`flex-1 rounded-full ${strength >= 1 ? 'bg-amber-500' : 'bg-[#E5E2DD]'}`}></div>
-              <div className={`flex-1 rounded-full ${strength >= 2 ? 'bg-amber-500' : 'bg-[#E5E2DD]'}`}></div>
-              <div className={`flex-1 rounded-full ${strength >= 3 ? 'bg-emerald-500' : 'bg-[#E5E2DD]'}`}></div>
+              <div className={`flex-1 rounded-full ${strength >= 1 ? 'bg-amber-500' : 'bg-[var(--color-border-default)]'}`}></div>
+              <div className={`flex-1 rounded-full ${strength >= 2 ? 'bg-amber-500' : 'bg-[var(--color-border-default)]'}`}></div>
+              <div className={`flex-1 rounded-full ${strength >= 3 ? 'bg-emerald-500' : 'bg-[var(--color-border-default)]'}`}></div>
             </div>
-            <span className="text-[10px] uppercase font-mono tracking-widest text-[#7A7670]">
+            <span className="text-[10px] uppercase font-mono tracking-widest text-[var(--color-text-muted)]">
               {strength === 1 && 'Weak'}
               {strength === 2 && 'Good'}
               {strength === 3 && 'Strong'}
@@ -175,16 +175,16 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
           {loading ? 'Creating Account...' : 'Create Account'}
         </Button>
 
-        <p className="text-xs text-[#7A7670] text-center mt-4">
-          By signing up, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#1A1A1A] focus-visible:outline-[#1A1A1A]">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-[#1A1A1A] focus-visible:outline-[#1A1A1A]">Privacy Policy</a>.
+        <p className="text-xs text-[var(--color-text-muted)] text-center mt-4">
+          By signing up, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text-primary)] focus-visible:outline-[var(--color-text-primary)]">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text-primary)] focus-visible:outline-[var(--color-text-primary)]">Privacy Policy</a>.
         </p>
       </form>
 
-      <div className="mt-8 text-center text-sm text-[#4A4742]">
+      <div className="mt-8 text-center text-sm text-[var(--color-text-secondary)]">
         Already have an account?{' '}
         <button
           onClick={() => onNavigate('signin')}
-          className="font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          className="font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
         >
           Sign In
         </button>

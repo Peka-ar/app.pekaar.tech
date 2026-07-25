@@ -8,7 +8,7 @@ export default async function ResetPasswordPage({
   const { token } = await searchParams;
 
   return (
-    <main className="min-h-screen bg-[#F9F8F6] flex items-center justify-center px-6 text-[#1A1A1A]">
+    <main className="min-h-screen bg-[var(--color-canvas)] flex items-center justify-center px-6 text-[var(--color-text-primary)]">
       <ResetPasswordForm token={token || ""} />
     </main>
   );

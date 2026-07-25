@@ -33,13 +33,13 @@ export default function ResetPasswordForm({ token }: { token: string }) {
   };
 
   return (
-    <Card className="max-w-md w-full rounded-[2rem] bg-white border border-[#E5E2DD] p-10 shadow-sm">
+    <Card className="max-w-md w-full rounded-[2rem] bg-[var(--color-surface)] border border-[var(--color-border-default)] p-10 shadow-sm">
       <CardBody className="p-0">
         <h1 className="text-3xl font-serif mb-3">Reset password</h1>
         {success ? (
           <div>
-            <p className="text-sm text-[#4A4742] mb-8">Your password has been updated.</p>
-            <Link href="/auth" className="inline-flex px-6 py-3 bg-[#1A1A1A] text-white rounded-full text-[11px] uppercase tracking-widest font-bold">
+            <p className="text-sm text-[var(--color-text-secondary)] mb-8">Your password has been updated.</p>
+            <Link href="/auth" className="inline-flex px-6 py-3 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[11px] uppercase tracking-widest font-bold">
               Sign In
             </Link>
           </div>

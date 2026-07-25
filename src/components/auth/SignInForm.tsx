@@ -73,8 +73,8 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8">
-        <h1 className="text-4xl font-serif text-[#1A1A1A] mb-2">Welcome back.</h1>
-        <p className="text-[#4A4742] text-sm">Sign in to manage your 3D assets and integrations.</p>
+        <h1 className="text-4xl font-serif text-[var(--color-text-primary)] mb-2">Welcome back.</h1>
+        <p className="text-[var(--color-text-secondary)] text-sm">Sign in to manage your 3D assets and integrations.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
@@ -109,7 +109,7 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
           <button
             type="button"
             onClick={() => onNavigate('forgot-password')}
-            className="text-[11px] text-[#4A4742] hover:text-[#1A1A1A] underline underline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+            className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] underline underline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
           >
             Forgot?
           </button>
@@ -127,11 +127,11 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
         </Button>
       </form>
 
-      <div className="mt-8 text-center text-sm text-[#4A4742]">
+      <div className="mt-8 text-center text-sm text-[var(--color-text-secondary)]">
         Don&apos;t have an account?{' '}
         <button
           onClick={() => onNavigate('signup')}
-          className="font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
+          className="font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
         >
           Sign Up
         </button>

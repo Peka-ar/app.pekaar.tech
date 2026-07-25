@@ -5,7 +5,6 @@ import { PRODUCTS } from "@/lib/types";
 import SignInForm from "@/components/auth/SignInForm";
 import SignUpForm from "@/components/auth/SignUpForm";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
-import Link from "next/link";
 import Image from "next/image";
 import { Box, ArrowLeft } from 'lucide-react';
 import { LinkButton } from "@/components/ui/LinkButton";
@@ -22,7 +21,7 @@ export default function AuthClient() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9F8F6] text-[#1A1A1A] flex font-sans antialiased overflow-hidden">
+    <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)] flex font-sans antialiased overflow-hidden">
       <div className="hidden lg:flex lg:w-1/2 bg-[#1A1A1A] flex-col relative overflow-hidden">
         <Image
           src={visualProduct.thumbnail}
@@ -52,7 +51,7 @@ export default function AuthClient() {
         </div>
       </div>
 
-      <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 sm:px-12 xl:px-24 bg-[#FFFFFF] relative">
+      <div className="w-full lg:w-1/2 flex flex-col justify-center px-6 sm:px-12 xl:px-24 bg-[var(--color-surface)] relative">
         <LinkButton
           href="/"
           variant="ghost"
