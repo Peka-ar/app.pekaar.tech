@@ -132,9 +132,9 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 
 | Route | File | Auth | Summary |
 |---|---|---|---|---|
-| `/` | `src/app/page.tsx` | Public | Marketing landing: Hero, TrustMarquee, sandbox (ProductCatalog + ThreeDConfigurator), Stats, BentoFeatures, GradientCTA |
+| `/` | `src/app/page.tsx` | Public | Marketing landing: Hero, TrustMarquee, sandbox (ProductCatalog + ThreeDConfigurator), Stats, BentoFeatures, GradientCTA, footer with **Privacy** (`/privacy`) + **Terms** (`/terms`) links. The footer is a single `max-w-7xl` flex row (`page.tsx:25-43`) — three brand badges (W3C WebXR, CORS, Model-Viewer 4.0) on the left, two legal links on the right, separated by `•` characters. Legal links are bare `<Link href="/privacy">` / `<Link href="/terms">` with the same mono-uppercase styling as the badges. |
 | `/terms` `/privacy` | `src/app/{terms,privacy}/page.tsx` | Public | Static placeholder legal pages (replace before launch) |
-| `/auth` | `src/app/auth/page.tsx` → `AuthClient.tsx` | Public (redirects logged-in+onboarded → `/dashboard`) | 3-view form: signin / signup / forgot-password |
+| `/auth` | `src/app/auth/page.tsx` → `AuthClient.tsx` | Public (redirects logged-in+onboarded → `/dashboard`) | 3-view form: signin / signup / forgot-password. Sign-in screen's CTA reads **"Sign Up"** (`SignInForm.tsx:136`) — renamed from the prior "Request Access" copy. TopNav is hidden on this route (and all `/auth/*` sub-routes) via `HIDDEN_ROUTES` in `TopNav.tsx:8`. |
 | `/auth/verify` | `src/app/auth/verify/page.tsx` | Public | Magic-link email verification (`?token=...` → `verifyEmail`) |
 | `/auth/reset-password` | `src/app/auth/reset-password/page.tsx` | Public | New-password form (`?token=...` → `resetPassword`) |
 | `/onboarding` | `src/app/onboarding/page.tsx` → `OnboardingClient.tsx` | Logged-in, not onboarded | 5-step wizard → `completeOnboarding` |
@@ -462,16 +462,18 @@ Public, CORS `*`. Body `{ eventType, sessionId, projectId }`. Creates `Analytics
 
 ## 12. Design system
 
-**Primary reference:** `design.md` (repo root) — brand identity, color hex codes, typography pairings, layout rules, interaction micro-animations, accessibility rules.
+**Primary reference:** `design.md` (repo root) — brand identity, color hex codes, typography pairings, layout rules, interaction micro-animations, accessibility rules. See `design.md` §2.5 ("Dark Mode Tokens") for the full token contract, keep-list (coral bands, dark-by-design surfaces, inverted pills), and substitution map that powers light/dark theming.
 
 **Additional tokens/classes in `src/app/globals.css:1`** (not covered in `design.md`):
-- **Semantic CSS custom properties** (light defaults + `.dark` overrides): `--canvas #faf9f5`, `--canvas-secondary #efe9de`, `--surface #fff`, `--canvas-inverted #181715`, `--text-primary #141413`, `--text-secondary #3d3d3a`, `--text-muted #6c6a64`, `--border-default #e6dfd8`, `--primary #cc785c`, `--primary-hover #a9583e`, `--on-primary #fff`.
+- **Semantic CSS custom properties** (light defaults in `:root` + dark overrides in `.dark` block at `globals.css:46-66`):
+  - Light: `--canvas #faf9f5`, `--canvas-secondary #efe9de`, `--surface #fff`, `--canvas-inverted #181715`, `--text-primary #141413`, `--text-secondary #3d3d3a`, `--text-muted #6c6a64`, `--border-default #e6dfd8`, `--primary #cc785c`, `--primary-hover #a9583e`, `--on-primary #fff`.
+  - Dark: `--canvas #141413`, `--canvas-secondary #252320`, `--surface #1f1e1b`, `--canvas-inverted #f5f3ee`, `--text-primary #f5f3ee`, `--text-secondary #c4c0b6`, `--text-muted #9a968d`, `--border-default #3d3d3a`. Primary/accent unchanged.
 - **Aliases** `--color-*` map to the above (fixes an undefined-token bug — keep both when referencing).
-- **Accent palette** (light mode): `--accent-1 #ff5a3c`, `--accent-2 #5b5bd6`, `--accent-3 #1fb6a6`, `--accent-gradient`, `--accent-gradient-soft`. Dark mode slightly punchier.
-- **Component classes** (`@layer components`): `.card`, `.btn-primary`, `.btn-secondary`, `.label-mono`, `.pill`, `.input-base`, `.th-mono`, `.gradient-text`, `.mesh-bg`, `.glow-border`, `.accent-ring`.
+- **Accent palette** (light mode): `--accent-1 #ff5a3c`, `--accent-2 #5b5bd6`, `--accent-3 #1fb6a6`, `--accent-gradient`, `--accent-gradient-soft`. Dark mode slightly punchier (`#ff6b4a`, `#7575e8`, `#2dd4c0`).
+- **Component classes** (`@layer components`): `.card`, `.btn-primary`, `.btn-secondary`, `.label-mono`, `.pill`, `.input-base`, `.th-mono`, `.gradient-text`, `.mesh-bg`, `.glow-border`, `.accent-ring`. `.card` has a dark-mode `box-shadow` override at `globals.css:106-108` for proper elevation feel on dark surfaces.
 - **Fonts** loaded as local woff2 in `layout.tsx:6`: Cormorant (serif, `--font-serif-loaded`), Inter (sans, `--font-sans-loaded`), JetBrains (mono, `--font-mono-loaded`). Surfaced as `--font-serif/sans/mono` via `@theme` in `globals.css:3`.
 - **Global `:focus-visible`**: 2px solid `--text-primary`, offset 2px (`globals.css:87`). Never use `outline-none` without a replacement ring.
-- **Theme:** `next-themes` `attribute="class"`, `defaultTheme="light"`, `enableSystem`. `ThemeToggle` is hydration-safe (placeholder until mounted).
+- **Theme:** `next-themes` `attribute="class"`, `defaultTheme="light"`, `enableSystem`. `ThemeToggle` is hydration-safe — uses `useSyncExternalStore` to detect mount (`ThemeToggle.tsx:11-13`) so the placeholder `<div>` is shown during SSR and the real button takes over post-hydration without a `react-hooks/set-state-in-effect` lint error. `<body>` carries `suppressHydrationWarning` to absorb the no-flash transition.
 
 **Status badge metadata** (`src/lib/status.ts:1`): `PROJECT_STATUS_META` for the default visual treatment (tone + icon) and two label tables: `ADMIN_LABEL` (PENDING→"Queued", REVISIONS→"Revisions Required", COMPLETED→"Completed", PUBLISHED→"Published") and `BRAND_LABEL` (PENDING→"Processing", REVISIONS→"Revisions", COMPLETED→"Review", PUBLISHED→"Published"). `getStatusLabel(status, role)` returns the right label per viewer. Used by Tasks, Dashboard, Notifications, NotificationBell, and admin pages. The `status.ts` file is a client-safe module (no Prisma runtime imports).
 
