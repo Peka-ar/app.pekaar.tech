@@ -4,7 +4,7 @@ import { useUploadThing } from "@/lib/uploadthing";
 import type { OurFileRouter } from "@/app/api/uploadthing/core";
 import { AssetType } from "@/generated/prisma/client";
 
-type Asset = {
+export type Asset = {
   id: string;
   url: string;
   key: string;
@@ -15,7 +15,7 @@ type Asset = {
 };
 
 interface UsePresignedUploadReturn {
-  upload: (file: File, type: AssetType) => Promise<Asset | null>;
+  upload: (file: File) => Promise<Asset | null>;
   isUploading: boolean;
   progress: number;
   error: string | null;
@@ -42,7 +42,7 @@ export function usePresignedUpload(endpoint: keyof OurFileRouter): UsePresignedU
     },
   });
 
-  const upload = useCallback(async (file: File, _type: AssetType): Promise<Asset | null> => {
+  const upload = useCallback(async (file: File): Promise<Asset | null> => {
     setIsUploading(true);
     setProgress(0);
     setError(null);

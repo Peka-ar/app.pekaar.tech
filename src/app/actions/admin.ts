@@ -51,7 +51,7 @@ export async function adminSubmitProject(
   glbAssetId: string,
   usdzAssetId?: string,
 ) {
-  const principal = await requirePrincipal({ roles: [Role.ADMIN] });
+  await requirePrincipal({ roles: [Role.ADMIN] });
 
   const glbAsset = await prisma.asset.findUnique({ where: { id: glbAssetId } });
   if (!glbAsset || glbAsset.type !== "MODEL_GLB" || glbAsset.status !== "READY") {

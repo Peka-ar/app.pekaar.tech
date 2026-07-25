@@ -12,7 +12,7 @@ export default function BentoFeatures() {
             Built for Scale, Designed for <span className="italic">Impact</span>
           </h3>
           <p className="text-[var(--color-text-secondary)] text-sm sm:text-base leading-relaxed" style={{ textWrap: 'balance' }}>
-            We've engineered a seamless pipeline from raw 3D assets directly into your customers' physical spaces.
+            We&apos;ve engineered a seamless pipeline from raw 3D assets directly into your customers&apos; physical spaces.
           </p>
         </div>
 

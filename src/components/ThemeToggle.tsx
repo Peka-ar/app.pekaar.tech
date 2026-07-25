@@ -4,13 +4,15 @@ import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 
+const subscribe = () => () => {};
+
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = React.useState(false);
-
-  React.useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = React.useSyncExternalStore(
+    subscribe,
+    () => true,
+    () => false,
+  );
 
   if (!mounted) {
     return <div className="w-8 h-8 rounded-full"></div>;

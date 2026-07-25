@@ -40,8 +40,8 @@ export function Drawer({
   const drawerRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<Element | null>(null);
   const [mounted] = useState(() => typeof document !== 'undefined');
-  const [present, setPresent] = useState(isOpen);
-  const [animateIn, setAnimateIn] = useState(false);
+  const [unmounted, setUnmounted] = useState(false);
+  const present = isOpen || !unmounted;
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -69,8 +69,8 @@ export function Drawer({
 
   useEffect(() => {
     if (isOpen) {
-      setPresent(true);
       const raf = requestAnimationFrame(() => {
+        setUnmounted(false);
         const node = drawerRef.current;
         if (node) {
           previouslyFocusedElement.current = document.activeElement;
@@ -79,21 +79,22 @@ export function Drawer({
           const firstFocusable = node.querySelector<HTMLElement>(firstFocusableSelector);
           firstFocusable?.focus();
         }
-        setAnimateIn(true);
       });
       return () => cancelAnimationFrame(raf);
-    } else {
-      setAnimateIn(false);
-      const timer = setTimeout(() => {
-        setPresent(false);
-        document.body.style.overflow = '';
-        document.removeEventListener('keydown', handleKeyDown);
-        if (previouslyFocusedElement.current instanceof HTMLElement) {
-          previouslyFocusedElement.current.focus();
-        }
-      }, 300);
-      return () => clearTimeout(timer);
     }
+  }, [isOpen, handleKeyDown]);
+
+  useEffect(() => {
+    if (isOpen) return;
+    const timer = setTimeout(() => {
+      setUnmounted(true);
+      document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleKeyDown);
+      if (previouslyFocusedElement.current instanceof HTMLElement) {
+        previouslyFocusedElement.current.focus();
+      }
+    }, 300);
+    return () => clearTimeout(timer);
   }, [isOpen, handleKeyDown]);
 
   if (!mounted || !present) return null;
@@ -119,7 +120,7 @@ export function Drawer({
           'fixed top-0 right-0 h-full bg-[var(--color-surface)] rounded-l-2xl shadow-2xl flex flex-col',
           sizeClasses[size],
           'transition-transform duration-300 ease-out',
-          animateIn ? 'translate-x-0' : 'translate-x-full'
+          isOpen ? 'translate-x-0' : 'translate-x-full'
         )}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-default)]">

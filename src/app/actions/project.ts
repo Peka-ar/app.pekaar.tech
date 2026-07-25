@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { ProjectStatus, Prisma, Role } from "@/generated/prisma/client";
+import { ProjectStatus, Prisma, Role, AssetStatus } from "@/generated/prisma/client";
 import { requirePrincipal } from "@/lib/auth-guards";
 
 export async function createProject(
@@ -27,7 +27,7 @@ export async function createProject(
     }
 
     const assets = await tx.asset.findMany({
-      where: { id: { in: assetIds }, ownerId: principal.userId, status: "READY" as any },
+      where: { id: { in: assetIds }, ownerId: principal.userId, status: AssetStatus.READY },
     });
     if (assets.length !== assetIds.length) {
       throw new Error("One or more assets not found or not ready");
