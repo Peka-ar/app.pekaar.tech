@@ -133,7 +133,7 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
           onClick={() => onNavigate('signup')}
           className="font-medium text-[#1A1A1A] underline underline-offset-4 hover:text-[#4A4742] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1A1A1A] rounded"
         >
-          Request Access
+          Sign Up
         </button>
       </div>
     </div>
