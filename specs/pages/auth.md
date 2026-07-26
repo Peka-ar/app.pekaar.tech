@@ -87,6 +87,7 @@ The redirect target is decided **after** NextAuth issues the JWT and only using 
 ### Stage 2 — OTP verification (`:81`)
 - Centered card with a checkmark, "Enter your code" heading, "We sent a 6-digit verification code to {email}."
 - `<OtpInput value={otp} onChange={setOtp} id="signup-otp" />` (6 boxes, auto-advance, paste-to-fill).
+- **Spam-folder hint** (`:96`) — `<Alert tone="info">` below the OTP input: "Didn't get the email? Check your **spam** or **promotions** folder, then try again." Gmail SMTP delivers land in spam frequently (no SPF/DKIM on the sending account), so this is shown unconditionally on the OTP screen.
 - Calls `verifyEmailOtp(submittedEmail, otp)` (`auth.ts:205`) → on success immediately `signIn("credentials", { email: submittedEmail, password, redirect: false })`.
 - If `signIn` errors → "Email verified, but automatic sign-in failed. Please sign in manually." (verification still succeeded).
 - On full success → `onSuccess()` (swaps AuthClient to signin view) + `router.push("/onboarding")` + `router.refresh()`.
@@ -156,7 +157,7 @@ All in `src/app/actions/auth.ts:1` (`"use server"`). Public unless noted.
 ### Helpers (private, same file)
 - `normalizeEmail(email)` — trim + lowercase.
 - `generateOtp()` — `crypto.getRandomValues(Uint32Array(1))[0]` padded to 10 digits, sliced to 6.
-- `issueVerificationOtp(email)` — deletes any existing `email_verification`/`email_verification_otp` tokens, hashes the OTP with `hashPassword` (bcrypt 12 rounds), stores with 10-min expiry, then calls `sendVerificationOtpEmail`. **The Resend send is wrapped in try/catch** — on email failure, the user record (already in the DB at this point) is left untouched and a clear error is thrown ("Account created, but we couldn't send the verification email. Please use the resend code option to try again.") which the form's `<Alert>` surfaces to the user. The throw is recoverable: re-submitting signup hits the "existing unverified user" branch and re-issues the OTP, or the user clicks the existing resend-code button.
+- `issueVerificationOtp(email)` — deletes any existing `email_verification`/`email_verification_otp` tokens, hashes the OTP with `hashPassword` (bcrypt 12 rounds), stores with 10-min expiry, then calls `sendVerificationOtpEmail`. **The Nodemailer send is wrapped in try/catch** — on email failure, the user record (already in the DB at this point) is left untouched and a clear error is thrown ("Account created, but we couldn't send the verification email. Please use the resend code option to try again.") which the form's `<Alert>` surfaces to the user. The throw is recoverable: re-submitting signup hits the "existing unverified user" branch and re-issues the OTP, or the user clicks the existing resend-code button.
 - `optionalText(value)` — trim or `null`.
 
 ---
@@ -232,14 +233,14 @@ export const authConfig = {
 
 ## 11. Email — `src/lib/emails.ts:1`
 
-Built on Resend via `getResend()` (`src/lib/resend.ts:1`). `sendEmail` **no-ops with a console warning** if `RESEND_API_KEY` is unset — so dev environments without Resend still work (verification tokens still get created and stored; the OTP just isn't emailed).
+Built on Nodemailer via `getTransporter()` (`src/lib/mail.ts:1`). `sendEmail` **no-ops with a console warning** if `GMAIL_USER` or `GMAIL_APP_PASSWORD` is unset — so dev environments without SMTP creds still work (verification tokens still get created and stored; the OTP just isn't emailed). `sendEmail` accepts both `html` and `text` arguments and passes them to `transporter.sendMail({ html, text })` — multipart/alternative MIME is **mandatory** because Gmail SMTP delivers to spam with HTML-only emails (no plain-text fallback breaks spam heuristics). Each public function builds both forms in parallel.
 
 | Function | Subject | Body | Expiry |
 |---|---|---|---|
-| `sendVerificationOtpEmail(email, otp)` | "Your STUDIO.V verification code" | Large 24px bold letter-spaced OTP + "expires in 10 minutes" | 10 min (token-side) |
-| `sendPasswordResetEmail(email, token)` | "Reset your STUDIO.V password" | `<a href="{APP_URL}/auth/reset-password?token={token}">Reset password</a>` + "expires in 1 hour" | 1 hr (token-side) |
+| `sendVerificationOtpEmail(email, otp)` | "Your STUDIO.V verification code" | Large 24px bold letter-spaced OTP + plain-text fallback + "expires in 10 minutes" | 10 min (token-side) |
+| `sendPasswordResetEmail(email, token)` | "Reset your STUDIO.V password" | `<a href="{APP_URL}/auth/reset-password?token={token}">Reset password</a>` + plain-text fallback + "expires in 1 hour" | 1 hr (token-side) |
 
-`fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"` (the Resend sandbox sender works in dev). `appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"`.
+`from = process.env.GMAIL_USER` (Gmail SMTP requires the authenticated sender). `appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"`.
 
 ---
 
@@ -288,6 +289,6 @@ Built on Resend via `getResend()` (`src/lib/resend.ts:1`). `sendEmail` **no-ops 
 | `StaleSessionError` | `src/lib/auth-guards.ts:21` |
 | `hashPassword`/`verifyPassword` | `src/lib/password.ts:1` |
 | `sendVerificationOtpEmail`/`sendPasswordResetEmail` | `src/lib/emails.ts:1` |
-| `getResend` | `src/lib/resend.ts:1` |
+| `getTransporter` | `src/lib/mail.ts:1` |
 | `Token` model | `prisma/schema.prisma:61` |
 | `User` model | `prisma/schema.prisma:10` |

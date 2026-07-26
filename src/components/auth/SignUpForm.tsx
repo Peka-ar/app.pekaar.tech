@@ -93,6 +93,10 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
             <OtpInput value={otp} onChange={setOtp} id="signup-otp" />
           </div>
 
+          <Alert tone="info">
+            Didn&apos;t get the email? Check your <strong>spam</strong> or <strong>promotions</strong> folder, then try again.
+          </Alert>
+
           {error && <Alert tone="error">{error}</Alert>}
 
           <Button

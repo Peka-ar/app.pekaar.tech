@@ -1,4 +1,4 @@
-# Deployment — Vercel + Supabase + UploadThing + GDrive + Resend
+# Deployment — Vercel + Supabase + UploadThing + GDrive + Gmail SMTP
 
 > Parent: [`./WEBSITE.md`](./WEBSITE.md)
 
@@ -37,7 +37,7 @@ Production runtime for STUDIO.V. This document is the **operational handbook** f
 | **Supabase** | Postgres DB (transaction + session pooler) | `DATABASE_URL`, `DIRECT_URL` in Vercel + local `.env` |
 | **UploadThing** | Primary file storage (`*.ufs.sh` CDN) | `UPLOADTHING_TOKEN` |
 | **Google Drive** | Backup of every uploaded asset (best-effort) | `GOOGLE_OAUTH_*`, `GDRIVE_BACKUP_FOLDER_ID` |
-| **Resend** | Transactional auth emails (OTP, password reset) | `RESEND_API_KEY`, `RESEND_FROM_EMAIL` |
+| **Gmail SMTP** | Transactional auth emails (OTP, password reset) via Nodemailer | `GMAIL_USER`, `GMAIL_APP_PASSWORD` |
 | **GitHub** | Source control; Vercel watches the repo | OAuth-linked in Vercel project settings |
 | **Vercel** | Hosting + serverless + edge middleware + build pipeline | CLI + dashboard |
 
@@ -56,8 +56,8 @@ All 14 are set in Vercel → Project → Settings → Environment Variables, **P
 | `AUTH_SECRET` | 32-byte base64 (use `openssl rand -base64 32` to generate new) |
 | `NEXT_PUBLIC_APP_URL` | `https://studio-v-indol.vercel.app` |
 | `UPLOADTHING_TOKEN` | `eyJ...` (JWT) |
-| `RESEND_API_KEY` | `re_...` |
-| `RESEND_FROM_EMAIL` | `onboarding@resend.dev` (Resend's built-in sandbox sender) |
+| `GMAIL_USER` | `kaizen3242@gmail.com` (full Gmail address used as both SMTP auth user and `from` sender) |
+| `GMAIL_APP_PASSWORD` | 16-char Google App Password (regenerable at https://myaccount.google.com/apppasswords) |
 | `GOOGLE_OAUTH_CLIENT_ID` | `...apps.googleusercontent.com` |
 | `GOOGLE_OAUTH_CLIENT_SECRET` | `GOCSPX-...` |
 | `GOOGLE_OAUTH_REFRESH_TOKEN` | `1//0...` (long-lived, from one-time consent flow) |
@@ -411,7 +411,7 @@ The `/api/auth/*` and server action endpoints are public and currently unrate-li
 | Open the live site | https://studio-v-indol.vercel.app |
 | Open Vercel dashboard | https://vercel.com/dashboard |
 | Open Supabase dashboard | https://supabase.com/dashboard |
-| Open Resend dashboard | https://resend.com/dashboard |
+| Open Gmail App Passwords | https://myaccount.google.com/apppasswords |
 | Open UploadThing dashboard | https://uploadthing.com/dashboard |
 | Open Google Drive backup folder | (open the folder by ID via drive.google.com) |
 

@@ -50,7 +50,7 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 | DB | **Prisma 7** + `@prisma/adapter-pg` on **Supabase Postgres** | `prisma/schema.prisma`, `src/lib/prisma.ts` |
 | File storage | **UploadThing v7** (`uploadthing@7.7.4`, `@uploadthing/react@7.3.3`) | appId `7r8xhgyw3k`, region `sea1`, CDN `*.ufs.sh` |
 | Backup storage | **Google Drive** via service account (`googleapis@173`) | backup-only, never in serving path |
-| Email | **Resend** (`resend@6.6.0`) | transactional auth emails |
+| Email | **Nodemailer** (`nodemailer@7.0.0`) via **Gmail SMTP** (`smtp.gmail.com:587`) | transactional auth emails (OTP, password reset). Requires `GMAIL_USER` + `GMAIL_APP_PASSWORD` (App Password generated from a 2FA-enabled Google account). |
 | Theming | **next-themes** (`next-themes@0.4.6`) | light/dark, `attribute="class"` |
 | Dates | **date-fns** (`date-fns@4.4.0`) | `formatDistanceToNow` on dashboard |
 | Passwords | **bcryptjs** (12-round salt) | `src/lib/password.ts` |
@@ -101,8 +101,8 @@ website/
 │   │   ├── prisma.ts          # singleton Prisma client
 │   │   ├── auth-guards.ts     # requirePrincipal() — canonical auth resolver
 │   │   ├── password.ts        # hashPassword / verifyPassword (bcrypt, 12 rounds)
-│   │   ├── emails.ts          # sendVerificationOtpEmail / sendPasswordResetEmail (Resend)
-│   │   ├── resend.ts          # getResend() factory
+│   │   ├── emails.ts          # sendVerificationOtpEmail / sendPasswordResetEmail (Nodemailer)
+│   │   ├── mail.ts            # getTransporter() factory (Gmail SMTP)
 │   │   ├── notifications.ts   # getRecentProjectActivity()
 │   │   ├── status.ts          # PROJECT_STATUS_META map → Badge tone/icon/label
 │   │   ├── embed-liveness.ts  # EMBED_LIVENESS_THRESHOLDS + getLivenessBadge + formatLastSeen
@@ -254,7 +254,7 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 ## 7. Auth & onboarding workflow
 
 ### Registration
-1. `SignUpForm` → `registerUser(formData)` (`auth.ts:82`): normalizes email, enforces password ≥ 6 chars. If an unverified user exists, re-hashes password + re-issues OTP; otherwise creates `BRAND` user with `usageLimits: 10`. Always issues a 6-digit OTP (hashed, 10-min expiry) via `issueVerificationOtp` → `sendVerificationOtpEmail` (Resend).
+1. `SignUpForm` → `registerUser(formData)` (`auth.ts:82`): normalizes email, enforces password ≥ 6 chars. If an unverified user exists, re-hashes password + re-issues OTP; otherwise creates `BRAND` user with `usageLimits: 10`. Always issues a 6-digit OTP (hashed, 10-min expiry) via `issueVerificationOtp` → `sendVerificationOtpEmail` (Nodemailer via Gmail SMTP).
 2. Returns `{ email, verificationRequired: true }`; `SignUpForm` swaps to OTP view (`OtpInput` 6-box).
 3. `verifyEmailOtp(email, otp)` (`auth.ts:190`): validates against hashed `email_verification_otp` tokens (oldest-first via `verifyPassword`), sets `emailVerified`, deletes all OTP tokens.
 4. Auto `signIn("credentials")` → redirect to `/onboarding` (not onboarded) or `/dashboard`.
@@ -494,8 +494,8 @@ File: `.env.example:1`. All required for full functionality.
 | `GOOGLE_OAUTH_CLIENT_SECRET` | Paired with above |
 | `GOOGLE_OAUTH_REFRESH_TOKEN` | From `npx tsx scripts/get-gdrive-refresh-token.ts` (one-time consent flow) |
 | `GDRIVE_BACKUP_FOLDER_ID` | Your Drive folder ID (owned by you — no sharing needed) |
-| `RESEND_API_KEY` | Resend API key |
-| `RESEND_FROM_EMAIL` | Verified sender (local: `onboarding@resend.dev`) |
+| `GMAIL_USER` | Full Gmail address used as the SMTP auth user + `from` sender (e.g. `kaizen3242@gmail.com`) |
+| `GMAIL_APP_PASSWORD` | 16-character Google App Password (requires 2-Step Verification enabled on the GMAIL_USER account). Generate at https://myaccount.google.com/apppasswords — pick "Mail" + "Other" (name "STUDIO.V"). Paste with spaces removed. |
 | `STRIPE_SECRET_KEY` | `sk_test_…` / `sk_live_…` (billing, optional for initial deploy) |
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` for `/api/webhooks/stripe` |
 | `STRIPE_PRICE_STARTER` / `_GROWTH` / `_ENTERPRISE` | Price IDs for tiers |
