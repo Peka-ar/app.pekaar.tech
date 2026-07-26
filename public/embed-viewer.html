@@ -161,7 +161,7 @@
           if (!cfg || !cfg.assetUrls || !cfg.assetUrls.glb) { showError("This 3D model is not currently available."); return; }
 
           var mv = document.createElement("model-viewer");
-          mv.setAttribute("src", cfg.assetUrls.glb);
+          mv.setAttribute("src", APP_URL + cfg.assetUrls.glb);
           mv.setAttribute("camera-controls", "");
           mv.setAttribute("disable-pan", "");
           mv.setAttribute("loading", "eager");

@@ -12,7 +12,7 @@ export async function GET(
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: ProjectStatus.PUBLISHED },
       select: {
-        assets: { select: { type: true, url: true } },
+        assets: { select: { id: true, type: true } },
         sdkConfig: true,
       },
     });
@@ -21,12 +21,16 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const glbUrl = project.assets.find((a) => a.type === "MODEL_GLB")?.url;
-    const usdzUrl = project.assets.find((a) => a.type === "MODEL_USDZ")?.url;
+    const glbAsset = project.assets.find((a) => a.type === "MODEL_GLB");
+    const usdzAsset = project.assets.find((a) => a.type === "MODEL_USDZ");
+    const assetUrls = {
+      glb: glbAsset ? `/api/v1/assets/${glbAsset.id}/file` : undefined,
+      usdz: usdzAsset ? `/api/v1/assets/${usdzAsset.id}/file` : undefined,
+    };
 
     return NextResponse.json(
       {
-        assetUrls: { glb: glbUrl, usdz: usdzUrl },
+        assetUrls,
         sdkConfig: project.sdkConfig,
       },
       {

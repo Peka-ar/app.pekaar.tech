@@ -154,7 +154,21 @@ export async function getUserProjects() {
       status: true,
       createdAt: true,
       brand: { select: { id: true, name: true, email: true, role: true, productCategory: true, storefrontPlatform: true, catalogSize: true } },
-      assets: { select: { id: true, type: true, url: true, originalName: true, mimeType: true, size: true, status: true } },
+      assets: {
+        select: {
+          id: true,
+          type: true,
+          url: true,
+          originalName: true,
+          mimeType: true,
+          size: true,
+          status: true,
+          key: true,
+          gdriveFileId: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      },
       revisionRequests: {
         orderBy: { createdAt: "desc" },
         select: { id: true, note: true, createdAt: true },
@@ -162,13 +176,29 @@ export async function getUserProjects() {
     },
   });
 
-  return projects.map((project) => ({
-    ...project,
-    referenceUrls: project.assets?.filter(a => a.type === 'REFERENCE_IMAGE').map(a => a.url) || [],
-    assetUrls: (() => {
-      const glb = project.assets?.find(a => a.type === 'MODEL_GLB')?.url;
-      const usdz = project.assets?.find(a => a.type === 'MODEL_USDZ')?.url;
-      return glb ? { glb, usdz } : null;
-    })(),
-  }));
+  return projects.map((project) => {
+    const liveGlb = project.assets?.find((a) => a.type === 'MODEL_GLB' && a.status === 'READY');
+    const liveUsdz = project.assets?.find((a) => a.type === 'MODEL_USDZ' && a.status === 'READY');
+    const archivedGlbs = (project.assets || [])
+      .filter((a) => a.type === 'MODEL_GLB' && a.status === 'ARCHIVED')
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+    const archivedUsdzs = (project.assets || [])
+      .filter((a) => a.type === 'MODEL_USDZ' && a.status === 'ARCHIVED')
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+    return {
+      ...project,
+      referenceUrls: project.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').map((a) => `/api/v1/assets/${a.id}/file`) || [],
+      assetUrls: liveGlb
+        ? {
+            glb: `/api/v1/assets/${liveGlb.id}/file`,
+            usdz: liveUsdz ? `/api/v1/assets/${liveUsdz.id}/file` : undefined,
+          }
+        : null,
+      archivedAssetUrls: {
+        glb: archivedGlbs.map((a) => ({ ...a, url: `/api/v1/assets/${a.id}/file` })),
+        usdz: archivedUsdzs.map((a) => ({ ...a, url: `/api/v1/assets/${a.id}/file` })),
+      },
+    };
+  });
 }

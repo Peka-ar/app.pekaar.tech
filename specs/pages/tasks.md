@@ -24,12 +24,12 @@ type TaskJob = {
   createdAt: Date | string;
   brand: TaskBrand;                     // { id, name, email, role, productCategory?, storefrontPlatform?, catalogSize? }
   referenceUrls: string[];              // derived: REFERENCE_IMAGE asset urls
-  assetUrls: { glb: string; usdz?: string } | null;  // derived: MODEL_GLB / MODEL_USDZ
+  assetUrls: { glb: string; usdz?: string } | null;  // derived: proxy URL `/api/v1/assets/{id}/file` for live MODEL_GLB / MODEL_USDZ — transparent UT→GDrive fallback, see ../WEBSITE.md §5
   revisionRequests?: { id: string; note: string; createdAt: Date | string }[];
 };
 ```
 
-**Helper selectors** (`TasksClient.tsx:78`–`120`): `getThumbnail`, `getSku`, `getProductCategory`, `getStorefrontPlatform`, `getCatalogSize`, `getInitials`, `getCreatedDate`, `getAssets` (`{ glb?, usdz? }`), `getDimensions`, `getViewerProduct` (builds a `Product` from the GLB url + dimensions for `ThreeDConfigurator`).
+**Helper selectors** (`TasksClient.tsx:78`–`120`): `getThumbnail` (composes the proxy URL `/api/v1/assets/{id}/file` from the first REFERENCE_IMAGE asset's `id`), `getSku`, `getProductCategory`, `getStorefrontPlatform`, `getCatalogSize`, `getInitials`, `getCreatedDate`, `getAssets` (reads `project.assetUrls.glb`/`usdz` — already proxied by `getUserProjects`), `getDimensions`, `getViewerProduct` (builds a `Product` from the GLB url + dimensions for `ThreeDConfigurator`; `product.src` is therefore the proxy URL). Every `getThumbnail()`/`<Image>` consumer that points at the proxy carries the **`unoptimized` prop** — see Modal 1 / Modal 4 / Lightbox sections, and `file-storage-architecture.md` §4b for why.
 
 ---
 
@@ -59,7 +59,7 @@ Filtering runs client-side over `initialJobs` — no server round-trip.
 
 Each column is a fixed-width (`w-80`) scrollable panel with a header (icon + label + count badge) and a list of job cards. Empty columns show a dashed "Empty" placeholder.
 
-**Job card**: thumbnail (first REFERENCE_IMAGE via `next/image`), job id mono pill, status icon, product name, and (for ADMIN only) a `Category:` line. Footer: brand initials avatar + SKU + created date. `COMPLETED` cards append a full-width **"Review Model"** button that opens the Review modal.
+**Job card**: thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>` — proxy URL composed from `asset.id`, `unoptimized` because the proxy is cookie-gated), job id mono pill, status icon, product name, and (for ADMIN only) a `Category:` line. Footer: brand initials avatar + SKU + created date. `COMPLETED` cards append a full-width **"Review Model"** button that opens the Review modal.
 
 **Card click routing** (`handleCardClick`, `TasksClient.tsx:160`):
 - `PENDING` → `setProcessingJob(job)` → Processing modal (read-only, "Awaiting production")
@@ -82,7 +82,7 @@ A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), S
 **Form sections:**
 1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional textarea).
 2. **Physical Dimensions (CM)** — `dimWidth`, `dimHeight`, `dimDepth` (all required, `min="1"`).
-3. **Reference Images** — dashed dropzone. Max **5 images** (`MAX_IMAGES = 5`). Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `usePresignedUpload("referenceImageUploader")` and appends the returned `Asset` to `uploadedAssets`. Thumbnails show in a wrap grid with remove buttons + a click-to-enlarge lightbox (fixed `z-[100]` black overlay).
+3. **Reference Images** — dashed dropzone. Max **5 images** (`MAX_IMAGES = 5`). Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `usePresignedUpload("referenceImageUploader")` and appends the returned `Asset` to `uploadedAssets`. Thumbnails show in a wrap grid with `<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` (proxy; UT→GDrive fallback; `unoptimized` because the proxy is cookie-gated), remove buttons, and a click-to-enlarge lightbox (fixed `z-[100]` black overlay) whose `<Image>` reads `lightboxUrl` — itself a proxy URL by construction, also `unoptimized`.
 
 **Submit handler** `submitNewJob`:
 1. Validates `uploadedAssets.length > 0`.
@@ -127,12 +127,13 @@ The body is a 2-column CSS grid. The left column (`aside`) is a fixed-width 420p
 - Project metadata grid: Name, SKU, Created, Brand.
 - Additional instructions (`whitespace-pre-wrap`) if `instructions` is non-empty.
 - Physical Dimensions (W / H / D cards) with unit fallback `cm`.
-- Reference Images — 2-column grid, clickable (`cursor-zoom-in`) to open the lightbox. `failedRefImages` Set tracks `<Image onError>`; broken assets render a placeholder with `ImageIcon` and `title="Image unavailable"`.
+- Reference Images — 2-column grid (`<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` — proxy URL, UT→GDrive fallback in place; `unoptimized` because the proxy is cookie-gated, see `file-storage-architecture.md` §4b), clickable (`cursor-zoom-in`) to open the lightbox. `failedRefImages` Set tracks `<Image onError>`; broken assets render a placeholder with `ImageIcon` and `title="Image unavailable"`.
 - Request Changes sub-form (BRAND only, when toggled): textarea + Cancel + "Send Request" button. `sendForRevisions` calls `brandSendForRevisions(reviewJob.id, note)`. Disabled until note has content.
 
 **Right pane**:
 - If `reviewViewerProduct` is truthy, mount `<ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />` where `reviewViewerProduct` is a `useMemo` of `getViewerProduct(reviewJob)` keyed on `reviewJob`. Memoizing the product reference prevents a new object literal per render.
 - The viewer is **always mounted** while the modal is open. It is not paused/unmounted when the textarea is focused — the original "viewer pause" hack was removed because the underlying issue was a focus-stealing effect in `Modal` (fixed in `src/components/ui/Modal.tsx:78-105`). Once a user has rotated/panned/zoomed the model, the camera state is preserved across re-renders; the configurator only resets the camera on a fresh `product.src` *and* only if the user has not yet interacted (see `src/components/ThreeDConfigurator.tsx:42-46`).
+- Below the viewer, a thin border-top + small mono caption **"Model last updated <relative>"** appears when the project has any `READY` MODEL_GLB/USDZ — `getLatestModelUpdatedAt()` picks the newest `updatedAt` and `formatRelativeShort()` renders "just now" / "Nm ago" / "Nh ago" / "Nd ago" / `<locale date>`. Tells the brand at-a-glance whether they're looking at the most recent resubmission. The viewer's GLB src is the proxy URL `/api/v1/assets/{id}/file` (`getViewerProduct()` reads `assetUrls.glb` which is rewritten to the proxy in `getUserProjects`), so a UT outage or deleted UT copy transparently falls back to the GDrive backup.
 - If no GLB is available, render "No GLB asset is available for review."
 
 ADMIN role does not see the sub-form, but the metadata rail + viewer still render.
@@ -144,7 +145,7 @@ ADMIN role does not see the sub-form, but the metadata rail + viewer still rende
 `TasksClient.tsx:1045`. Opened by clicking a PUBLISHED card. `Modal` props: `size="full"`, `variant="takeover"`. Header action (BRAND only):
 - **Send for Revisions** (secondary button) — toggles the sub-form in the left rail.
 
-Same side-by-side layout as the Review modal: 420px metadata rail (Name, SKU, Created, Brand, instructions, dimensions, clickable reference images with `failedRefImages` fallback) + always-mounted 3D viewer on the right (camera state preserved after user interaction; same no-reset policy as the Review modal).
+Same side-by-side layout as the Review modal: 420px metadata rail (Name, SKU, Created, Brand, instructions, dimensions, clickable reference images with `failedRefImages` fallback) + always-mounted 3D viewer on the right (camera state preserved after user interaction; same no-reset policy as the Review modal). The "Model last updated <relative>" caption renders under the viewer using the same `getLatestModelUpdatedAt()` helper as the Review modal.
 
 The sub-form copy differs: "This will remove the model from your live embed. The production team will make the requested changes and resubmit." `sendForRevisions` on a PUBLISHED project also calls `revalidatePath('/embed/[id]')` so the embed page stops serving the model.
 
@@ -156,7 +157,7 @@ ADMIN role does not see the sub-form.
 
 ## Lightbox
 
-`TasksClient.tsx:1212`. Click on an uploaded reference image thumbnail (anywhere in the wizard, Review modal, or Published modal reference image grids) opens a fixed `z-[100]` black overlay (`cursor-zoom-out`) with the image at `max-w-4xl max-h-[90vh]`. Click anywhere to close.
+`TasksClient.tsx:1212`. Click on an uploaded reference image thumbnail (anywhere in the wizard, Review modal, or Published modal reference image grids) opens a fixed `z-[100]` black overlay (`cursor-zoom-out`) with the image at `max-w-4xl max-h-[90vh]`. Click anywhere to close. The lightbox `<Image>` reads `lightboxUrl` and carries the `unoptimized` prop (proxy is cookie-gated).
 
 ---
 
@@ -170,7 +171,7 @@ ADMIN role does not see the sub-form.
 
 `src/app/actions/admin.ts`:
 - **`getAllTasks`** — ADMIN only. All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email).
-- **`adminSubmitProject`** — ADMIN only. Verifies GLB (and USDZ) are READY models. Atomic `updateMany` requiring `status ∈ {PENDING, REVISIONS}` → sets `COMPLETED`. Same action covers both initial submit and re-submit after revisions.
+- **`adminSubmitProject`** — ADMIN only. Verifies GLB (and USDZ) are READY models. Single `prisma.$transaction`: atomic `updateMany` requiring `status ∈ {PENDING, REVISIONS}` → sets `COMPLETED`; archives any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED` (keeps `projectId`); links the new GLB/USDZ. Post-commit, fires `UTApi.deleteFiles(archivedKeys)` fire-and-forget so old UploadThing copies are removed (GDrive backups retained). Same action covers initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED). See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` "Model archival on replacement" for the storage view.
 
 ---
 
@@ -196,7 +197,7 @@ ADMIN role does not see the sub-form.
 | `brandPublishProject` action | `src/app/actions/project.ts:60` |
 | `brandSendForRevisions` action | `src/app/actions/project.ts:89` |
 | `getUserProjects` action | `src/app/actions/project.ts:135` |
-| `adminSubmitProject` action | `src/app/actions/admin.ts:46` |
+| `adminSubmitProject` action | `src/app/actions/admin.ts:72` |
 | `getAllTasks` action | `src/app/actions/admin.ts:8` |
 
 ## See also

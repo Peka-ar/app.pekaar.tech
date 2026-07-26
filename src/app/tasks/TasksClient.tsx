@@ -41,6 +41,10 @@ type TaskAsset = {
   mimeType: string;
   size: number;
   status: string;
+  key: string;
+  gdriveFileId: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 type RevisionRequestLite = {
@@ -61,6 +65,7 @@ type TaskJob = {
   brand: TaskBrand;
   referenceUrls: string[];
   assetUrls: { glb: string; usdz?: string } | null;
+  archivedAssetUrls?: { glb: TaskAsset[]; usdz: TaskAsset[] };
   revisionRequests?: RevisionRequestLite[];
 };
 
@@ -73,14 +78,17 @@ const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] =
 
 const BOARD_STATUSES: ProjectStatus[] = COLUMNS.map((c) => c.id);
 
-const getThumbnail = (project: TaskJob) => project.assets?.find((a) => a.type === 'REFERENCE_IMAGE')?.url || '';
+const getThumbnail = (project: TaskJob) => {
+  const ref = project.assets?.find((a) => a.type === 'REFERENCE_IMAGE');
+  return ref ? `/api/v1/assets/${ref.id}/file` : '';
+};
 const getSku = (project: TaskJob) => project.sku || 'No SKU';
 const getProductCategory = (project: TaskJob) => project.brand?.productCategory?.trim() || 'Not specified';
 const getInitials = (name: string) => name === 'Unassigned' ? 'UN' : name.slice(0, 2).toUpperCase();
 const getCreatedDate = (project: TaskJob) => new Date(project.createdAt).toLocaleDateString();
 const getAssets = (project: TaskJob) => {
-  const glb = project.assets?.find((a) => a.type === 'MODEL_GLB')?.url;
-  const usdz = project.assets?.find((a) => a.type === 'MODEL_USDZ')?.url;
+  const glb = project.assetUrls?.glb;
+  const usdz = project.assetUrls?.usdz;
   return { glb, usdz } as { glb?: string; usdz?: string };
 };
 const getDimensions = (project: TaskJob) => (project.dimensions && typeof project.dimensions === 'object' ? project.dimensions : {}) as { width?: number; height?: number; depth?: number; length?: number; unit?: string };
@@ -104,6 +112,28 @@ const getViewerProduct = (project: TaskJob): Product | null => {
       depth: Number(dimensions.depth ?? dimensions.length ?? 0),
     },
   };
+};
+
+const formatRelativeShort = (value: Date | string): string => {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  const diffMs = Date.now() - date.getTime();
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return date.toLocaleDateString();
+};
+
+const getLatestModelUpdatedAt = (project: TaskJob): Date | string | null => {
+  const readyModels = (project.assets || []).filter((a) => a.status === 'READY' && (a.type === 'MODEL_GLB' || a.type === 'MODEL_USDZ'));
+  if (readyModels.length === 0) return null;
+  return readyModels.reduce((latest, a) => {
+    const t = new Date(a.updatedAt).getTime();
+    return t > new Date(latest.updatedAt).getTime() ? a : latest;
+  }).updatedAt;
 };
 
 export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJob[], role: string }) {
@@ -357,7 +387,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                       >
                         {getThumbnail(job) && (
                           <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
-                            <Image src={getThumbnail(job)} alt="" fill sizes="320px" className="object-cover group-hover:scale-105 transition-transform duration-700" />
+                            <Image src={getThumbnail(job)} alt="" fill sizes="320px" unoptimized className="object-cover group-hover:scale-105 transition-transform duration-700" />
                           </div>
                         )}
                         <div className="flex justify-between items-start mb-2">
@@ -446,7 +476,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         <div className="flex items-center gap-3">
                           {getThumbnail(job) ? (
                             <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[var(--color-border-default)]">
-                              <Image src={getThumbnail(job)} alt="" fill sizes="40px" className="object-cover" />
+                              <Image src={getThumbnail(job)} alt="" fill sizes="40px" unoptimized className="object-cover" />
                             </div>
                           ) : (
                             <div className="w-10 h-10 rounded-lg bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)] flex items-center justify-center">
@@ -693,10 +723,10 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                     <div
                       key={asset.id}
                       className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-sm cursor-pointer hover:border-[var(--color-text-primary)] transition-colors"
-                      onClick={() => setLightboxUrl(asset.url)}
+                      onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
                       title="Click to enlarge"
                     >
-                      <Image src={asset.url} alt={`Uploaded ${i + 1}`} fill sizes="80px" className="object-cover" />
+                      <Image src={`/api/v1/assets/${asset.id}/file`} alt={`Uploaded ${i + 1}`} fill sizes="80px" unoptimized className="object-cover" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
                         <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
@@ -788,7 +818,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {(processingJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index: number) => (
                   <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex flex-col relative">
-                    <Image src={asset.url} alt={`Reference ${index + 1}`} fill sizes="(min-width: 640px) 25vw, 50vw" className="object-cover opacity-80 mix-blend-multiply" />
+                    <Image src={`/api/v1/assets/${asset.id}/file`} alt={`Reference ${index + 1}`} fill sizes="(min-width: 640px) 25vw, 50vw" unoptimized className="object-cover opacity-80 mix-blend-multiply" />
                     <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm border-t border-[var(--color-border-default)] py-1.5 px-2">
                       <span className="text-[9px] font-medium text-[var(--color-text-primary)] uppercase tracking-wider">Reference {index + 1}</span>
                     </div>
@@ -960,11 +990,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                       <button
                         key={asset.id}
                         type="button"
-                        onClick={() => setLightboxUrl(asset.url)}
+                        onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
                         className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
                       >
                         <Image
-                          src={asset.url}
+                          src={`/api/v1/assets/${asset.id}/file`}
                           alt={`Ref ${index + 1}`}
                           fill
                           sizes="200px"
@@ -1022,7 +1052,18 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
           <main className="overflow-y-auto bg-[var(--color-surface)] min-h-0">
             {reviewViewerProduct ? (
-              <ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />
+              <>
+                <ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />
+                {reviewJob && (() => {
+                  const updated = getLatestModelUpdatedAt(reviewJob);
+                  if (!updated) return null;
+                  return (
+                    <p className="px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] text-center border-t border-[var(--color-border-default)]">
+                      Model last updated {formatRelativeShort(updated)}
+                    </p>
+                  );
+                })()}
+              </>
             ) : (
               <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for review.</div>
             )}
@@ -1122,11 +1163,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                       <button
                         key={asset.id}
                         type="button"
-                        onClick={() => setLightboxUrl(asset.url)}
+                        onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
                         className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-surface)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
                       >
                         <Image
-                          src={asset.url}
+                          src={`/api/v1/assets/${asset.id}/file`}
                           alt={`Ref ${index + 1}`}
                           fill
                           sizes="200px"
@@ -1184,7 +1225,18 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
           <main className="overflow-y-auto bg-[var(--color-surface)] min-h-0">
             {publishedViewerProduct ? (
-              <ThreeDConfigurator key="published-viewer" product={publishedViewerProduct} />
+              <>
+                <ThreeDConfigurator key="published-viewer" product={publishedViewerProduct} />
+                {publishedJob && (() => {
+                  const updated = getLatestModelUpdatedAt(publishedJob);
+                  if (!updated) return null;
+                  return (
+                    <p className="px-4 py-2 text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] text-center border-t border-[var(--color-border-default)]">
+                      Model last updated {formatRelativeShort(updated)}
+                    </p>
+                  );
+                })()}
+              </>
             ) : (
               <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for this project.</div>
             )}
@@ -1198,7 +1250,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           onClick={() => setLightboxUrl(null)}
         >
           <div className="relative max-w-4xl max-h-[90vh] w-full h-full">
-            <Image src={lightboxUrl} alt="Reference" fill sizes="(min-width: 1024px) 1024px, 100vw" className="object-contain" />
+            <Image src={lightboxUrl} alt="Reference" fill sizes="(min-width: 1024px) 1024px, 100vw" unoptimized className="object-contain" />
           </div>
         </div>
       )}

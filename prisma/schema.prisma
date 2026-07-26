@@ -146,4 +146,5 @@ model Asset {
 
   @@index([projectId])
   @@index([ownerId])
+  @@index([projectId, type, status])
 }

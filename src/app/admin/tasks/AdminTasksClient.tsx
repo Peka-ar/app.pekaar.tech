@@ -3,7 +3,8 @@ import React, { useState, useTransition, useCallback, useRef } from 'react';
 import {
   Search, Filter, Loader2, MessageSquareWarning,
   X, UploadCloud, Box, Image as ImageIcon,
-  Check, PackageCheck, ExternalLink
+  Check, PackageCheck, ExternalLink,
+  History, RefreshCw
 } from 'lucide-react';
 import Image from 'next/image';
 import type { ProjectStatus } from "@/generated/prisma/client";
@@ -30,6 +31,10 @@ type TaskAsset = {
   mimeType: string;
   size: number;
   status: string;
+  key: string;
+  gdriveFileId: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
 };
 
 type RevisionRequestLite = {
@@ -51,6 +56,7 @@ type TaskJob = {
   brand: TaskBrand;
   referenceUrls: string[];
   assetUrls: { glb: string; usdz?: string } | null;
+  archivedAssetUrls?: { glb: TaskAsset[]; usdz: TaskAsset[] };
   revisionRequests?: RevisionRequestLite[];
 };
 
@@ -72,7 +78,10 @@ const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] =
 
 const BOARD_STATUSES: ProjectStatus[] = COLUMNS.map((c) => c.id);
 
-const getThumbnail = (project: TaskJob) => project.assets?.find((a) => a.type === 'REFERENCE_IMAGE')?.url || '';
+const getThumbnail = (project: TaskJob) => {
+  const ref = project.assets?.find((a) => a.type === 'REFERENCE_IMAGE');
+  return ref ? `/api/v1/assets/${ref.id}/file` : '';
+};
 const getSku = (project: TaskJob) => project.sku || 'No SKU';
 const getInitials = (name: string) => name === 'Unassigned' ? 'UN' : name.slice(0, 2).toUpperCase();
 const getCreatedDate = (project: TaskJob) => new Date(project.createdAt).toLocaleDateString();
@@ -95,6 +104,8 @@ export default function AdminTasksClient({
 
   const [glbAsset, setGlbAsset] = useState<UploadedAsset | null>(null);
   const [usdzAsset, setUsdzAsset] = useState<UploadedAsset | null>(null);
+  const [glbFileName, setGlbFileName] = useState<string | null>(null);
+  const [usdzFileName, setUsdzFileName] = useState<string | null>(null);
   const [failedRefImages, setFailedRefImages] = useState<Set<string>>(new Set());
 
   const glbInputRef = useRef<HTMLInputElement>(null);
@@ -130,6 +141,7 @@ export default function AdminTasksClient({
   const handleGlbUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setGlbFileName(file.name);
     const asset = await uploadGlb(file);
     if (asset) setGlbAsset(asset);
     if (e.target) e.target.value = "";
@@ -138,6 +150,7 @@ export default function AdminTasksClient({
   const handleUsdzUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUsdzFileName(file.name);
     const asset = await uploadUsdz(file);
     if (asset) setUsdzAsset(asset);
     if (e.target) e.target.value = "";
@@ -159,12 +172,17 @@ export default function AdminTasksClient({
   const resetModelUploadState = () => {
     setGlbAsset(null);
     setUsdzAsset(null);
+    setGlbFileName(null);
+    setUsdzFileName(null);
     resetGlb();
     resetUsdz();
   };
 
-  const existingGlbUrl = selectedTask?.assets?.find((a) => a.type === 'MODEL_GLB')?.url;
-  const existingUsdzUrl = selectedTask?.assets?.find((a) => a.type === 'MODEL_USDZ')?.url;
+  const liveGlb = selectedTask?.assets?.find((a) => a.type === 'MODEL_GLB' && a.status === 'READY');
+  const liveUsdz = selectedTask?.assets?.find((a) => a.type === 'MODEL_USDZ' && a.status === 'READY');
+  const archivedGlbs = selectedTask?.archivedAssetUrls?.glb ?? [];
+  const archivedUsdzs = selectedTask?.archivedAssetUrls?.usdz ?? [];
+  const hasArchivedModels = archivedGlbs.length + archivedUsdzs.length > 0;
   const canSubmit = selectedTask?.status === 'PENDING' || selectedTask?.status === 'REVISIONS';
   const isPublished = selectedTask?.status === 'PUBLISHED';
 
@@ -232,7 +250,7 @@ export default function AdminTasksClient({
                     >
                       {getThumbnail(job) && (
                         <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
-                          <Image src={getThumbnail(job)} alt="" fill sizes="288px" className="object-cover group-hover:scale-105 transition-transform duration-700" />
+                          <Image src={getThumbnail(job)} alt="" fill sizes="288px" unoptimized className="object-cover group-hover:scale-105 transition-transform duration-700" />
                         </div>
                       )}
                       <div className="flex justify-between items-start mb-2">
@@ -362,10 +380,11 @@ export default function AdminTasksClient({
                     ) : (
                       <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square relative" title="Click to view">
                         <Image
-                          src={asset.url}
+                          src={`/api/v1/assets/${asset.id}/file`}
                           alt={`Ref ${index + 1}`}
                           fill
                           sizes="(min-width: 640px) 25vw, 50vw"
+                          unoptimized
                           className="object-cover opacity-80 mix-blend-multiply"
                           onError={() => setFailedRefImages((prev) => { const next = new Set(prev); next.add(asset.id); return next; })}
                         />
@@ -422,25 +441,29 @@ export default function AdminTasksClient({
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-2">GLB Model <span className="text-red-500">*</span></label>
                   <input type="file" accept=".glb" onChange={handleGlbUpload} className="hidden" id="glb-upload" disabled={isUploadingGlb} ref={glbInputRef} />
-                  {existingGlbUrl && !glbAsset ? (
-                    <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
-                      <div className="flex items-center gap-2">
-                        <Box className="w-4 h-4 text-[var(--color-text-muted)]" />
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-text-primary)]">Existing GLB Model</p>
-                          <a href={existingGlbUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1">
-                            View file <ExternalLink className="w-3 h-3" />
-                          </a>
+                  {liveGlb && !glbAsset && (
+                    <div className="mb-2 flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Box className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
+                          <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{liveGlb.originalName}</p>
+                          <p className="text-[10px] text-[var(--color-text-muted)]">{(liveGlb.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
                       </div>
+                      <a href={`/api/v1/assets/${liveGlb.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0">
+                        View <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
-                  ) : glbAsset ? (
+                  )}
+                  {glbAsset ? (
                     <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
-                      <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">GLB Model</p>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{glbFileName || 'GLB Model'}</p>
                         <p className="text-[10px] text-[var(--color-text-muted)]">{glbAsset.size ? `${(glbAsset.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
                       </div>
-                      <button onClick={() => setGlbAsset(null)} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100">
+                      <button onClick={() => { setGlbAsset(null); setGlbFileName(null); }} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -448,10 +471,14 @@ export default function AdminTasksClient({
                     <label htmlFor="glb-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-6 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-surface)]">
                       {isUploadingGlb ? (
                         <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-muted)]" />
+                      ) : liveGlb ? (
+                        <RefreshCw className="w-6 h-6 text-[var(--color-text-muted)]" />
                       ) : (
                         <UploadCloud className="w-6 h-6 text-[var(--color-text-muted)]" />
                       )}
-                      <span className="text-xs text-[var(--color-text-muted)] mt-2">{isUploadingGlb ? 'Uploading…' : 'Select GLB file'}</span>
+                      <span className="text-xs text-[var(--color-text-muted)] mt-2">
+                        {isUploadingGlb ? 'Uploading…' : liveGlb ? 'Replace GLB file' : 'Select GLB file'}
+                      </span>
                       {isUploadingGlb && (
                         <div className="w-full px-8 mt-3">
                           <div className="h-1.5 w-full bg-[var(--color-border-default)] rounded-full overflow-hidden">
@@ -471,25 +498,29 @@ export default function AdminTasksClient({
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-2">USDZ Model <span className="text-[var(--color-text-muted)] text-[10px] font-normal">(Optional)</span></label>
                   <input type="file" accept=".usdz" onChange={handleUsdzUpload} className="hidden" id="usdz-upload" disabled={isUploadingUsdz} ref={usdzInputRef} />
-                  {existingUsdzUrl && !usdzAsset ? (
-                    <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
-                      <div className="flex items-center gap-2">
-                        <Box className="w-4 h-4 text-[var(--color-text-muted)]" />
-                        <div>
-                          <p className="text-sm font-medium text-[var(--color-text-primary)]">Existing USDZ Model</p>
-                          <a href={existingUsdzUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1">
-                            View file <ExternalLink className="w-3 h-3" />
-                          </a>
+                  {liveUsdz && !usdzAsset && (
+                    <div className="mb-2 flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Box className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
+                          <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{liveUsdz.originalName}</p>
+                          <p className="text-[10px] text-[var(--color-text-muted)]">{(liveUsdz.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
                       </div>
+                      <a href={`/api/v1/assets/${liveUsdz.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0">
+                        View <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
-                  ) : usdzAsset ? (
+                  )}
+                  {usdzAsset ? (
                     <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
-                      <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">USDZ Model</p>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
+                        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{usdzFileName || 'USDZ Model'}</p>
                         <p className="text-[10px] text-[var(--color-text-muted)]">{usdzAsset.size ? `${(usdzAsset.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
                       </div>
-                      <button onClick={() => setUsdzAsset(null)} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100">
+                      <button onClick={() => { setUsdzAsset(null); setUsdzFileName(null); }} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
@@ -497,10 +528,14 @@ export default function AdminTasksClient({
                     <label htmlFor="usdz-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-4 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-surface)]">
                       {isUploadingUsdz ? (
                         <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-muted)]" />
+                      ) : liveUsdz ? (
+                        <RefreshCw className="w-6 h-6 text-[var(--color-text-muted)]" />
                       ) : (
                         <UploadCloud className="w-6 h-6 text-[var(--color-text-muted)]" />
                       )}
-                      <span className="text-xs text-[var(--color-text-muted)] mt-2">{isUploadingUsdz ? 'Uploading…' : 'Select USDZ file'}</span>
+                      <span className="text-xs text-[var(--color-text-muted)] mt-2">
+                        {isUploadingUsdz ? 'Uploading…' : liveUsdz ? 'Replace USDZ file' : 'Select USDZ file'}
+                      </span>
                       {isUploadingUsdz && (
                         <div className="w-full px-8 mt-3">
                           <div className="h-1.5 w-full bg-[var(--color-border-default)] rounded-full overflow-hidden">
@@ -516,6 +551,49 @@ export default function AdminTasksClient({
                   )}
                   {usdzError && <p className="text-xs text-red-500 mt-1">{usdzError}</p>}
                 </div>
+
+                {hasArchivedModels && (
+                  <details className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3 group">
+                    <summary className="flex items-center justify-between cursor-pointer list-none">
+                      <span className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-secondary)]">
+                        <History className="w-3.5 h-3.5" /> Previous models ({archivedGlbs.length + archivedUsdzs.length})
+                      </span>
+                      <span className="text-[10px] font-mono text-[var(--color-text-muted)] group-open:hidden">Show</span>
+                      <span className="text-[10px] font-mono text-[var(--color-text-muted)] hidden group-open:inline">Hide</span>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
+                        Earlier uploads remain available on Google Drive. UploadThing copies are removed on replacement.
+                      </p>
+                      {[...archivedGlbs, ...archivedUsdzs].map((m) => {
+                        const isGlb = m.type === 'MODEL_GLB';
+                        return (
+                          <div key={m.id} className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-lg p-2.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <Box className="w-3.5 h-3.5 text-[var(--color-text-muted)] shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{m.originalName}</p>
+                                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
+                                  {isGlb ? 'GLB' : 'USDZ'} · {(m.size / 1024 / 1024).toFixed(1)} MB · {new Date(m.updatedAt).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            {m.gdriveFileId && (
+                              <a
+                                href={`/api/admin/assets/${m.id}/gdrive-download`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0"
+                              >
+                                GDrive <ExternalLink className="w-3 h-3" />
+                              </a>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                )}
 
                 <button
                   onClick={handleSubmit}
