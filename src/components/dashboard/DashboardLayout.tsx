@@ -159,32 +159,32 @@ function DashboardLayoutInner({ children, title, action }: DashboardLayoutProps)
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <header
-          className="h-16 flex items-center justify-between px-6 sticky top-0 z-20"
+          className="h-16 flex items-center justify-between gap-3 px-4 sm:px-6 sticky top-0 z-20"
           style={{
             backgroundColor: 'var(--surface)',
             borderBottom: '1px solid var(--border-default)',
           }}
         >
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 min-w-0">
             <Button
               variant="ghost"
               onClick={() => setIsMobileNavOpen(true)}
               aria-label="Open navigation menu"
-              className="p-2 md:hidden"
+              className="p-2 md:hidden shrink-0"
             >
               <Menu className="w-5 h-5" />
             </Button>
-            <h1 className="text-2xl font-serif italic" style={{ color: 'var(--text-primary)' }}>
+            <h1 className="text-lg sm:text-2xl font-serif italic truncate" style={{ color: 'var(--text-primary)' }}>
               {title}
             </h1>
           </div>
-          <div className="flex items-center gap-3">
-            {action && <div>{action}</div>}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {action && <div className="hidden sm:block">{action}</div>}
             <ThemeToggle />
             <NotificationBell />
           </div>
         </header>
-        <main className="flex-1 p-6 sm:p-8 overflow-x-hidden">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">{children}</main>
       </div>
 
       <MobileNavDrawer

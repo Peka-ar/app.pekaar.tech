@@ -310,8 +310,8 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   return (
     <DashboardLayout title="Tasks Pipeline" action={role !== "ADMIN" ? actionButton : undefined}>
 
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-        <div className="flex items-center gap-3 w-full sm:w-auto">
+      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center sm:gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
           <div className="w-full sm:w-64">
             <Input
               type="text"
@@ -335,7 +335,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           </div>
         </div>
 
-        <div className="flex items-center p-1 bg-[var(--color-canvas-secondary)] rounded-full border border-[var(--color-border-default)] shrink-0">
+        <div className="flex items-center p-1 bg-[var(--color-canvas-secondary)] rounded-full border border-[var(--color-border-default)] shrink-0 self-end sm:self-auto">
           <button
             onClick={() => setViewMode('list')}
             className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-mono font-medium transition-all duration-200 ${viewMode === 'list' ? 'bg-[var(--color-surface)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
@@ -451,46 +451,46 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-[var(--color-border-default)] bg-[var(--color-canvas)]">
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Job ID</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Product</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Status</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Created</th>
-                  <th className="px-6 py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold text-right">Actions</th>
+                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Job ID</th>
+                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Product</th>
+                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Status</th>
+                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold">Created</th>
+                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-bold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-default)]">
                 {filteredJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-[var(--color-text-muted)] font-serif italic text-sm">
+                    <td colSpan={5} className="px-3 sm:px-6 py-10 sm:py-12 text-center text-[var(--color-text-muted)] font-serif italic text-sm">
                       No tasks match your search or filter.
                     </td>
                   </tr>
                 ) : (
                   filteredJobs.map(job => (
                     <tr key={job.id} className="hover:bg-[var(--color-canvas)] transition-colors group">
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <span className="text-[11px] font-mono font-medium text-[var(--color-text-primary)] bg-[var(--color-canvas-secondary)] px-2 py-1 rounded-md border border-[var(--color-border-default)]">
                           {job.id}
                         </span>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         <div className="flex items-center gap-3">
                           {getThumbnail(job) ? (
-                            <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[var(--color-border-default)]">
+                            <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[var(--color-border-default)] shrink-0">
                               <Image src={getThumbnail(job)} alt="" fill sizes="40px" unoptimized className="object-cover" />
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)] flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-lg bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)] flex items-center justify-center shrink-0">
                               <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" />
                             </div>
                           )}
-                          <div>
-                            <div className="text-sm font-medium text-[var(--color-text-primary)]">{job.name}</div>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{job.name}</div>
                             <div className="text-[10px] font-mono text-[var(--color-text-muted)]">{getSku(job)}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4">
                         {(() => {
                           const meta = PROJECT_STATUS_META[job.status];
                           const Icon = meta.icon;
@@ -501,28 +501,28 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                           );
                         })()}
                       </td>
-                      <td className="px-6 py-4 text-xs text-[var(--color-text-muted)] font-mono">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-[var(--color-text-muted)] font-mono">
                         {getCreatedDate(job)}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
                         {job.status === 'COMPLETED' ? (
                           <button
                             onClick={() => setReviewJob(job)}
-                            className="px-4 py-1.5 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:opacity-90 active:scale-95 transition-all duration-200"
+                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:opacity-90 active:scale-95 transition-all duration-200"
                           >
                             Review
                           </button>
                         ) : job.status === 'PUBLISHED' ? (
                           <button
                             onClick={() => setPublishedJob(job)}
-                            className="px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
+                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             View 3D
                           </button>
                         ) : (
                           <button
                             onClick={() => handleCardClick(job)}
-                            className="px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
+                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             Details
                           </button>

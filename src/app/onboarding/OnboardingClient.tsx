@@ -54,7 +54,7 @@ export default function OnboardingClient() {
   return (
     <main className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)] px-4 py-6 sm:px-8 lg:px-12">
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] max-w-6xl flex-col rounded-[2rem] border border-[var(--color-border-default)] bg-[var(--color-surface)] shadow-sm overflow-hidden lg:grid lg:grid-cols-[0.9fr_1.1fr]">
-        <aside className="relative bg-[#1A1A1A] p-8 text-white lg:p-12">
+        <aside className="relative bg-[#1A1A1A] p-6 text-white sm:p-8 lg:p-12 hidden lg:block">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_36%)]" />
           <div className="relative flex h-full flex-col justify-between gap-12">
             <div>
@@ -76,8 +76,8 @@ export default function OnboardingClient() {
           </div>
         </aside>
 
-        <section className="flex flex-1 flex-col p-6 sm:p-10 lg:p-12">
-          <div className="mb-10 flex items-center justify-between gap-4">
+        <section className="flex flex-1 flex-col p-5 sm:p-8 lg:p-12">
+          <div className="mb-8 sm:mb-10 flex items-center justify-between gap-4">
             <div className="flex gap-2" aria-label="Onboarding progress">
               {[1, 2, 3, 4, 5].map((idx) => (
                 <div key={idx} className={`h-1.5 rounded-full transition-all ${idx === step ? "w-10 bg-[var(--color-text-primary)]" : idx < step ? "w-6 bg-[var(--color-text-muted)]" : "w-6 bg-[var(--color-border-default)]"}`} />
@@ -91,7 +91,7 @@ export default function OnboardingClient() {
               {step === 1 && (
                 <div className="max-w-xl">
                   <Building2 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />
-                  <h2 className="text-4xl font-serif">What should we call your brand?</h2>
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif">What should we call your brand?</h2>
                   <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">This name appears across your dashboard and task pipeline.</p>
                   <label htmlFor="companyName" className="mt-8 block text-[11px] font-mono font-bold uppercase tracking-widest text-[var(--color-text-muted)]">Company name</label>
                   <input id="companyName" value={companyName} onChange={(event) => setCompanyName(event.target.value)} className="mt-2 block w-full rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-4 py-3 text-sm outline-none transition-colors hover:bg-[var(--color-canvas-secondary)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)]" placeholder="Acme Furniture Co." />
@@ -101,7 +101,7 @@ export default function OnboardingClient() {
               {step === 2 && (
                 <div className="max-w-2xl">
                   <Layers3 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />
-                  <h2 className="text-4xl font-serif">From product photos to embeddable 3D.</h2>
+                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif">From product photos to embeddable 3D.</h2>
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
                     {[{ icon: Camera, title: "Upload", body: "Send multi-angle product photography and dimensions." }, { icon: RefreshCw, title: "Generate", body: "STUDIO.V prepares web-ready GLB and USDZ assets." }, { icon: Code2, title: "Embed", body: "Publish an iframe viewer into your storefront." }].map(({ icon: Icon, title, body }) => (
                       <div key={title} className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5">
@@ -175,7 +175,7 @@ function ChoiceStep({ icon, title, subtitle, options, value, onChange, buttonCla
   return (
     <div className="max-w-2xl">
       {icon}
-      <h2 className="text-4xl font-serif">{title}</h2>
+      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif">{title}</h2>
       <p className="mt-3 text-sm leading-6 text-[var(--color-text-secondary)]">{subtitle}</p>
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
         {options.map((option) => (

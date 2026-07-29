@@ -103,9 +103,14 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
 
   const drawerContent = (
     <div
-      className="fixed inset-0 z-50 md:hidden"
+      className={cn(
+        'fixed inset-0 z-50 md:hidden transition-opacity duration-200 ease-out',
+        isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+      )}
       onClick={handleBackdropClick}
       aria-hidden={!isOpen}
+      // @ts-expect-error - `inert` is a valid HTML attribute supported in React 19+; types may lag.
+      inert={!isOpen ? true : undefined}
     >
       <div className="absolute inset-0 bg-black/50" />
       <div

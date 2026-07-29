@@ -251,8 +251,8 @@ interface AdminLayoutProps {
 
 **Structure:**
 - Left sidebar (desktop only, `w-64`): STUDIO.V logo + nav links (Overview → `/admin/dashboard`, Users → `/admin/users`, Tasks Management → `/admin/tasks`, Analytics → `/admin/analytics`), user profile (initials avatar + name/role) + Sign Out form.
-- Header (sticky): hamburger `Menu` button (mobile only, opens `AdminMobileNavDrawer`), title (`h1`, serif italic), action slot, `ThemeToggle`, `NotificationBell`.
-- `<main>` content area: `p-6 sm:p-8`.
+- Header (sticky): hamburger `Menu` button (mobile only, opens `AdminMobileNavDrawer`), title (`h1`, serif italic, `text-lg sm:text-2xl`), action slot (hidden below `sm`), `ThemeToggle`, `NotificationBell`.
+- `<main>` content area: `p-4 sm:p-6` (mobile-first padding to avoid cramped 360px viewports).
 
 **Nav items** (`:23`):
 ```
@@ -264,7 +264,7 @@ interface AdminLayoutProps {
 
 Active state is determined by `pathname.startsWith(item.path)`. Active: dark background (`var(--text-primary)`), white text. Inactive: transparent background, secondary text; hover background `var(--canvas-secondary)`.
 
-`AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`) wraps the shared `MobileNavDrawer` component — same nav items, same active highlighting, animated drawer overlay on mobile.
+`AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`) wraps the shared `MobileNavDrawer` component (`src/components/dashboard/MobileNavDrawer.tsx:1`) — same nav items, same active highlighting, animated drawer overlay on mobile. When closed, the drawer wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile; the wrapper remains mounted only long enough for the slide-out transition (`src/components/dashboard/MobileNavDrawer.tsx:104`).
 
 ---
 
@@ -314,6 +314,7 @@ All admin server actions are documented in `../WEBSITE.md` §8. Summary of files
 | `AdminLayout` | `src/components/admin/AdminLayout.tsx:19` |
 | Nav items | `AdminLayout.tsx:23` |
 | `AdminMobileNavDrawer` | `src/components/admin/AdminMobileNavDrawer.tsx:17` |
+| `MobileNavDrawer` (shared, closed = invisible) | `src/components/dashboard/MobileNavDrawer.tsx:1` |
 | **Server actions** | |
 | `getAllTasks` | `src/app/actions/admin.ts:9` |
 | `adminSubmitProject` (PENDING\|REVISIONS → COMPLETED, archives prior + UT post-commit delete) | `src/app/actions/admin.ts:72` |

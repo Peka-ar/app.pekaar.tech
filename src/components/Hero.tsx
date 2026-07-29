@@ -83,12 +83,12 @@ export default function Hero() {
                 </div>
 
                 {/* Centered 3D box illustration */}
-                <div className="absolute inset-0 flex items-center justify-center">
+                <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
                   <div className="relative">
                     {/* Outer ring */}
-                    <div className="absolute inset-0 -m-12 rounded-full border border-[var(--color-border-default)] opacity-40 animate-[spin_20s_linear_infinite]" />
+                    <div className="absolute inset-0 -m-8 sm:-m-12 rounded-full border border-[var(--color-border-default)] opacity-40 animate-[spin_20s_linear_infinite]" />
                     {/* Middle ring */}
-                    <div className="absolute inset-0 -m-6 rounded-full border border-dashed border-[var(--color-border-default)] opacity-50" />
+                    <div className="absolute inset-0 -m-4 sm:-m-6 rounded-full border border-dashed border-[var(--color-border-default)] opacity-50" />
                     {/* Central 3D cube */}
                     <div className="relative w-32 h-32 sm:w-40 sm:h-40 rounded-2xl bg-gradient-to-br from-[var(--accent-1)] via-[var(--accent-2)] to-[var(--accent-3)] shadow-2xl flex items-center justify-center transform hover:rotate-12 hover:scale-105 transition-transform duration-500">
                       <Box className="w-14 h-14 sm:w-16 sm:h-16 text-white drop-shadow-lg" strokeWidth={1.5} aria-hidden="true" />

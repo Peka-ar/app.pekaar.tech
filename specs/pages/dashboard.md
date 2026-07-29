@@ -12,7 +12,7 @@ The dashboard is the authenticated landing page. It surfaces four metric cards, 
 |---|---|
 | **Route** | `/dashboard` |
 | **Server entry** | `src/app/dashboard/page.tsx:1` (async server component) |
-| **Layout shell** | `DashboardLayout` with `title="Overview"` (`src/components/dashboard/DashboardLayout.tsx:1`) |
+| **Layout shell** | `DashboardLayout` with `title="Overview"` (`src/components/dashboard/DashboardLayout.tsx:1`) — includes left sidebar (≥768px), sticky header with hamburger button (<768px opens `MobileNavDrawer`), and `NotificationBell`. Header `h1` is `text-lg sm:text-2xl` and uses `px-4 sm:px-6` so long titles fit on 360px viewports; the action slot is hidden below `sm`. `<main>` carries `p-4 sm:p-6`. `MobileNavDrawer` is mounted once per page under a `react-dom` portal so the slide-out animation can play; when closed, the wrapper is `pointer-events-none opacity-0` and `inert` so the black 50%-opacity scrim never intercepts taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`). |
 | **Proxy gating** | `["BRAND","ADMIN"]` + onboarded (`src/proxy.ts:8`) |
 | **Loading** | `<DashboardSkeleton />` via `<Suspense>` (`page.tsx:19`) |
 | **Error** | `<DashboardError />` (`page.tsx:43`) — DB failures only; auth failures handled by `requirePrincipalOrRedirect()` |
@@ -185,4 +185,5 @@ Rendered when `fetchDashboardData()` returns `{ error: true }` (`page.tsx:42`). 
 | `formatCount` / `formatChange` | `src/lib/utils.ts:1` |
 | `PROJECT_STATUS_META` | `src/lib/status.ts:1` |
 | `DashboardLayout` | `src/components/dashboard/DashboardLayout.tsx:1` |
+| `MobileNavDrawer` (closed = invisible) | `src/components/dashboard/MobileNavDrawer.tsx:1` |
 | `NotificationBell` (in shell) | `src/components/dashboard/NotificationBell.tsx:1` |

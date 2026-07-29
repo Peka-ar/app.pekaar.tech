@@ -171,12 +171,12 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
     <DashboardLayout title="Integration & SDK">
       <div className="space-y-8 animate-in fade-in duration-500">
         <section className="bg-[var(--color-surface)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
-          <div className="px-8 py-10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          <div className="px-5 sm:px-8 py-7 sm:py-10 grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-center">
             <div>
               <span className="inline-block text-[10px] uppercase tracking-widest font-mono font-bold text-[var(--color-text-muted)] mb-3">
                 Integration & SDK
               </span>
-              <h1 className="text-3xl md:text-4xl font-serif italic text-[var(--color-text-primary)] leading-tight mb-3">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-serif italic text-[var(--color-text-primary)] leading-tight mb-3">
                 Drop your 3D models anywhere.
               </h1>
               <p className="text-sm text-[var(--color-text-secondary)] max-w-md">
@@ -184,15 +184,15 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-4 py-5">
+              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-3 sm:px-4 py-4 sm:py-5">
                 <p className="text-[10px] uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">No API key</p>
                 <p className="text-[11px] text-[var(--color-text-muted)] mt-1">The iframe just works.</p>
               </div>
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-4 py-5">
+              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-3 sm:px-4 py-4 sm:py-5">
                 <p className="text-[10px] uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Zero setup</p>
                 <p className="text-[11px] text-[var(--color-text-muted)] mt-1">Paste and ship.</p>
               </div>
-              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-4 py-5">
+              <div className="rounded-2xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] px-3 sm:px-4 py-4 sm:py-5">
                 <p className="text-[10px] uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Any storefront</p>
                 <p className="text-[11px] text-[var(--color-text-muted)] mt-1">HTML, liquid, anywhere.</p>
               </div>
@@ -200,12 +200,12 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
           </div>
         </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
           <section className="bg-[var(--color-surface)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-[var(--color-border-default)] flex items-center justify-between gap-4">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border-default)] flex items-center justify-between gap-4">
               <h2 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Where it works</h2>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-6 space-y-5">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {PLATFORMS.map((platform) => {
                   const isDetected = detectedPlatform?.key === platform.key;
@@ -268,23 +268,23 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
           </section>
 
           <section className="bg-[var(--color-surface)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-[var(--color-border-default)]">
+            <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border-default)]">
               <h2 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">What you&apos;ll see</h2>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {selectedProject ? (
                 <div className="rounded-2xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-canvas)]">
                   <iframe
                     src={selectedProject.embedCode.match(/src="([^"]+)"/)?.[1] ?? ""}
                     title={`${selectedProject.name} preview`}
-                    className="w-full h-[420px] block"
+                    className="w-full h-[280px] sm:h-[420px] block"
                     style={{ border: 0 }}
                     allow="accelerometer; autoplay; encrypted-media; gyroscope; xr-spatial-tracking"
                     loading="lazy"
                   />
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-[var(--color-border-default)] bg-[var(--color-canvas)] p-8 text-center">
+                <div className="rounded-2xl border border-dashed border-[var(--color-border-default)] bg-[var(--color-canvas)] p-6 sm:p-8 text-center">
                   <p className="text-sm text-[var(--color-text-muted)]">Publish a project to preview it here.</p>
                 </div>
               )}
@@ -292,7 +292,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
           </section>
         </div>
 
-        <section className="bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-3xl p-6 md:p-8 relative shadow-md">
+        <section className="bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-3xl p-5 sm:p-6 md:p-8 relative shadow-md">
           <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-transparent pointer-events-none rounded-3xl" />
           <div className="relative z-10 space-y-6">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">

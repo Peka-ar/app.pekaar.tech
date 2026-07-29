@@ -64,7 +64,7 @@ export interface TableCellProps {
 
 export function TableCell({ className, children }: TableCellProps) {
   return (
-    <td className={cn('px-6 py-4 text-sm text-[var(--color-text-primary)]', className)}>{children}</td>
+    <td className={cn('px-3 sm:px-6 py-3 sm:py-4 text-sm text-[var(--color-text-primary)]', className)}>{children}</td>
   );
 }
 
@@ -76,7 +76,7 @@ export interface TableEmptyStateProps {
 export function TableEmptyState({ colSpan, message = 'No data available' }: TableEmptyStateProps) {
   return (
     <tr>
-      <td colSpan={colSpan} className="px-6 py-12 text-center text-[var(--color-text-muted)]">
+      <td colSpan={colSpan} className="px-3 sm:px-6 py-10 sm:py-12 text-center text-[var(--color-text-muted)]">
         {message}
       </td>
     </tr>

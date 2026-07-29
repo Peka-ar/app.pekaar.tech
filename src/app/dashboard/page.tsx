@@ -229,11 +229,11 @@ async function DashboardContent() {
                   const meta = PROJECT_STATUS_META[job.status];
                   const Icon = meta.icon;
                   return (
-                    <div key={job.id} className="px-6 py-4 flex items-center justify-between hover:bg-[var(--color-canvas)] transition-colors">
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-xl bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)]" />
-                        <div>
-                          <div className="text-sm font-medium text-[var(--color-text-primary)]">{job.name}</div>
+                    <div key={job.id} className="px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 hover:bg-[var(--color-canvas)] transition-colors">
+                      <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-[var(--color-canvas-secondary)] border border-[var(--color-border-default)] shrink-0" />
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{job.name}</div>
                           <div className="text-[10px] font-mono text-[var(--color-text-muted)] mt-0.5">{formatDistanceToNow(new Date(job.createdAt), { addSuffix: true })}</div>
                         </div>
                       </div>

@@ -35,12 +35,14 @@ type TaskJob = {
 
 ## Layout shell
 
-`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:269` — gated on `role !== "ADMIN"`). The shell provides the fixed sidebar, the user profile + `logout` form, the sticky header with `ThemeToggle` + `NotificationBell`, and `MobileNavDrawer`.
+`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:269` — gated on `role !== "ADMIN"`); it is hidden below `sm` in the sticky header so the mobile action bar stays uncluttered. The shell provides the fixed sidebar (≥768px), the user profile + `logout` form, the sticky header with `ThemeToggle` + `NotificationBell`, and `MobileNavDrawer`. The drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`).
 
-Below the header, `TasksClient` renders a **toolbar**:
+Below the header, `TasksClient` renders a **toolbar** (`TasksClient.tsx:313`):
 - **Search input** (`Input` with `Search` icon) — filters by `name`, `sku`, or `id` (case-insensitive).
 - **Status filter** (`Select` with `Filter` icon) — `all` or one of the four statuses, labelled via `BRAND_LABEL` (so the dropdown shows "Processing", "Revisions", "Review", "Published").
 - **View toggle** (pill segmented control) — `List` ↔ `Board`. Defaults to `board` on desktop (`useMediaQuery('(min-width: 768px)')`), `list` on mobile.
+
+On mobile the toolbar stacks: search input is full-width, status filter + view toggle share a second row that wraps if needed. Cell padding in the list-view table is `px-3 py-3 sm:px-6 sm:py-4` to fit narrow phones.
 
 Filtering runs client-side over `initialJobs` — no server round-trip.
 
@@ -188,6 +190,7 @@ ADMIN role does not see the sub-form.
 | `sendForRevisions` handler | `src/app/tasks/TasksClient.tsx:193` |
 | `submitNewJob` handler | `src/app/tasks/TasksClient.tsx:210` |
 | `handleImageUpload` | `src/app/tasks/TasksClient.tsx:256` |
+| `MobileNavDrawer` (closed = invisible) | `src/components/dashboard/MobileNavDrawer.tsx:1` |
 | Processing modal | `src/app/tasks/TasksClient.tsx:738` |
 | Revisions modal | `src/app/tasks/TasksClient.tsx:822` |
 | Review modal | `src/app/tasks/TasksClient.tsx:868` |
