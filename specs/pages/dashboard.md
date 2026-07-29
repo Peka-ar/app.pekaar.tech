@@ -70,6 +70,8 @@ totalInteractions = events.length;
 ```
 In-memory filtering — no DB-level aggregation. Acceptable at MVP scale (a brand's event volume is small).
 
+> **Note:** `AR_LAUNCH` events are emitted by the public storefront embed (`/embed/[projectId]`) on the first `ar-status: session-started` (or `object-placed`) per page view — see `pages/embed.md` §"AR button". The `arLaunches` card therefore reflects AR usage by end-customers on third-party storefronts, not by brand/admin users viewing models inside `/tasks` (those do not emit analytics). When AR is unsupported on the viewer's device, no event is emitted.
+
 **Query 2 — 12-month series** (`page.tsx:118`):
 ```ts
 const twelveMonthsAgo = new Date();

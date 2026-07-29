@@ -1,7 +1,7 @@
 "use client";
 import React, { useRef, useState, useEffect } from 'react';
 import Script from "next/script";
-import { RotateCcw, Compass, RefreshCw } from 'lucide-react';
+import { RotateCcw, Compass, RefreshCw, Smartphone } from 'lucide-react';
 import { Product } from "@/lib/types";
 
 const MV = 'model-viewer' as unknown as React.ElementType;
@@ -15,6 +15,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [autoRotate, setAutoRotate] = useState(true);
+  const [arSupported, setArSupported] = useState(false);
   const [pageLoaded, setPageLoaded] = useState(() =>
     typeof document !== 'undefined' && document.readyState === 'complete'
   );
@@ -46,7 +47,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
       mv.autoRotate = true;
     }
 
-    const onLoad = () => { setLoaded(true); setProgress(100); };
+    const onLoad = () => { setLoaded(true); setProgress(100); setArSupported(Boolean(mv.canActivateAR)); };
     const onProgress = (e: CustomEvent) => {
       if (e.detail?.totalProgress != null) {
         setProgress(Math.round(e.detail.totalProgress * 100));
@@ -86,9 +87,13 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
         <MV
           ref={mvRef}
           src={pageLoaded ? product.src : undefined}
+          ios-src={product.usdz}
           alt={product.name}
           camera-controls
           disable-pan
+          ar
+          ar-modes="webxr scene-viewer quick-look"
+          ar-scale="fixed"
           loading="eager"
           reveal="auto"
           shadow-intensity="0.6"
@@ -111,6 +116,18 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[var(--color-canvas)] p-6" slot="poster">
               <span className="text-xs font-mono text-red-500 text-center max-w-md">{error}</span>
             </div>
+          )}
+
+          {loaded && arSupported && (
+            <button
+              type="button"
+              slot="ar-button"
+              aria-label="View in your space"
+              className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 flex items-center gap-1.5 sm:gap-2 bg-[var(--color-canvas-inverted)] text-[var(--color-canvas)] hover:bg-[var(--color-text-primary)] active:scale-95 transition-colors duration-200 text-[10px] sm:text-xs font-mono uppercase tracking-widest px-3 py-2 sm:px-4 sm:py-2.5 rounded-full border border-[var(--color-canvas-inverted)] shadow-sm"
+            >
+              <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>View in your space</span>
+            </button>
           )}
         </MV>
 

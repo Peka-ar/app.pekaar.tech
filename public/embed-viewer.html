@@ -88,6 +88,22 @@
     .ctrl-btn:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .ctrl-btn svg { width: 16px; height: 16px; display: block; }
     .ctrl-btn[data-spin] svg { animation: spin 8s linear infinite; }
+    .ar-button {
+      position: absolute; bottom: 16px; right: 16px;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-radius: 9999px;
+      background: var(--text-primary); color: #fff;
+      border: 1px solid var(--text-primary);
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+      font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+      cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+      transition: background-color 200ms, color 200ms, border-color 200ms, transform 100ms;
+    }
+    .ar-button:hover { background: #2A2825; }
+    .ar-button:active { transform: scale(0.97); }
+    .ar-button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+    .ar-button[hidden] { display: none; }
+    .ar-button svg { width: 14px; height: 14px; display: block; }
     :focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
   </style>
 </head>
@@ -162,8 +178,12 @@
 
           var mv = document.createElement("model-viewer");
           mv.setAttribute("src", APP_URL + cfg.assetUrls.glb);
+          if (cfg.assetUrls.usdz) mv.setAttribute("ios-src", APP_URL + cfg.assetUrls.usdz);
           mv.setAttribute("camera-controls", "");
           mv.setAttribute("disable-pan", "");
+          mv.setAttribute("ar", "");
+          mv.setAttribute("ar-modes", "webxr scene-viewer quick-look");
+          mv.setAttribute("ar-scale", "fixed");
           mv.setAttribute("loading", "eager");
           mv.setAttribute("reveal", "auto");
           mv.setAttribute("shadow-intensity", "0.6");
@@ -180,6 +200,15 @@
           mv.style.outline = "none";
           mv.style.backgroundColor = "transparent";
           mv.style.background = "transparent";
+
+          var arBtn = document.createElement("button");
+          arBtn.setAttribute("type", "button");
+          arBtn.setAttribute("slot", "ar-button");
+          arBtn.setAttribute("class", "ar-button");
+          arBtn.setAttribute("aria-label", "View in your space");
+          arBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/></svg><span>View in your space</span>';
+          arBtn.hidden = true;
+          mv.appendChild(arBtn);
 
           var stage = document.getElementById("stage");
           stage.removeAttribute("aria-label");
@@ -206,9 +235,22 @@
             }
           });
 
-          mv.addEventListener("load", function () { showControls(); });
+          mv.addEventListener("load", function () {
+            showControls();
+            if (mv.canActivateAR) arBtn.hidden = false;
+          });
 
           mv.addEventListener("error", function () { showError("Failed to load model"); });
+
+          var arLaunched = false;
+          mv.addEventListener("ar-status", function (e) {
+            if (arLaunched) return;
+            var status = e && e.detail && e.detail.status;
+            if (status === "session-started" || status === "object-placed") {
+              arLaunched = true;
+              send("AR_LAUNCH");
+            }
+          });
 
           var btnRotate = document.getElementById("btn-rotate");
           btnRotate.addEventListener("click", function () {

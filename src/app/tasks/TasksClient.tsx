@@ -93,7 +93,7 @@ const getAssets = (project: TaskJob) => {
 };
 const getDimensions = (project: TaskJob) => (project.dimensions && typeof project.dimensions === 'object' ? project.dimensions : {}) as { width?: number; height?: number; depth?: number; length?: number; unit?: string };
 const getViewerProduct = (project: TaskJob): Product | null => {
-  const glb = getAssets(project).glb;
+  const { glb, usdz } = getAssets(project);
   if (!glb) return null;
 
   const dimensions = getDimensions(project);
@@ -104,6 +104,7 @@ const getViewerProduct = (project: TaskJob): Product | null => {
     brand: project.brand?.name || 'STUDIO.V',
     price: 0,
     src: glb,
+    usdz,
     thumbnail: getThumbnail(project),
     description: project.instructions || '',
     idealPhysicalDimensions: {

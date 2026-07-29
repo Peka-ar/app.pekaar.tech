@@ -5,6 +5,7 @@ export interface Product {
   brand: string;
   price: number;
   src: string;
+  usdz?: string;
   thumbnail: string;
   description: string;
   idealPhysicalDimensions: {

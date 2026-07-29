@@ -45,7 +45,7 @@ Brand storefront
 
 ### `public/embed-viewer.html`
 - **File:** `public/embed-viewer.html:1` (single static template, no bundler)
-- **Size:** ~10 KB (template). At request time the route handler replaces `{PROJECT_ID}`; the response is `~10 KB` and has no font preloads, no app shell, and zero layout chain.
+- **Size:** ~12 KB (template). At request time the route handler replaces `{PROJECT_ID}`; the response is `~12 KB` and has no font preloads, no app shell, and zero layout chain.
 - **Contents:**
   - `<style>` with STUDIO.V design tokens (`--bg #F9F8F6`, `--border #E5E2DD`, `--text-muted #7A7670`, `--text-primary #1A1A1A`, `--hover #EFEDEA`).
   - `<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js">` in `<head>` (matches landing page version).
@@ -58,19 +58,24 @@ Brand storefront
   - Inline `<script type="module">`:
     1. `projectId = "{PROJECT_ID}"` (replaced at request time).
     2. `sessionId = crypto.randomUUID()` (or fallback for old browsers).
-    3. `fetch('/api/sdk/v1/config/' + projectId)` → `{ assetUrls, sdkConfig }`. **Only `assetUrls.glb` is read** — `sdkConfig` is intentionally **not consumed** (viewer config is hardcoded, see §"Hardcoded config" below). The `sdkConfig` field is kept in the SDK response for forward-compat and any third-party JS SDK consumers.
+    3. `fetch('/api/sdk/v1/config/' + projectId)` → `{ assetUrls, sdkConfig }`. **Only `assetUrls.glb` and `assetUrls.usdz` are read** — `sdkConfig` is intentionally **not consumed** (viewer config is hardcoded, see §"Hardcoded config" below). The `sdkConfig` field is kept in the SDK response for forward-compat and any third-party JS SDK consumers.
     4. On 404 / no GLB → `showError("This 3D model is not currently available.")`.
-    5. On success → build `<model-viewer>` with the hardcoded attribute set (see §"Hardcoded config").
+    5. On success → build `<model-viewer>` with the hardcoded attribute set (see §"Hardcoded config"), **including AR attributes**. When `cfg.assetUrls.usdz` is present the embed also sets `ios-src` so iOS Quick Look uses the higher-fidelity uploaded USDZ; when it is absent Quick Look falls back to model-viewer's in-browser USDZ generation from the GLB.
     6. `customElements.whenDefined("model-viewer").then(applyInitial)` to set `cameraOrbit`, `cameraTarget`, `interpolationDecay`, `autoRotate = true`, then `jumpCameraToGoal()` to snap to the initial framing without a fly-in animation.
     7. Wire up `btn-rotate` (toggles `mv.autoRotate` + `aria-pressed` + `data-spin` attribute) and `btn-reset` (re-applies `cameraOrbit` + `cameraTarget`).
     8. Wire up loader progress text via `progress` event.
-    9. On `load` → hide loader, show controls.
+    9. On `load` → hide loader, show controls; if `mv.canActivateAR` is truthy, show the AR button (see §"AR button" below). Otherwise the button stays hidden — model-viewer reports no AR mode available (typical on desktop browsers).
     10. On `error` → show error message, hide controls.
     11. `send("VIEW")` immediately.
     12. First `camera-change` per session → `send("INTERACTION")` once.
-- **No STUDIO.V badge.** The bottom-right pill from v1 was removed per user request.
-- **No AR.** USDZ `ios-src`, `ar`, and `ar-modes` attributes are **not** set; matches landing's `ThreeDConfigurator`. The SDK config endpoint still returns `assetUrls.usdz` for any future re-add or third-party consumer.
-- **`AR_LAUNCH` analytics are not emitted** (the AR button doesn't exist). Existing `AnalyticsEvent` rows of type `AR_LAUNCH` remain in the DB for historical continuity.
+    13. On `ar-status` event with `detail.status` of `session-started` or `object-placed` → `send("AR_LAUNCH")` once per page view (guarded by an `arLaunched` boolean).
+  - **No STUDIO.V badge.** The bottom-right pill from v1 was removed per user request.
+  - **AR enabled.** `ar`, `ar-modes="webxr scene-viewer quick-look"`, and `ar-scale="fixed"` are set on the `<model-viewer>`; `ios-src` is set only when the SDK config returns a USDZ. The embed exposes a slotted AR button (`.ar-button`, see §"AR button") that opens the appropriate AR experience for the device:
+    - **Android Chrome** → in-browser WebXR (with the "Place in space" flow); non-Chrome Android browsers fall through to the **Scene Viewer** app via the `intent://` URL model-viewer constructs.
+    - **iOS Safari** → **AR Quick Look** using `ios-src` when present, otherwise model-viewer generates a USDZ from the GLB in-browser.
+    - **Desktop browsers** → `canActivateAR` is false, the button stays hidden, no dead click target.
+  - **`AR_LAUNCH` analytics are emitted** on the first `ar-status: session-started` (or `object-placed`) per page view. The dormant `/analytics` and `/dashboard` AR-launch metrics become live again.
+
 
 ---
 
@@ -82,25 +87,29 @@ The values are lifted directly from `src/components/ThreeDConfigurator.tsx:42-47
 
 | Attribute | Value | Source |
 |---|---|---|
-| `src` | `cfg.assetUrls.glb` (only per-project field still read) | `ThreeDConfigurator.tsx:88` |
-| `camera-controls` | ✓ | `ThreeDConfigurator.tsx:90` |
-| `disable-pan` | ✓ | `ThreeDConfigurator.tsx:91` |
-| `loading` | `"eager"` | `ThreeDConfigurator.tsx:92` |
-| `reveal` | `"auto"` | `ThreeDConfigurator.tsx:93` |
-| `shadow-intensity` | `"0.6"` | `ThreeDConfigurator.tsx:94` |
-| `shadow-softness` | `"0.8"` | `ThreeDConfigurator.tsx:95` |
-| `exposure` | `"1"` | `ThreeDConfigurator.tsx:96` |
-| `tone-mapping` | `"aces"` | `ThreeDConfigurator.tsx:97` |
-| `environment-image` | `"neutral"` | `ThreeDConfigurator.tsx:98` |
-| `camera-orbit` (init) | `"0deg 75deg 105%"` | `ThreeDConfigurator.tsx:43, 74` |
-| `cameraTarget` (init) | `"0m 0.4m 0m"` | `ThreeDConfigurator.tsx:44, 75` |
-| `interpolationDecay` | `200` | `ThreeDConfigurator.tsx:45` |
-| `auto-rotate` (default) | `true` | `ThreeDConfigurator.tsx:46` |
-| `model-viewer` version | `4.2.0` from `ajax.googleapis.com` | matches `ThreeDConfigurator.tsx:81` |
+| `src` | `cfg.assetUrls.glb` (per-project field) | `ThreeDConfigurator.tsx:89` |
+| `ios-src` | `cfg.assetUrls.usdz` if present, otherwise omitted (model-viewer auto-generates a USDZ from the GLB for Quick Look) | `embed-viewer.html:181` |
+| `camera-controls` | ✓ | `ThreeDConfigurator.tsx:92` |
+| `disable-pan` | ✓ | `ThreeDConfigurator.tsx:93` |
+| `ar` | ✓ | `embed-viewer.html:184`, `ThreeDConfigurator.tsx:94` |
+| `ar-modes` | `"webxr scene-viewer quick-look"` (WebXR on Android Chrome; Scene Viewer on other Android browsers; Quick Look on iOS) | `embed-viewer.html:185`, `ThreeDConfigurator.tsx:95` |
+| `ar-scale` | `"fixed"` (locks 1:1 physical scale for furniture) | `embed-viewer.html:186`, `ThreeDConfigurator.tsx:96` |
+| `loading` | `"eager"` | `ThreeDConfigurator.tsx:97` |
+| `reveal` | `"auto"` | `ThreeDConfigurator.tsx:98` |
+| `shadow-intensity` | `"0.6"` | `ThreeDConfigurator.tsx:99` |
+| `shadow-softness` | `"0.8"` | `ThreeDConfigurator.tsx:100` |
+| `exposure` | `"1"` | `ThreeDConfigurator.tsx:101` |
+| `tone-mapping` | `"aces"` | `ThreeDConfigurator.tsx:102` |
+| `environment-image` | `"neutral"` | `ThreeDConfigurator.tsx:103` |
+| `camera-orbit` (init) | `"0deg 75deg 105%"` | `ThreeDConfigurator.tsx:44, 75` |
+| `cameraTarget` (init) | `"0m 0.4m 0m"` | `ThreeDConfigurator.tsx:45, 76` |
+| `interpolationDecay` | `200` | `ThreeDConfigurator.tsx:46` |
+| `auto-rotate` (default) | `true` | `ThreeDConfigurator.tsx:47` |
+| `model-viewer` version | `4.2.0` from `ajax.googleapis.com` | matches `ThreeDConfigurator.tsx:82` |
 
 After mount, `customElements.whenDefined("model-viewer").then(applyInitial)` sets `cameraOrbit`, `cameraTarget`, `interpolationDecay`, `autoRotate = true`, and calls `jumpCameraToGoal()` so the model appears in the landing-page framing with no fly-in animation.
 
-**Dropped attributes** (compared to v1): `ar`, `ar-modes`, `ios-src` (AR support), `scale` (no per-model scaling override), `touch-action` (default is fine without pan).
+**Dropped attributes** (compared to v1): `scale` (no per-model scaling override), `touch-action` (default is fine without pan). AR attributes (`ar`, `ar-modes`, `ar-scale`, `ios-src`) are present again — see §"AR button" below.
 
 **Hardcoded to `"transparent"`:** `background-color` on the `<model-viewer>` host (so the 3D grid floor shows through the canvas wherever the model isn't drawn — see §"3D grid floor" below for the full stacking details).
 
@@ -118,6 +127,42 @@ Top-right corner, vertical button stack (`.controls` in `public/embed-viewer.htm
 | `#btn-reset` | `Compass` SVG (lucide-style polygon inside circle) | Sets `mv.cameraOrbit = "0deg 75deg 105%"` and `mv.cameraTarget = "0m 0.4m 0m"` (identical to `ThreeDConfigurator.tsx:74-76`). |
 
 Both buttons have `aria-label`, `:focus-visible` ring per `design.md:49` (`2px solid #1A1A1A`), and `cursor: pointer`. They are positioned `top: 16px; right: 16px; z-index: 20;` (over the model, but only after load — the loader uses `z-index: 10` so it never sits behind the controls).
+
+## AR button
+
+A third action, slotted into `<model-viewer>` via the standard `slot="ar-button"` mechanism (custom AR buttons replace the model's built-in bottom-right pill). Defined in `public/embed-viewer.html` at lines `204-211` (element creation) and styled in the CSS block at `public/embed-viewer.html` (`.ar-button` rule).
+
+**Markup (created in JS, appended as a child of `<model-viewer>`):**
+
+```html
+<button type="button" slot="ar-button" class="ar-button" aria-label="View in your space">
+  <svg viewBox="0 0 24 24" ...><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+  <span>View in your space</span>
+</button>
+```
+
+**Style** (matches the rotate/reset control stack — same border, shadow, focus ring, mono-uppercase label):
+
+- `position: absolute; bottom: 16px; right: 16px;`
+- Pill: `border-radius: 9999px`, padding `10px 16px`
+- Background `--text-primary` (`#1A1A1A`), white text
+- Font: `ui-monospace`, `10px`, `letter-spacing: 0.18em`, uppercase
+- Hover darkens to `#2A2825`; `:active { transform: scale(0.97) }`
+- `box-shadow: 0 2px 8px rgba(0,0,0,0.12)`
+- `aria-label="View in your space"`; icon `aria-hidden="true"`
+- `:focus-visible` ring per `design.md:49`
+
+**Capability gating:** the button starts `hidden` and is revealed only on the `<model-viewer>` `load` event if `mv.canActivateAR` is truthy. On desktop browsers (and any other device without a usable AR mode) `canActivateAR` is `false` and the button never appears — no dead click target.
+
+**Mode resolution** (driven by the `<model-viewer>` element's AR attributes, not by the embed's JS):
+1. **Android Chrome** → in-browser WebXR AR session (model-viewer's preferred mode given `ar-modes="webxr scene-viewer quick-look"`).
+2. **Other Android browsers** → Scene Viewer app via the `intent://arvr.google.com/scene-viewer/...` URL model-viewer constructs. The fallback kicks in when WebXR is unavailable.
+3. **iOS Safari** → AR Quick Look. Uses `ios-src` (the project's uploaded USDZ) when the SDK config provides one; otherwise model-viewer auto-generates a USDZ from the GLB in-browser.
+4. **Desktop** → `canActivateAR` is false → button hidden.
+
+**Analytics:** the embed re-emits `AR_LAUNCH` analytics. The listener is attached to the `<model-viewer>` `ar-status` event (see the inline `<script>` step 13 in §Files above). On `detail.status === "session-started"` or `"object-placed"`, `send("AR_LAUNCH")` fires once per page view (guarded by an `arLaunched` boolean so repeat interactions don't double-count). The dormant `/analytics` and `/dashboard` AR-launch metrics become live again.
+
+**iOS USDZ handling:** the embed reads `cfg.assetUrls.usdz` from `/api/sdk/v1/config/[projectId]`. When present, `ios-src` is set on the model-viewer — iOS Quick Look uses the higher-fidelity uploaded USDZ. When absent, `ios-src` is omitted and Quick Look falls back to model-viewer's in-browser USDZ generation from the GLB. The button stays available in both cases; the only difference is fidelity and a slightly longer iOS load when generation is required.
 
 ---
 
@@ -235,6 +280,7 @@ The URL is preserved — brands don't see any change in the snippet they copy fr
 | Static HTML template | `public/embed-viewer.html:1` |
 | Hardcoded viewer config | `public/embed-viewer.html` (cameraOrbit/cameraTarget/autoRotate block in inline `<script>`) |
 | Top-right controls (rotate + reset) | `public/embed-viewer.html` (`.controls` + `#btn-rotate` / `#btn-reset`) |
+| AR button (slotted, `.ar-button` + capability gating) | `public/embed-viewer.html` (`.ar-button` CSS; element creation `:204-211`; reveal-on-load `:238-241`; `ar-status` listener `:245-253`) |
 | 3D grid floor (CSS) | `public/embed-viewer.html` (`.grid-floor` block in `<style>`) |
 | Loader + error UI (landing-replica) | `public/embed-viewer.html` (`.loader` + `.err` blocks) |
 | Liveness thresholds | `src/lib/embed-liveness.ts:1` |
