@@ -1,12 +1,10 @@
 import { Client } from "node-appwrite";
-import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "./appwrite-config";
+import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "@/lib/appwrite-config";
+import { env } from "@/server/env";
 
-// On Appwrite Sites, injected APPWRITE_* env vars take precedence and user-set
-// APPWRITE_-prefixed keys are disallowed — so the server key is stored under
-// STUDIOV_API_KEY there. Everywhere else (.env local, Vercel) APPWRITE_API_KEY applies.
-export const APPWRITE_API_KEY = process.env.STUDIOV_API_KEY ?? process.env.APPWRITE_API_KEY!;
+export const APPWRITE_API_KEY = env.APPWRITE_API_KEY;
 
-export { APPWRITE_DATABASE_ID, APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_USERS_TABLE_ID, SESSION_COOKIE } from "./appwrite-config";
+export { APPWRITE_DATABASE_ID, APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, APPWRITE_USERS_TABLE_ID, SESSION_COOKIE } from "@/lib/appwrite-config";
 
 const globalForAppwrite = globalThis as unknown as { adminClient?: Client };
 

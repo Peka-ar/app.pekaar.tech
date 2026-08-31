@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Query } from "node-appwrite";
-import { AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/lib/db";
+import { AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/server/db/client";
 
 export const dynamic = "force-dynamic";
 

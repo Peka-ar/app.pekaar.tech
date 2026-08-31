@@ -40,14 +40,14 @@ Client (useAppwriteUpload)            Appwrite Storage              Next.js (rec
    │←── { asset } ────────────────────────│                                │
 ```
 
-- **`fileId` = assets row `$id`** — a single identifier across storage and the database. The client generates it with `ID.unique()`; `recordAssetUpload` reuses it as the row id (`src/app/actions/record-asset.ts:53`).
+- **`fileId` = assets row `$id`** — a single identifier across storage and the database. The client generates it with `ID.unique()`; `recordAssetUpload` reuses it as the row id. The action is **idempotent by `rowId = fileId`** (`record-asset.ts:75`) — a retried call or a browser that uploaded but never received the response reuses the existing row (ownership-checked) instead of creating a duplicate.
 - The server never proxies upload bytes. The `serverActions.bodySizeLimit: '16mb'` limit remains in `next.config.mjs` for the (small) action payloads — it is a general Next.js server-action cap, unrelated to file uploads (browser-direct to Appwrite).
 - The client SDK `createFile` `onProgress` receives `UploadProgress = { progress: 0-100 }` (percent), unlike the server SDK's `{ progress, bytesUploaded, bytesTotal }`.
-- **Client-side session requirement (Phase 6 bug 1):** uploads are browser-direct to `fra.cloud.appwrite.io`, so the client SDK must hold the session. The `@appwrite.io/react` SSR sign-in only sets the httpOnly cookie (and returns `{ user }`); the provider's client is built per page load with `setSession(ssr.session)` from the root-layout prop. A **soft-navigation** sign-in keeps that prop `null`, so `storage.createFile` would go out as a guest and fail the label-gated bucket `create`. `SignInForm` therefore calls `client.setSession(sessionSecret)` (secret returned by `getSessionPrincipal`, `auth.ts:203`) before navigating — see `pages/auth.md` §2.
+- **Client-side session requirement (Phase 6 bug 1):** uploads are browser-direct to `fra.cloud.appwrite.io`, so the client SDK must hold the session. The `@appwrite.io/react` SSR sign-in only sets the httpOnly cookie (and returns `{ user }`); the provider's client is built per page load with `setSession(ssr.session)` from the root-layout prop. A **soft-navigation** sign-in keeps that prop `null`, so `storage.createFile` would go out as a guest and fail the label-gated bucket `create`. `SignInForm` therefore calls `client.setSession(sessionSecret)` (secret returned by `getSessionPrincipal`, `auth.ts:219`) before navigating — see `pages/auth.md` §2.
 
 ### 3. The `assets` TablesDB row (canonical file record)
 
-`AssetsRow` (`src/lib/db.ts:84`) — mirrors the old Prisma `Asset` model, minus storage-provider fields:
+`AssetsRow` (`src/server/db/client.ts:50`) — mirrors the old Prisma `Asset` model, minus storage-provider fields:
 
 ```
 $id           = storage fileId          (single identifier, set by client ID.unique())
@@ -64,19 +64,19 @@ size          number                    (file.sizeOriginal)
 checksum      string | null             (file.signature — MD5)
 ```
 
-New rows are created by `recordAssetUpload` with `projectId: null`, `status: "READY"`, `provider: "appwrite"` (`src/app/actions/record-asset.ts:50-66`). `projectId` is set later by `createProject` (reference images) or `adminSubmitProject` (models).
+New rows are created by `recordAssetUpload` with `projectId: null`, `status: "READY"`, `provider: "appwrite"` (`src/app/actions/record-asset.ts:86`). `projectId` is set later by `createProject` (reference images) or `adminSubmitProject` (models).
 
 ### 4. Public access model (publish grant / unpublish revoke)
 
 Bucket-level `read` is label-scoped, so the **proxy route is the only in-app delivery path** (it fetches with the server API key, `APPWRITE_API_KEY` in `.env`). Public embed reads go through **file-level `read:any`**:
 
-- **Publish** (`brandPublishProject`, `src/app/actions/project.ts:117`): grant FIRST, flip status after:
-  1. `listAppwriteModelAssets(projectId)` (`project.ts:230`) — READY, `provider === "appwrite"`, GLB/USDZ rows with `fileId` (query: `equal(projectId)` + `Query.or([equal(type, GLB), equal(type, USDZ)])` + `equal(status, READY)` + `equal(provider, "appwrite")`).
-  2. `setFilePublic(a, true)` (`project.ts:243`) — admin-client `storage.updateFile({ bucketId, fileId, permissions: [read(any)] })`, allSettled, failures logged only.
+- **Publish** (`brandPublishProjectService`, `src/server/services/project.service.ts:127` — action wrapper `src/app/actions/project.ts:31`): grant FIRST, flip status after:
+  1. `listAppwriteModelAssetsForProject(projectId)` (`project.service.ts:436`) — READY, `provider === "appwrite"`, GLB/USDZ rows with `fileId` (query: `equal(projectId)` + `Query.or([equal(type, GLB), equal(type, USDZ)])` + `equal(status, READY)` + `equal(provider, "appwrite")`).
+  2. `setFilePublicWithRetry(a, true)` (`src/server/storage.ts`) — admin-client `storage.updateFile({ bucketId, fileId, permissions: [read(any)] })`, 3 attempts with 250ms exp backoff, allSettled, failures logged only.
   3. Guarded `updateRows` → `PUBLISHED`. If the flip fails: best-effort revoke + throw. Invariant: `PUBLISHED ⇒ files publicly readable`.
-- **Unpublish** (`brandSendForRevisions` when `wasPublished`, `project.ts:213-226`): flip status to `REVISIONS` in the transaction, then `setFilePublic(a, false)` → `permissions: []` (node-appwrite v26 `updateFile` only sends `permissions` when defined, so `[]` clears file-level perms). Failures logged only.
+- **Unpublish** (`brandSendForRevisionsService` when `wasPublished`, `project.service.ts:186`): flip status to `REVISIONS` in the transaction, then `setFilePublicWithRetry(a, false)` → `permissions: []` (node-appwrite v26 `updateFile` only sends `permissions` when defined, so `[]` clears file-level perms). Failures logged only (residual drift → nightly reconciliation, see `backend-architecture.md` §11).
 - `revalidatePath('/embed/[id]')` on both, so the embed gate and cached config refresh.
-- **Reference images never receive `read:any`.** `Permission`/`Role` are imported from `node-appwrite` aliased as `AppwriteRole` (`project.ts:3`) to avoid clashing with the local `Role` enum from `@/lib/auth-guards`.
+- **Reference images never receive `read:any`.** `Permission`/`Role` are imported from `node-appwrite` aliased as `AppwriteRole` (`src/server/storage.ts:1`) to avoid clashing with the local `Role` enum from `@/server/auth-guards`.
 
 ### 5. Asset delivery route — `GET /api/v1/assets/[assetId]/file`
 
@@ -116,7 +116,7 @@ useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions? })
 - Client-side validation: size ≤ `maxSizeMB`, extension ∈ `allowedExtensions` (if provided).
 - `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress: (p) => setProgress(p.progress) })`, then `recordAssetUpload({ fileId, type })`.
 - Errors: `AppwriteException` 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; otherwise the message. On failure, best-effort `storage.deleteFile` orphan cleanup.
-- Returns `RecordedAsset` (`record-asset.ts:15`): `{ id, url, type, status, mimeType, size, originalName }` — **no `key`**.
+- Returns `RecordedAsset` (`record-asset.ts:16`): `{ id, url, type, status, mimeType, size, originalName }` — **no `key`**.
 
 Consumers:
 - `src/app/tasks/TasksClient.tsx:169` — `bucketId: APPWRITE_REFERENCE_IMAGES_BUCKET_ID`, 16 MB, `["jpg","jpeg","png","webp","gif","avif"]`; `upload(file, "REFERENCE_IMAGE")`.
@@ -124,7 +124,7 @@ Consumers:
 
 ### 9. `recordAssetUpload` server action
 
-`src/app/actions/record-asset.ts:23` — `recordAssetUpload({ fileId, type }) → { asset: RecordedAsset }`:
+`src/app/actions/record-asset.ts:38` — `recordAssetUpload({ fileId, type }) → { asset: RecordedAsset }`:
 - Role per type: `REFERENCE_IMAGE` → `[Role.BRAND]`; `MODEL_GLB`/`MODEL_USDZ` → `[Role.ADMIN]` (mirrors the bucket `create` perms).
 - Admin-client `storage.getFile({ bucketId, fileId })` (validates existence + size metadata).
 - `mimeType = file.mimeType || defaultMimeTypeForAssetType(type) || "application/octet-stream"` (browsers send empty types for GLB/USDZ).
@@ -150,7 +150,7 @@ Consumers:
 
 | Var | Used for | Location |
 |---|---|---|
-| `APPWRITE_API_KEY` | Server-side proxy streaming, `getFile`, `updateFile` (perms) | `.env` (gitignored), read via `src/lib/appwrite.ts:8` |
+| `APPWRITE_API_KEY` | Server-side proxy streaming, `getFile`, `updateFile` (perms) | `.env` (gitignored), read via `src/server/appwrite.ts:5` (env validated by `src/server/env.ts`) |
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | Client + server endpoint | public |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | Client + server project | public |
 
@@ -210,8 +210,8 @@ Reverted the Filebase presigned-URL architecture back to UploadThing (`*.ufs.sh`
 Full replacement (Phase 4 of `tasks/appwrite-migration.md`): browser-direct uploads to Appwrite buckets, `assets` rows in TablesDB (row `$id` = storage fileId), auth-gated streaming proxy for in-app reads, direct CDN URLs for published embeds via publish-time `read:any` grants. **Phase 5 completed the removal:** `utapi` cleanup branch deleted from `adminSubmitProject`, `src/lib/uploadthing-server.ts` + gdrive-download route + `prisma/` deleted, `UPLOADTHING_TOKEN`/`GOOGLE_OAUTH_*`/`GDRIVE_*` env vars stripped.
 
 **Files created:** `src/app/actions/record-asset.ts`, `src/lib/use-appwrite-upload.ts`.
-**Files rewritten:** `src/app/api/v1/assets/[assetId]/file/route.ts` (TablesDB + streaming), `src/app/api/sdk/v1/config/[projectId]/route.ts` + `src/app/api/sdk/v1/events/route.ts` + `src/app/embed/[projectId]/route.ts` (TablesDB), `src/app/actions/project.ts` (grant/revoke), `src/app/actions/admin.ts` (archival; the legacy provider-split cleanup branch was removed in Phase 5), `src/lib/appwrite-config.ts` (bucket id, `buildFileUrl`, `bucketForAssetType`, mime defaults), `src/app/tasks/TasksClient.tsx` + `src/app/admin/tasks/AdminTasksClient.tsx` (hook swap, GDrive copy/link removal), `next.config.mjs` (remote patterns).
-**Files deleted:** `src/app/api/uploadthing/` (route + core), `src/lib/hooks/use-presigned-upload.ts`, `src/lib/uploadthing.ts`, `src/lib/storage/` (types, gdrive-adapter, gdrive-client, asset-delivery, naming, index). **Phase 5 deletions:** `src/lib/uploadthing-server.ts`, `src/app/api/admin/assets/[assetId]/gdrive-download/route.ts`, `prisma/`, `scripts/get-gdrive-refresh-token.ts`, `scripts/get-published-id.ts`.
+**Files rewritten:** `src/app/api/v1/assets/[assetId]/file/route.ts` (TablesDB + streaming), `src/app/api/sdk/v1/config/[projectId]/route.ts` + `src/app/api/sdk/v1/events/route.ts` + `src/app/embed/[projectId]/route.ts` (TablesDB), `src/app/actions/project.ts` + `src/server/services/project.service.ts` (grant/revoke moved into the service layer in Phase 5b), `src/app/actions/admin.ts` (archival; the legacy provider-split cleanup branch was removed in Phase 5), `src/lib/appwrite-config.ts` (bucket id, `buildFileUrl`, `bucketForAssetType`, mime defaults), `src/app/tasks/TasksClient.tsx` + `src/app/admin/tasks/AdminTasksClient.tsx` (hook swap, GDrive copy/link removal), `next.config.mjs` (remote patterns).
+**Files deleted:** `src/app/api/uploadthing/` (route + core), `src/lib/hooks/use-presigned-upload.ts`, `src/lib/uploadthing.ts`, `src/lib/storage/` (types, gdrive-adapter, gdrive-client, asset-delivery, naming, index). **Phase 5 deletions:** `src/lib/uploadthing-server.ts`, `src/app/api/admin/assets/[assetId]/gdrive-download/route.ts`, `prisma/`, `scripts/get-gdrive-refresh-token.ts`, `scripts/get-published-id.ts`. **Phase 5b moves:** `src/lib/appwrite.ts` → `src/server/appwrite.ts`, `src/lib/db.ts` → `src/server/db/client.ts`, `src/lib/notifications.ts` → `src/server/services/notification.service.ts`.
 
 ## References
 

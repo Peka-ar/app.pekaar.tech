@@ -1,6 +1,6 @@
 import { Query } from "node-appwrite";
-import { requirePrincipal } from "@/lib/auth-guards";
-import { DB, getTablesDB, ProjectsRow } from "@/lib/db";
+import { requirePrincipal } from "@/server/auth-guards";
+import { DB, getTablesDB, ProjectsRow } from "@/server/db/client";
 
 export interface NotificationProject {
   id: string;
@@ -19,6 +19,7 @@ export async function getRecentProjectActivity(): Promise<NotificationProject[]>
       Query.equal("brandId", principal.userId),
       Query.orderDesc("$createdAt"),
       Query.limit(10),
+      Query.select(["name", "status"]),
     ],
     total: false,
   });

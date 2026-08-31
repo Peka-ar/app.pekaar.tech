@@ -1,6 +1,6 @@
 import "dotenv/config";
 import { ID, Query, TablesDB, Users } from "node-appwrite";
-import { createAdminClient } from "../src/lib/appwrite";
+import { createAdminClient } from "../src/server/appwrite";
 import {
   APPWRITE_ASSETS_TABLE_ID,
   APPWRITE_DATABASE_ID,

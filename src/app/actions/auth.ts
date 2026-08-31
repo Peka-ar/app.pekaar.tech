@@ -3,13 +3,13 @@ import { Account, ID, Query, TablesDB, Users } from "node-appwrite";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePrincipal, Role } from "@/lib/auth-guards";
+import { requirePrincipal, Role } from "@/server/auth-guards";
 import {
   createAdminClient,
   createPublicClient,
   createSessionClient,
   SESSION_COOKIE,
-} from "@/lib/appwrite";
+} from "@/server/appwrite";
 import { createNextServerHelpers } from "@appwrite.io/react/server/next";
 import {
   APPWRITE_DATABASE_ID,
@@ -17,6 +17,9 @@ import {
   APPWRITE_PROJECT_ID,
   APPWRITE_USERS_TABLE_ID,
 } from "@/lib/appwrite-config";
+import { signupSchema, resetPasswordSchema, onboardingSchema } from "@/server/http/schemas";
+import { enforceRateLimit, rateLimitKey } from "@/server/http/rate-limit";
+import { clientIpForAction } from "@/server/http/ip";
 
 type CompleteOnboardingInput = {
   companyName: string;
@@ -62,28 +65,34 @@ export async function registerUser(formData: FormData) {
   const email = normalizeEmail(formData.get("email") as string);
   const password = formData.get("password") as string;
 
-  if (!email || !password) {
-    throw new Error("Email and password are required");
+  const parsed = signupSchema.safeParse({ email, password });
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid email or password");
   }
 
-  if (password.length < 6) {
-    throw new Error("Password must be at least 6 characters");
-  }
+  const ip = await clientIpForAction();
+  await enforceRateLimit(rateLimitKey("register", ip), { limit: 10, windowSeconds: 3600 });
 
   const users = new Users(createAdminClient());
-  const existing = await lookupUserByEmail(email);
+  const existing = await lookupUserByEmail(parsed.data.email);
 
   if (existing.users.length > 0) {
     const user = existing.users[0];
     if (user.emailVerification) {
       throw new Error("Email already registered");
     }
-    await users.updatePassword({ userId: user.$id, password });
+    // Account-takeover guard: NEVER overwrite the password on an existing
+    // account — even an unverified one. Re-send the verification email only;
+    // password recovery is handled by requestPasswordReset.
     await sendVerificationEmail(user.$id);
-    return { email, verificationRequired: true };
+    return { email: parsed.data.email, verificationRequired: true };
   }
 
-  const appwriteUser = await users.create({ userId: ID.unique(), email, password });
+  const appwriteUser = await users.create({
+    userId: ID.unique(),
+    email: parsed.data.email,
+    password: parsed.data.password,
+  });
   const userId = appwriteUser.$id;
 
   const tablesDB = new TablesDB(createAdminClient());
@@ -93,7 +102,7 @@ export async function registerUser(formData: FormData) {
     rowId: userId,
     data: {
       userId,
-      email,
+      email: parsed.data.email,
       role: "BRAND",
       usageLimits: 10,
       onboarded: false,
@@ -107,7 +116,7 @@ export async function registerUser(formData: FormData) {
     await sendVerificationEmail(userId);
   } catch (emailError) {
     console.error(
-      `[auth] Failed to send verification email to ${email}:`,
+      `[auth] Failed to send verification email to ${parsed.data.email}:`,
       emailError instanceof Error ? emailError.message : emailError
     );
     throw new Error(
@@ -115,11 +124,15 @@ export async function registerUser(formData: FormData) {
     );
   }
 
-  return { email, verificationRequired: true };
+  return { email: parsed.data.email, verificationRequired: true };
 }
 
 export async function resendVerificationEmail(email: string) {
   const normalizedEmail = normalizeEmail(email);
+  const ip = await clientIpForAction();
+  await enforceRateLimit(rateLimitKey("resend-verify-ip", ip), { limit: 10, windowSeconds: 3600 });
+  await enforceRateLimit(rateLimitKey("resend-verify", normalizedEmail), { limit: 5, windowSeconds: 3600 });
+
   const existing = await lookupUserByEmail(normalizedEmail);
   const user = existing.users[0];
 
@@ -133,6 +146,9 @@ export async function resendVerificationEmail(email: string) {
 
 export async function requestPasswordReset(email: string) {
   const normalizedEmail = normalizeEmail(email);
+  const ip = await clientIpForAction();
+  await enforceRateLimit(rateLimitKey("password-reset-ip", ip), { limit: 10, windowSeconds: 3600 });
+  await enforceRateLimit(rateLimitKey("password-reset", normalizedEmail), { limit: 3, windowSeconds: 3600 });
 
   try {
     const account = new Account(createPublicClient());
@@ -148,17 +164,18 @@ export async function requestPasswordReset(email: string) {
 }
 
 export async function resetPassword(userId: string, secret: string, password: string) {
-  if (!userId || !secret) {
+  const parsed = resetPasswordSchema.safeParse({ userId, secret, password });
+  if (!parsed.success) {
     throw new Error("Reset link is invalid or expired");
-  }
-
-  if (!password || password.length < 6) {
-    throw new Error("Password must be at least 6 characters");
   }
 
   try {
     const account = new Account(createPublicClient());
-    await account.updateRecovery({ userId, secret, password });
+    await account.updateRecovery({
+      userId: parsed.data.userId,
+      secret: parsed.data.secret,
+      password: parsed.data.password,
+    });
   } catch {
     throw new Error("Reset link is invalid or expired");
   }
@@ -169,10 +186,9 @@ export async function resetPassword(userId: string, secret: string, password: st
 export async function completeOnboarding(input: CompleteOnboardingInput) {
   const principal = await requirePrincipal();
 
-  const companyName = input.companyName.trim();
-
-  if (!companyName.trim()) {
-    throw new Error("Company name is required");
+  const parsed = onboardingSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid onboarding data");
   }
 
   const tablesDB = new TablesDB(createAdminClient());
@@ -181,10 +197,10 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
     tableId: APPWRITE_USERS_TABLE_ID,
     rowId: principal.userId,
     data: {
-      name: companyName,
-      productCategory: optionalText(input.productCategory),
-      storefrontPlatform: optionalText(input.storefrontPlatform),
-      catalogSize: optionalText(input.catalogSize),
+      name: parsed.data.companyName,
+      productCategory: optionalText(parsed.data.productCategory),
+      storefrontPlatform: optionalText(parsed.data.storefrontPlatform),
+      catalogSize: optionalText(parsed.data.catalogSize),
       onboarded: true,
     },
   });

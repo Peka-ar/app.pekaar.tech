@@ -6,7 +6,7 @@ import {
   AssetStatus,
   AssetType,
   ProjectStatus,
-} from "@/lib/db";
+} from "@/server/db/client";
 
 export type TaskAsset = {
   id: string;

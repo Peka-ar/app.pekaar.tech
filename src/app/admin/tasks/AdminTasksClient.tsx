@@ -90,6 +90,7 @@ export default function AdminTasksClient({
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const [glbAsset, setGlbAsset] = useState<UploadedAsset | null>(null);
   const [usdzAsset, setUsdzAsset] = useState<UploadedAsset | null>(null);
@@ -156,12 +157,13 @@ export default function AdminTasksClient({
   const handleSubmit = async () => {
     if (!selectedTask || !glbAsset) return;
     setIsSubmitting(true);
-    try {
-      await adminSubmitProject(selectedTask.id, glbAsset.id, usdzAsset?.id);
+    setSubmitError(null);
+    const result = await adminSubmitProject(selectedTask.id, glbAsset.id, usdzAsset?.id);
+    if (result.ok) {
       refreshTasks();
       closeModal();
-    } catch (e) {
-      console.error(e);
+    } else {
+      setSubmitError(result.message);
     }
     setIsSubmitting(false);
   };
@@ -580,6 +582,12 @@ export default function AdminTasksClient({
                       })}
                     </div>
                   </details>
+                )}
+
+                {submitError && (
+                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                    {submitError}
+                  </div>
                 )}
 
                 <button

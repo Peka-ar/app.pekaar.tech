@@ -1,7 +1,7 @@
 import AdminTasksClient from "./AdminTasksClient";
 import { getAllTasks } from "@/app/actions/admin";
-import { Role } from "@/lib/auth-guards";
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
+import { Role } from "@/server/auth-guards";
+import { requirePrincipalOrRedirect } from "@/server/auth-guards";
 import AdminLayout from "@/components/admin/AdminLayout";
 
 import { Suspense } from 'react';

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { getRecentProjectActivity } from '@/lib/notifications';
-import { UnauthenticatedError, ForbiddenError } from '@/lib/auth-guards';
+import { getRecentProjectActivity } from "@/server/services/notification.service";
+import { UnauthenticatedError, ForbiddenError } from '@/server/auth-guards';
 
 export async function GET() {
   try {

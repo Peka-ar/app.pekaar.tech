@@ -1,8 +1,8 @@
 import React, { Suspense } from "react";
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Users, Box, UserCheck, Activity } from "lucide-react";
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
-import { Role } from "@/lib/auth-guards";
+import { requirePrincipalOrRedirect } from "@/server/auth-guards";
+import { Role } from "@/server/auth-guards";
 import {
   getPlatformKPIs,
   getSignupsSeries,

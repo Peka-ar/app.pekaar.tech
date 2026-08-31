@@ -46,8 +46,11 @@ Set in Vercel dashboard → studio-v → Settings → Environment Variables (or 
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Production + Preview | Non-sensitive |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Production + Preview | Non-sensitive |
 | `NEXT_PUBLIC_APP_URL` | `https://studio-v-indol.vercel.app` | Production + Preview | Non-sensitive |
+| `CRON_SECRET` | Random ≥ 16 chars (e.g. `openssl rand -hex 32`) — must match the value Vercel Cron sends as `Authorization: Bearer ${CRON_SECRET}` | Production | Sensitive |
 
-Read by `src/lib/appwrite.ts:7` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (the fallback exists because Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel has no such restriction but uses `STUDIOV_API_KEY` to keep parity with the dormant Sites deployment).
+Read by `src/server/appwrite.ts:5` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (the fallback exists because Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel has no such restriction but uses `STUDIOV_API_KEY` to keep parity with the dormant Sites deployment). All required vars are validated at boot by `src/server/env.ts`.
+
+**Nightly cron (Production only):** `vercel.json` schedules `GET /api/cron/maintenance` at `0 2 * * *` (02:00 UTC). Vercel Cron sends `Authorization: Bearer ${CRON_SECRET}`; the route fails closed when the secret is unset or mismatched (see `backend-architecture.md` §11). On Hobby the cron fires at most once per day.
 
 Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_KEY` (the fallback handles both). `ADMIN_*` vars are only needed by `npm run sync-admin` / `npm run seed:appwrite` — never set on Vercel (they would let anyone with dashboard access reset the admin password; they are run locally against the same Appwrite project).
 
@@ -259,7 +262,7 @@ website/
 
 | Element | Location |
 |---|---|
-| Server API key env fallback (`STUDIOV_API_KEY ?? APPWRITE_API_KEY`) | `src/lib/appwrite.ts:7` |
+| Server API key env fallback (`STUDIOV_API_KEY ?? APPWRITE_API_KEY`) | `src/server/appwrite.ts:5` |
 | Local env var template (documents both key names) | `.env.example:1` |
 | Next.js config (CORS, security headers, image patterns) | `next.config.mjs:1` |
 | Tailwind v4 + design tokens | `src/app/globals.css:1` |

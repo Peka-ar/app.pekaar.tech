@@ -1,9 +1,9 @@
 import React from 'react';
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Eye, Activity, Smartphone, Box, ArrowUpRight, ArrowDownRight, AlertTriangle } from 'lucide-react';
-import { requirePrincipalOrRedirect } from '@/lib/auth-guards';
+import { requirePrincipalOrRedirect } from '@/server/auth-guards';
 import { Query } from "node-appwrite";
-import { AnalyticsEventRow, DB, ProjectsRow, countRows, groupBy, listAllRows } from '@/lib/db';
+import { AnalyticsEventRow, DB, ProjectsRow, countRows, groupBy, listAllRows } from '@/server/db/client';
 import { formatCount, formatChange, subDays, startOfDay, startOfMonth, addMonths } from '@/lib/utils';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Table, TableHead, TableBody, TableRow, TableCell, TableEmptyState } from '@/components/ui/Table';

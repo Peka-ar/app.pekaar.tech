@@ -1,6 +1,6 @@
 # Auth Stabilization Plan
 
-> **HISTORICAL — task plan written for the NextAuth/Prisma era and fully implemented before the Appwrite migration (Phases 0–2 of `tasks/appwrite-migration.md`).** References to Prisma, `@/auth`, JWT claims, and UploadThing below describe the *pre-migration* design, not the current codebase. The current data layer is Appwrite TablesDB (`src/lib/db.ts`) and auth is `requirePrincipal()` (`src/lib/auth-guards.ts`). Keep this file as a design-rationale record; do not treat it as current-state reference.
+> **HISTORICAL — task plan written for the NextAuth/Prisma era and fully implemented before the Appwrite migration (Phases 0–2 of `tasks/appwrite-migration.md`).** References to Prisma, `@/auth`, JWT claims, and UploadThing below describe the *pre-migration* design, not the current codebase. The current data layer is Appwrite TablesDB (`src/server/db/client.ts`) and auth is `requirePrincipal()` (`src/server/auth-guards.ts`). Keep this file as a design-rationale record; do not treat it as current-state reference.
 
 ## Overview
 

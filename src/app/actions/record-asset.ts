@@ -1,14 +1,17 @@
 "use server";
 
 import { Storage } from "node-appwrite";
-import { requirePrincipal, Role } from "@/lib/auth-guards";
-import { createAdminClient } from "@/lib/appwrite";
+import { requirePrincipal, Role } from "@/server/auth-guards";
+import { createAdminClient } from "@/server/appwrite";
+import { buildFileUrl } from "@/lib/appwrite-config";
 import {
-  buildFileUrl,
-  bucketForAssetType,
-  defaultMimeTypeForAssetType,
-} from "@/lib/appwrite-config";
-import { AssetStatus, AssetsRow, DB, getTablesDB } from "@/lib/db";
+  ASSET_POLICY,
+  isAssetType,
+  validateAssetUpload,
+} from "@/server/domain/asset-policy";
+import { AssetStatus, AssetsRow, DB, getRowSafe, getTablesDB } from "@/server/db/client";
+import { recordAssetSchema } from "@/server/http/schemas";
+import { logger } from "@/server/logging";
 
 export type RecordedAsset = {
   id: string;
@@ -20,30 +23,65 @@ export type RecordedAsset = {
   originalName: string;
 };
 
+function toRecorded(a: AssetsRow): RecordedAsset {
+  return {
+    id: a.$id,
+    url: a.url,
+    type: a.type,
+    status: a.status,
+    mimeType: a.mimeType,
+    size: a.size,
+    originalName: a.originalName,
+  };
+} 
+
 export async function recordAssetUpload(input: {
   fileId: string;
   type: string;
 }): Promise<{ asset: RecordedAsset }> {
-  const { fileId, type } = input;
-
-  if (!fileId || !type) {
-    throw new Error("Missing required upload metadata");
+  const parsed = recordAssetSchema.safeParse(input);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "Invalid upload metadata");
   }
-
-  const roles =
-    type === "REFERENCE_IMAGE" ? [Role.BRAND] : type === "MODEL_GLB" || type === "MODEL_USDZ" ? [Role.ADMIN] : null;
-  if (!roles) {
+  const { fileId, type } = parsed.data;
+  if (!isAssetType(type)) {
     throw new Error("Unsupported asset type");
   }
 
+  const roles =
+    type === "REFERENCE_IMAGE" ? [Role.BRAND] : [Role.ADMIN];
   const principal = await requirePrincipal({ roles });
-  const bucketId = bucketForAssetType(type);
+  const policy = ASSET_POLICY[type];
 
   const storage = new Storage(createAdminClient());
-  const file = await storage.getFile({ bucketId, fileId });
+  const file = await storage.getFile({ bucketId: policy.bucketId, fileId });
 
-  const mimeType = file.mimeType || defaultMimeTypeForAssetType(type) || "application/octet-stream";
-  const url = buildFileUrl(bucketId, fileId);
+  // Server-side policy enforcement — never trust the client claim alone.
+  const validation = validateAssetUpload({
+    type,
+    fileName: file.name,
+    sizeBytes: file.sizeOriginal,
+  });
+  if (!validation.ok) {
+    await storage.deleteFile({ bucketId: policy.bucketId, fileId }).catch(() => {
+      logger.warn(`[assets] failed to delete rejected file ${fileId}`);
+    });
+    throw new Error(validation.reason);
+  }
+
+  // Idempotent: a retried call (or a browser that uploaded but never got the
+  // response) must not create a duplicate row. Reuse the existing row when the
+  // file is already recorded.
+  const existing = await getRowSafe<AssetsRow>(DB.assets, fileId);
+  if (existing) {
+    if (existing.ownerId !== principal.userId) {
+      throw new Error("You do not own this file");
+    }
+    return { asset: toRecorded(existing) };
+  }
+
+  const mimeType = file.mimeType || policy.mimeFallback;
+  const url = buildFileUrl(policy.bucketId, fileId);
 
   await getTablesDB().createRow<AssetsRow>({
     databaseId: DB.databaseId,

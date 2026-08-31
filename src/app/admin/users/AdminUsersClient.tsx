@@ -145,36 +145,36 @@ export function AdminUsersClient() {
   const handleUpdateRole = async () => {
     if (!selectedUser || !newRole) return;
     setActionError(null);
-    try {
-      await adminUpdateUser(selectedUser.id, { role: newRole as Role });
+    const result = await adminUpdateUser(selectedUser.id, { role: newRole as Role });
+    if (result.ok) {
       await fetchDetail(selectedUser.id);
       refreshUsers();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update role');
+    } else {
+      setActionError(result.message);
     }
   };
 
   const handleUpdateUsageLimits = async () => {
     if (!selectedUser || newUsageLimits === '') return;
     setActionError(null);
-    try {
-      await adminUpdateUser(selectedUser.id, { usageLimits: Number(newUsageLimits) });
+    const result = await adminUpdateUser(selectedUser.id, { usageLimits: Number(newUsageLimits) });
+    if (result.ok) {
       await fetchDetail(selectedUser.id);
       refreshUsers();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update usage limits');
+    } else {
+      setActionError(result.message);
     }
   };
 
   const handleUpdateSubscriptionTier = async () => {
     if (!selectedUser) return;
     setActionError(null);
-    try {
-      await adminUpdateUser(selectedUser.id, { subscriptionTier: newSubscriptionTier });
+    const result = await adminUpdateUser(selectedUser.id, { subscriptionTier: newSubscriptionTier });
+    if (result.ok) {
       await fetchDetail(selectedUser.id);
       refreshUsers();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to update subscription tier');
+    } else {
+      setActionError(result.message);
     }
   };
 
@@ -186,22 +186,22 @@ export function AdminUsersClient() {
       const reason = window.prompt('Reason for suspension:');
       if (reason === null) return;
       setActionError(null);
-      try {
-        await adminSetUserStatus(selectedUser.id, newStatus as UserStatus, reason || undefined);
+      const result = await adminSetUserStatus(selectedUser.id, newStatus as UserStatus, reason || undefined);
+      if (result.ok) {
         await fetchDetail(selectedUser.id);
         refreshUsers();
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : 'Failed to suspend user');
+      } else {
+        setActionError(result.message);
       }
     } else {
       if (!window.confirm('Activate this user?')) return;
       setActionError(null);
-      try {
-        await adminSetUserStatus(selectedUser.id, newStatus as UserStatus);
+      const result = await adminSetUserStatus(selectedUser.id, newStatus as UserStatus);
+      if (result.ok) {
         await fetchDetail(selectedUser.id);
         refreshUsers();
-      } catch (err) {
-        setActionError(err instanceof Error ? err.message : 'Failed to activate user');
+      } else {
+        setActionError(result.message);
       }
     }
   };
@@ -213,12 +213,12 @@ export function AdminUsersClient() {
     );
     if (!confirmed) return;
     setActionError(null);
-    try {
-      await adminDeleteUser(selectedUser.id);
+    const result = await adminDeleteUser(selectedUser.id);
+    if (result.ok) {
       closeDetail();
       refreshUsers();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed to delete user');
+    } else {
+      setActionError(result.message);
     }
   };
 

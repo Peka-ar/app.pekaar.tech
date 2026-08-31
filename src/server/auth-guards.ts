@@ -2,17 +2,23 @@ import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createNextServerHelpers } from "@appwrite.io/react/server/next";
 import { Models, TablesDB } from "node-appwrite";
-import { createAdminClient } from "@/lib/appwrite";
+import { createAdminClient } from "@/server/appwrite";
 import {
   APPWRITE_DATABASE_ID,
   APPWRITE_ENDPOINT,
   APPWRITE_PROJECT_ID,
   APPWRITE_USERS_TABLE_ID,
 } from "@/lib/appwrite-config";
+import {
+  ForbiddenError,
+  StaleSessionError,
+  UnauthenticatedError,
+} from "@/server/http/errors";
 
 import { Role } from "@/lib/enums";
 
 export { Role } from "@/lib/enums";
+export { ForbiddenError, StaleSessionError, UnauthenticatedError };
 
 export interface Principal {
   userId: string
@@ -20,27 +26,6 @@ export interface Principal {
   role: Role
   onboarded: boolean
   companyName: string | null
-}
-
-export class UnauthenticatedError extends Error {
-  constructor(message = "Unauthorized") {
-    super(message)
-    this.name = "UnauthenticatedError"
-  }
-}
-
-export class StaleSessionError extends UnauthenticatedError {
-  constructor(message = "Your session is no longer valid. Please sign in again.") {
-    super(message)
-    this.name = "StaleSessionError"
-  }
-}
-
-export class ForbiddenError extends Error {
-  constructor(message = "Forbidden") {
-    super(message)
-    this.name = "ForbiddenError"
-  }
 }
 
 export interface RequirePrincipalOptions {

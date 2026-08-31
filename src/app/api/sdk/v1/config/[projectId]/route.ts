@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { Query } from "node-appwrite";
 import { buildFileUrl, bucketForAssetType } from "@/lib/appwrite-config";
-import { AssetStatus, AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/lib/db";
+import { AssetStatus, AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/server/db/client";
 
 function resolveAssetUrl(asset: AssetsRow): string | undefined {
   if (asset.provider === "appwrite" && asset.fileId) {

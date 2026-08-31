@@ -1,6 +1,6 @@
 import AuthClient from "./AuthClient";
 import { redirect } from "next/navigation";
-import { requirePrincipal } from "@/lib/auth-guards";
+import { requirePrincipal } from "@/server/auth-guards";
 
 export default async function AuthPage() {
   let principal;

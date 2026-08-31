@@ -1,6 +1,6 @@
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
+import { requirePrincipalOrRedirect } from "@/server/auth-guards";
 import { Query } from "node-appwrite";
-import { DB, listAllRows, ProjectStatus, ProjectsRow } from "@/lib/db";
+import { DB, listAllRows, ProjectStatus, ProjectsRow } from "@/server/db/client";
 import NotificationsClient from "./NotificationsClient";
 
 export default async function NotificationsPage() {

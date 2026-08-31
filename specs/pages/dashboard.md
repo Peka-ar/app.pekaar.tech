@@ -31,7 +31,7 @@ export default function DashboardPage() {
 ```
 `DashboardContent` is an **async** server component wrapped in `<Suspense>` so the metric computation can stream without blocking the shell. The Suspense boundary is what makes `DashboardSkeleton` show during server work.
 
-> **Note (resolved Phase 6):** `DashboardContent` calls `requirePrincipalOrRedirect()` at the top while `getUserProjects()` internally calls `requirePrincipal()` again. The duplicate DB lookup is now collapsed by the React `cache()` wrapper in `src/lib/auth-guards.ts` (`getSessionPrincipalData`) — all `requirePrincipal` calls in a request share one session lookup + users-row fetch. Data path: single `listAllRows(analytics_events, brandId)` (parallel with `getUserProjects`) + JS filters (Phase 6).
+> **Note (resolved Phase 6):** `DashboardContent` calls `requirePrincipalOrRedirect()` at the top while `getUserProjects()` internally calls `requirePrincipal()` again. The duplicate DB lookup is now collapsed by the React `cache()` wrapper in `src/server/auth-guards.ts` (`getSessionPrincipalData`) — all `requirePrincipal` calls in a request share one session lookup + users-row fetch. Data path: single `listAllRows(analytics_events, brandId)` (parallel with `getUserProjects`) + JS filters (Phase 6).
 
 ---
 

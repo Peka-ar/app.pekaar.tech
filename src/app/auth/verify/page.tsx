@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Account } from "node-appwrite";
-import { createPublicClient } from "@/lib/appwrite";
+import { createPublicClient } from "@/server/appwrite";
 
 export default async function VerifyEmailPage({
   searchParams,

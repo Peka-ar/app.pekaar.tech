@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import AdminLayout from "@/components/admin/AdminLayout";
-import { requirePrincipalOrRedirect } from '@/lib/auth-guards';
-import { Role } from '@/lib/auth-guards';
+import { requirePrincipalOrRedirect } from '@/server/auth-guards';
+import { Role } from '@/server/auth-guards';
 import { AdminUsersClient } from './AdminUsersClient';
 import { Skeleton } from '@/components/ui/Skeleton';
 

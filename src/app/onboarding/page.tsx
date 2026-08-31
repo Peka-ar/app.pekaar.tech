@@ -1,4 +1,4 @@
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards"
+import { requirePrincipalOrRedirect } from "@/server/auth-guards"
 import { redirect } from "next/navigation"
 import OnboardingClient from "./OnboardingClient"
 

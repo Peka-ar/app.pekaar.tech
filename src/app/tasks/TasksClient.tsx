@@ -153,6 +153,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [uploadedAssets, setUploadedAssets] = useState<UploadedAsset[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [failedRefImages, setFailedRefImages] = useState<Set<string>>(new Set());
@@ -202,37 +203,40 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     setRequestChangesNote('');
     setShowRequestChangesForm(false);
     setFailedRefImages(new Set());
+    setActionError(null);
   };
 
   const publishJob = async (jobId: string) => {
     if (role === "ADMIN") return;
     setIsPublishing(true);
-    try {
-      await brandPublishProject(jobId);
+    setActionError(null);
+    const result = await brandPublishProject(jobId);
+    if (result.ok) {
       startTransition(() => {
         router.refresh();
       });
-    } catch (e) {
-      console.error(e);
+      closeAllModals();
+    } else {
+      setActionError(result.message);
     }
-    closeAllModals();
     setIsPublishing(false);
   };
 
   const sendForRevisions = async (jobId: string) => {
     if (!requestChangesNote.trim()) return;
     setIsRequestingChanges(true);
-    try {
-      await brandSendForRevisions(jobId, requestChangesNote.trim());
+    setActionError(null);
+    const result = await brandSendForRevisions(jobId, requestChangesNote.trim());
+    if (result.ok) {
       setRequestChangesNote('');
       setShowRequestChangesForm(false);
       startTransition(() => {
         router.refresh();
       });
-    } catch (e) {
-      console.error(e);
+      closeAllModals();
+    } else {
+      setActionError(result.message);
     }
-    closeAllModals();
     setIsRequestingChanges(false);
   };
 
@@ -259,24 +263,23 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     }
 
     setIsSubmitting(true);
-    try {
-      await createProject(nameVal, uploadedAssets.map(a => a.id), skuVal, instructionsVal, {
-        width,
-        height,
-        depth,
-        unit: 'cm',
-      });
+    const result = await createProject(nameVal, uploadedAssets.map(a => a.id), skuVal, instructionsVal, {
+      width,
+      height,
+      depth,
+      unit: 'cm',
+    });
+    if (result.ok) {
       setUploadedAssets([]);
       resetUpload();
       setUploadSuccess(false);
       startTransition(() => {
         router.refresh();
       });
-    } catch (err: unknown) {
-      console.error(err);
-      setFormError(err instanceof Error ? err.message : "Failed to create project. Please try again.");
+      setIsWizardOpen(false);
+    } else {
+      setFormError(result.message);
     }
-    setIsWizardOpen(false);
     setIsSubmitting(false);
   };
 
@@ -932,6 +935,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
               </h3>
 
+              {actionError && (
+                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                  {actionError}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
@@ -1104,6 +1113,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               <h3 className="text-[10px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-primary)] flex items-center gap-2">
                 <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
               </h3>
+
+              {actionError && (
+                <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                  {actionError}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>

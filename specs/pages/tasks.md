@@ -4,7 +4,7 @@
 
 `/tasks` is the brand's primary work surface. Admins also land here (the page is shared) but the modal flows are role-aware. This spec documents the **brand** experience; the admin board at `/admin/tasks` is documented in [`./admin.md`](./admin.md).
 
-The lifecycle is now a 4-state machine: `PENDING → COMPLETED → PUBLISHED`, with `REVISIONS` as a re-entrant branch off `COMPLETED` and `PUBLISHED`. Every status has its own modal.
+The lifecycle is now a 4-state machine: `PENDING → COMPLETED → PUBLISHED`, with `REVISIONS` as a **non-re-entrant** branch off `COMPLETED` and `PUBLISHED` (a project already in `REVISIONS` must be resubmitted before another revision request — see `../backend-architecture.md` §3). Every status has its own modal.
 
 ---
 
@@ -35,7 +35,7 @@ type TaskJob = {
 
 ## Layout shell
 
-`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:269` — gated on `role !== "ADMIN"`); it is hidden below `sm` in the sticky header so the mobile action bar stays uncluttered. The shell provides the fixed sidebar (≥768px), the user profile + `logout` form, the sticky header with `ThemeToggle` + `NotificationBell`, and `MobileNavDrawer`. The drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`).
+`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:306` — gated on `role !== "ADMIN"` at `:316`); it is hidden below `sm` in the sticky header so the mobile action bar stays uncluttered. The shell provides the fixed sidebar (≥768px), the user profile + `logout` form, the sticky header with `ThemeToggle` + `NotificationBell`, and `MobileNavDrawer`. The drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`).
 
 Below the header, `TasksClient` renders a **toolbar** (`TasksClient.tsx:313`):
 - **Search input** (`Input` with `Search` icon) — filters by `name`, `sku`, or `id` (case-insensitive).
@@ -63,7 +63,7 @@ Each column is a fixed-width (`w-80`) scrollable panel with a header (icon + lab
 
 **Job card**: thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>` — proxy URL composed from `asset.id`, `unoptimized` because the proxy is cookie-gated), job id mono pill, status icon, product name, and (for ADMIN only) a `Category:` line. Footer: brand initials avatar + SKU + created date. `COMPLETED` cards append a full-width **"Review Model"** button that opens the Review modal.
 
-**Card click routing** (`handleCardClick`, `TasksClient.tsx:160`):
+**Card click routing** (`handleCardClick`, `TasksClient.tsx:191`):
 - `PENDING` → `setProcessingJob(job)` → Processing modal (read-only, "Awaiting production")
 - `REVISIONS` → `setRevisionsJob(job)` → Revisions modal (read-only, shows the brand's revision notes)
 - `COMPLETED` → `setReviewJob(job)` → Review modal (with 3D viewer + Approve / Request Changes)
@@ -93,7 +93,7 @@ A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), S
 4. On success: clears `uploadedAssets`, resets upload state, `router.refresh()` inside `startTransition`.
 5. On error: surfaces the error message in a red banner.
 
-**Server side** (`src/app/actions/project.ts:8`): `createProject` requires `Role.BRAND`, runs a TablesDB `runTransaction` — atomic quota decrement (`decrementRowColumn(users, usageLimits, value: 1, min: 0)`), verifies all `assetIds` are `READY` + owned by the caller (`listRows` total check), creates the project as `PENDING` (`createRow`), links assets via staged `updateRows`.
+**Server side** (`src/app/actions/project.ts:8`): `createProject` requires `Role.BRAND` and returns an `ActionResult`; the real work is in `createProjectService` (`src/server/services/project.service.ts`), which runs a TablesDB `runTransaction` — atomic quota decrement (`decrementRowColumn(users, usageLimits, value: 1, min: 0)`), verifies all `assetIds` are `READY` + owned by the caller (`listRows` total check + `isNull("projectId")` guard), creates the project as `PENDING` (`createRow`), links assets via staged `updateRows`. The action maps failures to `{ ok: false, code, message }` via `toActionResult`; the client branches on `result.ok` and renders `result.message` in the error banner (no raw Appwrite rows cross the wire).
 
 > File upload mechanics are in `../file-storage-architecture.md`.
 
@@ -101,7 +101,7 @@ A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), S
 
 ## Modal 2 — Processing (PENDING read-only)
 
-`TasksClient.tsx:721`. Opened by clicking a PENDING card. `Modal` size `lg`, variant `dialog`. No footer actions — read-only.
+`TasksClient.tsx:777`. Opened by clicking a PENDING card. `Modal` size `lg`, variant `dialog`. No footer actions — read-only.
 
 Shows: product info, dimensions, reference images grid, plus an amber banner: "Your project is in the production queue. You will be notified when the 3D model is ready for your review."
 
@@ -109,7 +109,7 @@ Shows: product info, dimensions, reference images grid, plus an amber banner: "Y
 
 ## Modal 3 — Revisions (REVISIONS read-only)
 
-`TasksClient.tsx:794`. Opened by clicking a REVISIONS card. `Modal` size `lg`, variant `dialog`. No footer actions.
+`TasksClient.tsx:865`. Opened by clicking a REVISIONS card. `Modal` size `lg`, variant `dialog`. No footer actions.
 
 Shows: an amber banner ("Production team is making changes") + the brand's full revision notes history. Each `RevisionRequest` renders as a card with author ("You"), timestamp, and the note text. Newest first.
 
@@ -117,7 +117,7 @@ Shows: an amber banner ("Production team is making changes") + the brand's full 
 
 ## Modal 4 — Review (COMPLETED — Approve or Request Changes)
 
-`TasksClient.tsx:868`. Opened by clicking a COMPLETED card or its "Review Model" button. `Modal` props: `size="full"`, `variant="takeover"`. Header action (BRAND only):
+`TasksClient.tsx:932`. Opened by clicking a COMPLETED card or its "Review Model" button. `Modal` props: `size="full"`, `variant="takeover"`. Header action (BRAND only):
 - **Request Changes** (secondary button) — toggles the sub-form in the left rail.
 - **Approve & Publish** (primary button) — calls `brandPublishProject(jobId)`.
 
@@ -145,7 +145,7 @@ ADMIN role does not see the sub-form, but the metadata rail + viewer still rende
 
 ## Modal 5 — Published (PUBLISHED — View 3D or Send for Revisions)
 
-`TasksClient.tsx:1045`. Opened by clicking a PUBLISHED card. `Modal` props: `size="full"`, `variant="takeover"`. Header action (BRAND only):
+`TasksClient.tsx:1111`. Opened by clicking a PUBLISHED card. `Modal` props: `size="full"`, `variant="takeover"`. Header action (BRAND only):
 - **Send for Revisions** (secondary button) — toggles the sub-form in the left rail.
 
 Same side-by-side layout as the Review modal: 420px metadata rail (Name, SKU, Created, Brand, instructions, dimensions, clickable reference images with `failedRefImages` fallback) + always-mounted 3D viewer on the right (camera state preserved after user interaction; same no-reset policy as the Review modal). The viewer exposes the same **"View in your space"** AR button as the Review modal (see above). The "Model last updated <relative>" caption renders under the viewer using the same `getLatestModelUpdatedAt()` helper as the Review modal.
@@ -160,21 +160,21 @@ ADMIN role does not see the sub-form.
 
 ## Lightbox
 
-`TasksClient.tsx:1212`. Click on an uploaded reference image thumbnail (anywhere in the wizard, Review modal, or Published modal reference image grids) opens a fixed `z-[100]` black overlay (`cursor-zoom-out`) with the image at `max-w-4xl max-h-[90vh]`. Click anywhere to close. The lightbox `<Image>` reads `lightboxUrl` and carries the `unoptimized` prop (proxy is cookie-gated).
+`TasksClient.tsx:1266`. Click on an uploaded reference image thumbnail (anywhere in the wizard, Review modal, or Published modal reference image grids) opens a fixed `z-[100]` black overlay (`cursor-zoom-out`) with the image at `max-w-4xl max-h-[90vh]`. Click anywhere to close. The lightbox `<Image>` reads `lightboxUrl` and carries the `unoptimized` prop (proxy is cookie-gated).
 
 ---
 
 ## Server side — actions
 
-`src/app/actions/project.ts`:
-- **`createProject`** — BRAND only. TablesDB transaction: atomic quota decrement (`usageLimits` = remaining budget), asset ownership/READY check. Creates PENDING project, links assets. Returns `{ success, projectId, remaining }` — only a plain object, never the raw Appwrite row. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
-- **`brandPublishProject`** — BRAND owner only. Guarded `updateRows` requiring ownership + `status === COMPLETED` → sets `PUBLISHED` (0 matched → error). Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks`.
-- **`brandSendForRevisions`** — BRAND owner only. Verifies ownership, non-empty note, `status ∈ {COMPLETED, PUBLISHED}`. TablesDB transaction: in-tx precondition check (`getRowSafe(projects, id, txId)` — ownership + status; failure → "Project is not in a revisable state") then staged `updateRow` by rowId → REVISIONS + `createRow(revision_requests)`. (Staged bulk `updateRows` responses cannot be used for guards — Appwrite returns `{ total: 0, rows: [] }` for staged operations, Phase 6 bug 2.) Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. If was PUBLISHED, additionally revalidates `/embed/[id]`.
-- **`getUserProjects`** — caller's projects (newest first) with assets + brand + revisionRequests (newest first), via batched TablesDB queries + `buildTaskJob()`. Derived `referenceUrls`, `assetUrls { glb, usdz }`.
+`src/app/actions/project.ts` — thin adapters over `src/server/services/project.service.ts` (all three mutations return `ActionResult<...>`; clients check `result.ok` and surface `result.message`):
+- **`createProject`** — BRAND only. Service: TablesDB transaction — atomic quota decrement (`usageLimits` = remaining budget), asset ownership/READY/`isNull("projectId")` check. Creates PENDING project, links assets. Returns `ActionResult<{ projectId, remaining }>` — only a plain object, never the raw Appwrite row. On `ok` revalidates `/tasks`, `/dashboard`, `/admin/tasks`. Failures: `QUOTA_EXCEEDED` "Usage limit exceeded…", `STATE_CONFLICT` "One or more assets not found, not ready, or already attached…".
+- **`brandPublishProject`** — BRAND owner only. Service: **fail-closed publish** — grants `read:any` on every READY GLB/USDZ storage file BEFORE the status flip; any grant failure revokes already-granted files and aborts. Guarded `updateRows` requiring ownership + `status === COMPLETED` → sets `PUBLISHED` (0 matched → `STATE_CONFLICT`). On `ok` revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks`.
+- **`brandSendForRevisions`** — BRAND owner only. Service: verifies ownership, non-empty note, status via the state machine (`{COMPLETED, PUBLISHED}` — not re-entrant). TablesDB transaction: in-tx precondition check (`getRowSafe(projects, id, txId)` — ownership + status) then staged `updateRow` by rowId → REVISIONS + `createRow(revision_requests)`. On `ok` revalidates `/tasks`, `/dashboard`, `/admin/tasks`; if was PUBLISHED, revokes `read:any` on model files (`setFilePublicWithRetry`) + revalidates `/embed/[id]`.
+- **`getUserProjects`** — caller's projects (newest first) with assets + brand + revisionRequests (newest first), via batched TablesDB queries + `buildTaskJob()`. Derived `referenceUrls`, `assetUrls { glb, usdz }`. Throws (read).
 
-`src/app/actions/admin.ts`:
-- **`getAllTasks`** — ADMIN only. All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email), via batched TablesDB queries + `buildTaskJob()`.
-- **`adminSubmitProject`** — ADMIN only. Verifies GLB (and USDZ) are READY models. TablesDB `runTransaction`: in-tx precondition check (`getRowSafe(projects, id, txId)` requires `status ∈ {PENDING, REVISIONS}`; failure → "Project is no longer available to submit") then staged `updateRow` by rowId → sets `COMPLETED`; archives any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED` (keeps `projectId`); links the new GLB/USDZ. **No post-commit cleanup** — archived files are always kept (archived models stay viewable via the proxy; the legacy `utapi.deleteFiles` branch was removed in Phase 5). Same action covers initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED). See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` §10 for the storage view.
+`src/app/actions/admin.ts` — thin adapter over `project.service.ts`:
+- **`getAllTasks`** — ADMIN only. All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email), via batched TablesDB queries + `buildTaskJob()`. Throws (read).
+- **`adminSubmitProject`** — ADMIN only, returns `ActionResult<{ success: true }>`. Service: verifies GLB (and USDZ) are READY models. TablesDB `runTransaction`: in-tx precondition check (`getRowSafe(projects, id, txId)` requires `status ∈ {PENDING, REVISIONS}`; failure → "Project is no longer available to submit") + **in-tx per-asset link verification** (each new model re-read inside the tx must be READY + `projectId === null`), then staged `updateRow` by rowId → sets `COMPLETED`; archives any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED` (keeps `projectId`); links the new GLB/USDZ. **No post-commit cleanup** — archived files are always kept (archived models stay viewable via the proxy; the legacy `utapi.deleteFiles` branch was removed in Phase 5). Same action covers initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED). See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` §10 for the storage view.
 
 ---
 
@@ -182,26 +182,26 @@ ADMIN role does not see the sub-form.
 
 | Element | Location |
 |---|---|
-| `TasksClient` component | `src/app/tasks/TasksClient.tsx:112` |
-| `COLUMNS` array | `src/app/tasks/TasksClient.tsx:69` |
-| `TaskJob` type | `src/app/tasks/TasksClient.tsx:49` |
-| `handleCardClick` (status → modal routing) | `src/app/tasks/TasksClient.tsx:160` |
-| `publishJob` handler | `src/app/tasks/TasksClient.tsx:178` |
-| `sendForRevisions` handler | `src/app/tasks/TasksClient.tsx:193` |
-| `submitNewJob` handler | `src/app/tasks/TasksClient.tsx:210` |
-| `handleImageUpload` | `src/app/tasks/TasksClient.tsx:256` |
+| `TasksClient` component | `src/app/tasks/TasksClient.tsx:139` |
+| `COLUMNS` array | `src/app/tasks/TasksClient.tsx:71` |
+| `TaskJob` type | `src/app/tasks/TasksClient.tsx:55` |
+| `handleCardClick` (status → modal routing) | `src/app/tasks/TasksClient.tsx:191` |
+| `publishJob` handler | `src/app/tasks/TasksClient.tsx:209` |
+| `sendForRevisions` handler | `src/app/tasks/TasksClient.tsx:225` |
+| `submitNewJob` handler | `src/app/tasks/TasksClient.tsx:243` |
+| `handleImageUpload` | `src/app/tasks/TasksClient.tsx:288` |
 | `MobileNavDrawer` (closed = invisible) | `src/components/dashboard/MobileNavDrawer.tsx:1` |
-| Processing modal | `src/app/tasks/TasksClient.tsx:738` |
-| Revisions modal | `src/app/tasks/TasksClient.tsx:822` |
-| Review modal | `src/app/tasks/TasksClient.tsx:868` |
-| Published modal | `src/app/tasks/TasksClient.tsx:1045` |
-| Lightbox | `src/app/tasks/TasksClient.tsx:1212` |
+| Processing modal | `src/app/tasks/TasksClient.tsx:777` |
+| Revisions modal | `src/app/tasks/TasksClient.tsx:865` |
+| Review modal | `src/app/tasks/TasksClient.tsx:932` |
+| Published modal | `src/app/tasks/TasksClient.tsx:1111` |
+| Lightbox | `src/app/tasks/TasksClient.tsx:1266` |
 | `BRAND_LABEL` / `getStatusLabel` | `src/lib/status.ts` |
-| `createProject` action | `src/app/actions/project.ts:28` |
-| `brandPublishProject` action | `src/app/actions/project.ts:115` |
-| `brandSendForRevisions` action | `src/app/actions/project.ts:162` |
-| `getUserProjects` action | `src/app/actions/project.ts:252` |
-| `adminSubmitProject` action | `src/app/actions/admin.ts:73` |
+| `createProject` action | `src/app/actions/project.ts:15` |
+| `brandPublishProject` action | `src/app/actions/project.ts:31` |
+| `brandSendForRevisions` action | `src/app/actions/project.ts:42` |
+| `getUserProjects` action | `src/app/actions/project.ts:60` |
+| `adminSubmitProject` action | `src/app/actions/admin.ts:15` |
 | `getAllTasks` action | `src/app/actions/admin.ts:26` |
 
 ## See also

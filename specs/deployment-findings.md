@@ -65,7 +65,7 @@ All 14 pre-migration vars (Prisma/Postgres `DATABASE_URL`/`DIRECT_URL`, `AUTH_SE
 | Web platform | `peka-ar-site` (hostname `branch-main-86d3a7e.appwrite.network`) |
 
 **Findings (unique to Sites):**
-- Sites **forbids user-set env vars with the `APPWRITE_` prefix** (reserved for injected vars like `APPWRITE_SITE_API_KEY`) — hence the server key lives in `STUDIOV_API_KEY`, read as `process.env.STUDIOV_API_KEY ?? process.env.APPWRITE_API_KEY!` in `src/lib/appwrite.ts:7`.
+- Sites **forbids user-set env vars with the `APPWRITE_` prefix** (reserved for injected vars like `APPWRITE_SITE_API_KEY`) — hence the server key lives in `STUDIOV_API_KEY`, read as `process.env.STUDIOV_API_KEY ?? process.env.APPWRITE_API_KEY!` in `src/server/appwrite.ts:5`.
 - Only **VCS deployments from `main` re-point the branch URL**; a manual "duplicate deployment" builds fresh but leaves the branch URL on the old deployment. To redeploy after env-var changes: MCP `sites_create_vcs_deployment {site_id:"peka-ar", type:"branch", reference:"main", activate:true}` (or push to `origin`).
 - Build ~3.5 min (cache hit ~55s compile). 6 npm audit highs + blocked postinstall scripts (esbuild/sharp/unrs-resolver) — non-blocking.
 - Rollback = re-activate a previous deployment (Console → Deployments → Activate, or MCP `sites_update_site_deployment`). No rebuild needed.
@@ -83,7 +83,7 @@ All 14 pre-migration vars (Prisma/Postgres `DATABASE_URL`/`DIRECT_URL`, `AUTH_SE
 |---|---|
 | Project | "Peka.ar" — `6a8562a20037b62075e1`, region `fra`, console https://cloud.appwrite.io |
 | Endpoint | `https://fra.cloud.appwrite.io/v1` |
-| TablesDB | database `studiov` (5 tables — IDs in `src/lib/appwrite-config.ts`) |
+| TablesDB | database `studiov` (6 tables incl. `rate_limits` — IDs in `src/lib/appwrite-config.ts`; `rate_limits` provisioned by `npm run ensure-backend`) |
 | Storage buckets | `models`, `reference-images` |
 | API key | `standard_…` server key (scopes: users/sessions, tables+columns+indexes+rows, buckets/files, messaging, usage.read) — value only in local `.env` + host env-var stores |
 | Web platforms | `web-production-site` → `studio-v-indol.vercel.app` · `peka-ar-site` → `branch-main-86d3a7e.appwrite.network` · `local-dev-web` → `localhost` |
@@ -144,7 +144,7 @@ Local-only files (gitignored + untracked from repos in commit `9c1122e`): `.agen
 
 | Element | Location |
 |---|---|
-| Server key env fallback | `src/lib/appwrite.ts:7` |
+| Server key env fallback | `src/server/appwrite.ts:5` |
 | Appwrite proxy (sign-in/out, OAuth) | `src/app/api/appwrite/[...appwrite]/route.ts:1` (routes: `POST sign-in/email-password`, `POST sign-up/email-password`, `POST sign-out`, `GET/POST oauth/{callback,failure}`) |
 | Public SDK endpoints | `src/app/api/sdk/v1/config/[projectId]/route.ts:1`, `src/app/api/sdk/v1/events/route.ts:1` |
 | Env var template | `.env.example:1` |

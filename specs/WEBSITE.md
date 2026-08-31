@@ -44,20 +44,22 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 | Layer | Tech | Notes |
 |---|---|---|
 | Framework | **Next.js 16** (App Router, Turbopack) | `next.config.mjs` — `images.remotePatterns` retains `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (Appwrite CDN). Asset proxy is reached through `unoptimized` `<Image>` consumers, not via `/_next/image` (see §5). |
-| Hosting | **Vercel** (primary — project `studio-v`, auto-deploy from `Kaizen3424/StudioV` `main`, remote `legacy`) + **Appwrite Sites** (site `peka-ar`, dormant/frozen at `0e72d57` — revival steps in `specs/deployment-findings.md` §3) | Production handbook: `specs/deployment.md`. Full live-values record: `specs/deployment-findings.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/lib/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel uses `STUDIOV_API_KEY` for parity). |
+| Hosting | **Vercel** (primary — project `studio-v`, auto-deploy from `Kaizen3424/StudioV` `main`, remote `legacy`) + **Appwrite Sites** (site `peka-ar`, dormant/frozen at `0e72d57` — revival steps in `specs/deployment-findings.md` §3) | Production handbook: `specs/deployment.md`. Full live-values record: `specs/deployment-findings.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/server/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel uses `STUDIOV_API_KEY` for parity). |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | PostCSS-based, tokens in `globals.css` |
 | 3D | **Google `<model-viewer>` 4.1.0/4.2.0** via `next/script` | No SSR — dynamically imported |
-| Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client hooks + SSR helpers) + `node-appwrite` (server) | `src/app/api/appwrite/[...appwrite]/route.ts` (handlers), `src/app/providers.tsx`, `src/lib/appwrite.ts`, `src/lib/auth-guards.ts` |
-| DB | **Appwrite TablesDB** (`studiov`, 5 tables) + `node-appwrite` client | `src/lib/db.ts`, `src/lib/appwrite-config.ts`, `src/lib/enums.ts` (edge-safe enum module). **Prisma removed entirely in Phase 5** |
-| File storage | **Appwrite Storage** — 2 buckets: `models` (ADMIN-create, 150 MB) + `reference-images` (BRAND-create, 16 MB) | browser-direct uploads via session-authenticated client; in-app reads via auth-gated proxy; published embeds via direct CDN URLs with publish-time `read:any` grants. Full spec: `file-storage-architecture.md` |
+| Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client hooks + SSR helpers) + `node-appwrite` (server) | `src/app/api/appwrite/[...appwrite]/route.ts` (handlers), `src/app/providers.tsx`, `src/server/appwrite.ts`, `src/server/auth-guards.ts` |
+| DB | **Appwrite TablesDB** (`studiov`, 6 tables incl. `rate_limits`) + `node-appwrite` client | `src/server/db/client.ts`, `src/lib/appwrite-config.ts`, `src/lib/enums.ts` (edge-safe enum module). **Prisma removed entirely in Phase 5** |
+| File storage | **Appwrite Storage** — 2 buckets: `models` (ADMIN-create, 150 MB) + `reference-images` (BRAND-create, 16 MB) | browser-direct uploads via session-authenticated client; in-app reads via auth-gated proxy; published embeds via direct CDN URLs with publish-time `read:any` grants. Buckets hardened by `npm run ensure-backend` (`reference-images`: no read perm; `models`: glb/usdz-only extensions, antivirus + encryption on). Full spec: `file-storage-architecture.md` |
 | Email | **Appwrite Cloud email** (Gmail SMTP configured in console: sender "Peka.ar", `studiov3242@gmail.com`) | transactional auth emails — Appwrite's built-in **verification** + **recovery** templates; click URL passed per-call via `createVerification({ url })` / `createRecovery({ url })`. Legacy Nodemailer stack (`src/lib/emails.ts`, `mail.ts`) is dead code (zero consumers, deleted in Phase 5) |
 | Theming | **next-themes** (`next-themes@0.4.6`) | light/dark, `attribute="class"` |
 | Dates | **date-fns** (`date-fns@4.4.0`) | `formatDistanceToNow` on dashboard |
+| Validation | **zod** | input schemas in `src/server/http/schemas.ts`, validated in services/API handlers |
+| Testing | **vitest** (dev dep) | `npm run test` — node env, `src/server/**/*.test.ts` (pure modules; 54 tests) |
 | Passwords | **Appwrite** (Argon2, hashed server-side, app never stores them) | |
 
-**Scripts:** `npm run dev` · `npm run build` · `npm run start` · `npm run lint` (eslint)
+**Scripts:** `npm run dev` · `npm run build` · `npm run start` · `npm run lint` (eslint) · `npm run test` (vitest) · `npm run sync-admin` · `npm run seed:appwrite` · `npm run ensure-backend` (provisions `rate_limits` table + hardens buckets; idempotent)
 
-**Env vars:** local `.env` uses `APPWRITE_API_KEY`; on Vercel and Appwrite Sites the same key is set as `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved on Sites; Vercel keeps the name for parity) — read via the fallback in `src/lib/appwrite.ts`. Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`. Full reference: `specs/deployment.md` §3 + `specs/deployment-findings.md` §2/§3 + `.env.example`.
+**Env vars:** local `.env` uses `APPWRITE_API_KEY`; on Vercel and Appwrite Sites the same key is set as `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved on Sites; Vercel keeps the name for parity) — read via the fallback in `src/server/appwrite.ts`. Validated at boot by `src/server/env.ts` (fails fast listing every invalid var). Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`, optional `ADMIN_*`, `CRON_SECRET`, `LOG_LEVEL`. Full reference: `specs/deployment.md` §3 + `specs/deployment-findings.md` §2/§3 + `.env.example`.
 
 ---
 
@@ -97,24 +99,31 @@ website/
 │   │   ├── ThreeDConfigurator.tsx
 │   │   └── ThemeProvider.tsx, ThemeToggle.tsx
 │   ├── lib/
-│   │   ├── db.ts              # TablesDB data layer: row types, getTablesDB(), getRowSafe, listAllRows, countRows, runTransaction, groupBy
 │   │   ├── enums.ts           # edge-safe const enums + types (ProjectStatus/AssetStatus/AssetType/UserStatus/EventType/Role) — client-importable, zero SDK imports
-│   │   ├── project-augment.ts # buildTaskJob()/usersToTaskBrand()/requesterLiteFromUsers() — TablesDB row → client TaskJob shape
+│   │   ├── project-augment.ts # buildTaskJob()/usersToTaskBrand()/requesterLiteFromUsers() — TablesDB row → client TaskJob shape (imports row types from @/server/db/client, enums from @/lib/enums)
 │   │   ├── appwrite-config.ts # edge-safe Appwrite constants (endpoint, projectId, SESSION_COOKIE, DB/table/bucket ids) + buildFileUrl/bucketForAssetType/mime defaults — no SDK imports
-│   │   ├── appwrite.ts        # APPWRITE_API_KEY + createAdminClient() / createSessionClient() / createPublicClient() factories
-│   │   ├── auth-guards.ts     # requirePrincipal() — canonical auth resolver (Appwrite session + users-table row), React cache()-deduped per request (Phase 6); re-exports Role from enums.ts
-│   │   ├── notifications.ts   # getRecentProjectActivity() (TablesDB `listRows`)
 │   │   ├── status.ts          # PROJECT_STATUS_META map → Badge tone/icon/label (imports enums from @/lib/enums)
 │   │   ├── embed-liveness.ts  # EMBED_LIVENESS_THRESHOLDS + getLivenessBadge + formatLastSeen
 │   │   ├── types.ts           # Product interface + PRODUCTS[] demo data
 │   │   ├── utils.ts           # generateEmbedCode, formatCount, formatChange, date helpers
 │   │   ├── use-appwrite-upload.ts # client upload hook: useAppwriteUpload → { upload, isUploading, progress, error, reset }
 │   │   ├── use-click-outside.ts, use-media-query.ts
-│   │   └── (removed in Phase 4/5: prisma.ts, password.ts, emails.ts, mail.ts, uploadthing-server.ts, uploadthing.ts, hooks/use-presigned-upload.ts, storage/)
+│   │   └── (removed in Phase 4/5: db.ts, appwrite.ts, auth-guards.ts, notifications.ts → moved to src/server/; prisma.ts, password.ts, emails.ts, mail.ts, uploadthing-server.ts, uploadthing.ts, hooks/use-presigned-upload.ts, storage/)
+│   ├── server/                # server-only code (never imported by client components)
+│   │   ├── env.ts             # zod-validated env (fails fast)
+│   │   ├── logging.ts         # JSON structured logger (LOG_LEVEL)
+│   │   ├── appwrite.ts        # APPWRITE_API_KEY + createAdminClient()/createSessionClient()/createPublicClient()
+│   │   ├── auth-guards.ts     # getSessionPrincipal/requirePrincipal/requirePrincipalOrRedirect + Principal type
+│   │   ├── storage.ts         # setFilePublic / setFilePublicWithRetry — read:any grant/revoke on storage files (3 attempts, 250ms exp backoff)
+│   │   ├── http/              # errors.ts (AppError taxonomy + StaleSessionError), handler.ts (withApi/handleApiError), rate-limit.ts (Appwrite-table rate limiting), result.ts (ActionResult/toActionResult), schemas.ts (zod)
+│   │   ├── db/                # client.ts (TablesDB singleton, DB map, getRowSafe/listAllRows/countRows/runTransaction/groupBy, row types), errors.ts (isNotFoundError/mapAppwriteError)
+│   │   ├── domain/            # project-state-machine.ts (pure transition rules), asset-policy.ts (ASSET_POLICY/validateAssetUpload)
+│   │   └── services/          # project.service.ts, user-admin.service.ts, analytics.service.ts, notification.service.ts, maintenance.service.ts — business logic, throw AppError
 │   ├── assets/fonts/          # local woff2: Cormorant, Inter, JetBrains
 │   ├── proxy.ts               # proxy (middleware) — cookie-presence route gating only
 │   └── types/                 # ambient type augmentations
-├── scripts/                   # sync-admin.ts (Appwrite bootstrap), seed-appwrite.ts (demo seed)
+├── scripts/                   # sync-admin.ts (Appwrite bootstrap), seed-appwrite.ts (demo seed), ensure-backend.ts (rate_limits table + bucket hardening)
+├── vercel.json                # Vercel Cron schedule: /api/cron/maintenance @ 02:00 UTC daily
 ├── design.md                  # design system spec (read alongside §9 below)
 ├── specs/                     # ← you are here
 └── tasks/                     # migration records (plan.md, todo.md, revert-to-uploadthing.md, appwrite-migration.md)
@@ -162,14 +171,25 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 - **Responses:** `200` `NotificationProject[] = { id, name, status, createdAt }[]` (10 newest of caller's projects) · `401`/`403`/`500` all return `[]` (graceful degrade for `NotificationBell`).
 - **File:** `src/app/api/notifications/route.ts:1`
 
+### `GET /api/health`
+- **Auth:** none. Verifies the admin client can reach Appwrite (creates a throwaway `getProject` on the admin client).
+- **Responses:** `200 { ok: true }` · `503 { ok: false, error }` (Appwrite unreachable / bad API key). Wrapped in `withApi` so unexpected errors become a JSON 500. Intended for Vercel/uptime monitors.
+- **File:** `src/app/api/health/route.ts:1`
+
 ### Uploads — no API route (Phase 4)
-Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage directly (`storage.createFile` via the session-authenticated `useAppwrite()` client), then the `recordAssetUpload` **server action** (`src/app/actions/record-asset.ts:23`) creates the TablesDB `assets` row. Bucket `create` permissions gate the role (BRAND → `reference-images`, ADMIN → `models`).
+Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage directly (`storage.createFile` via the session-authenticated `useAppwrite()` client), then the `recordAssetUpload` **server action** (`src/app/actions/record-asset.ts:38`) creates the TablesDB `assets` row. Bucket `create` permissions gate the role (BRAND → `reference-images`, ADMIN → `models`).
 
 ### `GET /api/auth/clear-session`
 - **File:** DELETED in Appwrite migration Phase 1. `StaleSessionError` now redirects directly to `/auth` from `requirePrincipalOrRedirect()` (see §7).
 
 ### `GET|POST /api/auth/[...nextauth]`
 - **File:** DELETED in Appwrite migration Phase 1 — replaced by `GET|POST /api/appwrite/[...appwrite]` above.
+
+### `GET /api/cron/maintenance` — Vercel Cron entrypoint
+- **File:** `src/app/api/cron/maintenance/route.ts:1` · schedule `0 2 * * *` in `vercel.json`
+- **Auth:** fail closed — `Authorization: Bearer ${CRON_SECRET}`. Unset `CRON_SECRET` → `503`; mismatch → `401`.
+- Runs nightly maintenance (see `backend-architecture.md` §11): storage-permission reconciliation (PUBLISHED projects' model assets must carry `read:any`, else revoked), `rate_limits` retention (> 48h), `analytics_events` retention (> 90d).
+- **Response:** `200 { ok: true, storage: { scanned, granted, revoked, failures }, rateLimitsDeleted, analyticsEventsDeleted }`
 
 ### `POST /api/sdk/v1/events` — **public**
 - **File:** `src/app/api/sdk/v1/events/route.ts:1`
@@ -240,7 +260,7 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 - `COMPLETED` → `PUBLISHED`: only via `brandPublishProject` (BRAND owner; guarded `updateRows` requiring `COMPLETED` + `brandId`)
 - `COMPLETED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner, requires non-empty note; creates a `revision_requests` row in the same transaction)
 - `PUBLISHED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner, requires note; embed stops serving on transition)
-- `REVISIONS` is re-entrant: the brand can request more revisions on a project that's already in REVISIONS (creates another `revision_requests` row; status remains REVISIONS)
+- **`REVISIONS` is NOT re-entrant via `brandSendForRevisions`** — the from-state guard requires `{COMPLETED, PUBLISHED}`, so a project already in `REVISIONS` must be resubmitted (→ `COMPLETED`) first. (Spec corrected in the backend-architecture pass; the pure rule table lives in `src/server/domain/project-state-machine.ts`.)
 - `PUBLISHED` is the only embed-servable state. All other states render the embed's "not available" placeholder.
 - The admin board shows 3 columns: `PENDING` (Queued), `REVISIONS` (Revisions Required), `COMPLETED` (Completed). `PUBLISHED` projects are read-only (show "Live on storefront" banner).
 - The brand's `/tasks` shows 4 columns. Labels are role-dependent — see `src/lib/status.ts`: `ADMIN_LABEL` and `BRAND_LABEL` with `getStatusLabel(status, role)` helper.
@@ -255,14 +275,14 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 ## 7. Auth & onboarding workflow
 
 ### Registration
-1. `SignUpForm` → `registerUser(formData)` (`auth.ts:61`, admin client): normalizes email, enforces password ≥ 6 chars. Verified existing user ⇒ throw `Email already registered`; unverified ⇒ `updatePassword` + re-send; new ⇒ `Users.create(ID.unique(), email, password)` + `users` TableDB row (`role: "BRAND"`, `usageLimits: 10`, `onboarded: false`, `status: "ACTIVE"`) + `updateLabels(["BRAND"])`.
+1. `SignUpForm` → `registerUser(formData)` (`auth.ts:64`, admin client): normalizes email, enforces password ≥ 8 chars. Verified existing user ⇒ throw `Email already registered`; unverified ⇒ `updatePassword` + re-send; new ⇒ `Users.create(ID.unique(), email, password)` + `users` TableDB row (`role: "BRAND"`, `usageLimits: 10`, `onboarded: false`, `status: "ACTIVE"`) + `updateLabels(["BRAND"])`. **Rate-limited:** 10/h/IP.
 2. Always sends a **link-based verification email** via `sendVerificationEmail(userId)` (mint session → `createVerification({ url })` → delete session; Appwrite appends `userId`+`secret` to the link).
-3. Returns `{ email, verificationRequired: true }`; `SignUpForm` swaps to a **"Check your inbox"** screen with a spam hint + resend button (`resendVerificationEmail`, `auth.ts:121`).
+3. Returns `{ email, verificationRequired: true }`; `SignUpForm` swaps to a **"Check your inbox"** screen with a spam hint + resend button (`resendVerificationEmail`, `auth.ts:130`).
 4. User clicks the email link → `/auth/verify` → `updateVerification` → success card → **manual sign-in** (no auto session, deviation D2) → `getSessionPrincipal` routes to `/onboarding` (not onboarded) or `/dashboard`/`/admin/dashboard`.
 
 ### Login
 1. `SignInForm` → `signIn.emailPassword({ email, password, ... })` (`useAuth()` → `POST /api/appwrite/signin/email-password` → sets the session cookie). No `preflightLogin` anymore (deleted, deviation D5).
-2. On success → `getSessionPrincipal()` (`auth.ts:203`) reads the `users` row **and returns the session secret** → `SignInForm` calls `client.setSession(secret)` (provider client via `useAppwrite()`) so browser-direct SDK calls (uploads) are authenticated — SSR sign-in does not hydrate the client SDK (Phase 6 bug 1) → `router.push(postLoginPath(onboarded, role))`: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`.
+2. On success → `getSessionPrincipal()` (`auth.ts:219`) reads the `users` row **and returns the session secret** → `SignInForm` calls `client.setSession(secret)` (provider client via `useAppwrite()`) so browser-direct SDK calls (uploads) are authenticated — SSR sign-in does not hydrate the client SDK (Phase 6 bug 1) → `router.push(postLoginPath(onboarded, role))`: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`.
 3. Errors mapped client-side from the `AppwriteException`: 401 / `user_invalid_credentials` / `user_not_found` → "Invalid email or password."; 429 / `*rate_limit*` → "Too many attempts. Please try again later."
 4. Role/onboarded gating happens per-request in `requirePrincipal` / `requirePrincipalOrRedirect` (reads the `users` TableDB row) — suspended users are rejected at the page boundary, not at login.
 
@@ -270,22 +290,22 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 - `/auth/verify?userId=...&secret=...` → `Account(createPublicClient()).updateVerification({ userId, secret })` directly in the page (`src/app/auth/verify/page.tsx:1`). Invalid/missing/expired → "Verification link is invalid or expired." Success card links to `/auth`. No session is created.
 
 ### Password reset
-- `ForgotPasswordForm` → `requestPasswordReset(email)` (`auth.ts:134`, public client): **always returns `{ success: true }`** (no enumeration; failures logged). Appwrite emails the recovery link (1-hr expiry).
-- `/auth/reset-password?userId=...&secret=...` → `ResetPasswordForm({ userId, secret })` → `resetPassword(userId, secret, password)` (`auth.ts:150`): enforces ≥ 6 chars, `updateRecovery` on the public client. Invalid/expired → "Reset link is invalid or expired."
+- `ForgotPasswordForm` → `requestPasswordReset(email)` (`auth.ts:147`, public client): **always returns `{ success: true }`** (no enumeration; failures logged). Appwrite emails the recovery link (1-hr expiry).
+- `/auth/reset-password?userId=...&secret=...` → `ResetPasswordForm({ userId, secret })` → `resetPassword(userId, secret, password)` (`auth.ts:166`): enforces ≥ 8 chars, `updateRecovery` on the public client. Invalid/expired → "Reset link is invalid or expired."
 
 ### Onboarding
 - `OnboardingClient` 5 steps: (1) company name [required], (2) pipeline explainer, (3) product category, (4) storefront platform, (5) catalog size. Steps 3–5 optional/skippable.
-- Final step → `completeOnboarding({ companyName, productCategory?, storefrontPlatform?, catalogSize? })` (`auth.ts:245`): requires principal, updates `User.{name, productCategory, storefrontPlatform, catalogSize, onboarded: true}`. Appwrite sessions re-read the `users` row per request, so no JWT refresh is needed. Revalidates 5 paths, redirects to `/dashboard`.
+- Final step → `completeOnboarding({ companyName, productCategory?, storefrontPlatform?, catalogSize? })` (`auth.ts:186`): requires principal, updates `User.{name, productCategory, storefrontPlatform, catalogSize, onboarded: true}`. Appwrite sessions re-read the `users` row per request, so no JWT refresh is needed. Revalidates 5 paths, redirects to `/dashboard`.
 
 ### `requirePrincipal()` — canonical auth resolver
-- **File:** `src/lib/auth-guards.ts:64`
+- **File:** `src/server/auth-guards.ts:64`
 - Calls `createNextServerHelpers({ endpoint, projectId }).getLoggedInUser()` (reads the `appwrite-session-<projectId>` cookie), then loads the `users` TableDB row by `user.$id` via the admin client (`TablesDB.getRow({ databaseId: "studiov", tableId: "users", rowId })`). Returns typed `Principal { userId, email, role, onboarded, companyName }` — contract unchanged from the NextAuth era, so zero consumer edits were needed in the migration.
 - Throws `UnauthenticatedError` (no/invalid session), `StaleSessionError extends UnauthenticatedError` (session valid but no `users` row — e.g. DB wiped), or `ForbiddenError` (role mismatch / not onboarded / account suspended).
 - **Suspended check:** after loading the row, if `user.status === 'SUSPENDED'` it throws `ForbiddenError("Account suspended")`. Unlike the NextAuth era (which blocked login for suspended users), Appwrite allows login — this per-request check blocks every protected page, action, and API route for suspended users.
 - Options: `{ roles?: Role[], requireOnboarded?: boolean, allowUnonboarded?: boolean }`. `Role` is a string-literal const/type pair from the edge-safe `src/lib/enums.ts:1` (re-exported by `auth-guards.ts`). Used by **every** server action, protected page, and API handler.
 
 ### `requirePrincipalOrRedirect()` — page auth helper
-- **File:** `src/lib/auth-guards.ts:108`
+- **File:** `src/server/auth-guards.ts:108`
 - Wraps `requirePrincipal()` for pages (server components). Redirect map: `UnauthenticatedError`/`StaleSessionError` → `/auth` (the `/api/auth/clear-session` route was deleted — Appwrite expires the cookie itself); suspended → `/auth`; role error → `/dashboard`; **not onboarded** → `/onboarding` (replaces the middleware's old onboarded check, which the edge runtime can no longer perform). The only page that renders for a not-onboarded user (`/onboarding`) opts out via `allowUnonboarded: true`.
 - 11 pages use it: `/tasks`, `/notifications`, `/integrations`, `/dashboard`, `/analytics`, `/onboarding`, `/admin/dashboard`, `/admin/users`, `/admin/tasks`, `/admin/analytics`.
 - **Not used** in API routes or server actions — those catch auth errors and return appropriate status codes.
@@ -309,69 +329,79 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 
 All files start with `"use server"`. All auth via `requirePrincipal()`.
 
+**Layering (see `backend-architecture.md`):** actions are thin adapters — parse context, call a `src/server/services/*.service.ts` function, run Next.js cache side-effects (`revalidatePath`), and (for mutations) wrap the result with `toActionResult`. Business logic and Appwrite calls live in the services; schema validation in `src/server/http/schemas.ts`.
+
+**Return contract:** mutations return `ActionResult<T> = { ok: true; data } | { ok: false; code, message }` (clients branch on `result.ok`, render `result.message`). Reads keep throwing (pages catch via `error.tsx`). Auth/onboarding forms keep the throw contract (forms display `err.message`). Unexpected failures map to `{ ok: false, code: "INTERNAL" }` with a logged error — clients never see stack traces.
+
 ### `src/app/actions/auth.ts` (`auth.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | Admin client: create BRAND user (`Users.create` + `users` TableDB row `{ role: "BRAND", usageLimits: 10, onboarded: false, status: "ACTIVE" }` + `updateLabels(["BRAND"])`) or re-verify existing unverified; sends link-based verification email. Throws "Email already registered" (verified existing), "Password must be at least 6 characters" |
-| `resendVerificationEmail` | `(email) → { success; status: "invalid"\|"sent" }` | None | Re-send verification email for unverified user (no-enumeration on verified/missing) |
-| `requestPasswordReset` | `(email) → { success: true }` | None | `createRecovery` on the **public client**; always returns success (no enumeration, failures logged) |
-| `resetPassword` | `(userId, secret, password) → { success: true }` | None | ≥ 6 chars; `updateRecovery` on the public client; throws "Reset link is invalid or expired" |
+| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | Admin client: create BRAND user (`Users.create` + `users` TableDB row `{ role: "BRAND", usageLimits: 10, onboarded: false, status: "ACTIVE" }` + `updateLabels(["BRAND"])`) or re-verify existing unverified; sends link-based verification email. **Prevents account takeover:** an existing verified account never gets its password reset. Throws "Email already registered" / "Password must be at least 8 characters". **Rate-limited:** 10/h/IP |
+| `resendVerificationEmail` | `(email) → { success; status: "invalid"\|"sent" }` | None | Re-send verification email for unverified user (no-enumeration on verified/missing). **Rate-limited:** 5/h/email + 10/h/IP |
+| `requestPasswordReset` | `(email) → { success: true }` | None | `createRecovery` on the **public client**; always returns success (no enumeration, failures logged). **Rate-limited:** 3/h/email + 10/h/IP |
+| `resetPassword` | `(userId, secret, password) → { success: true }` | None | ≥ 8 chars; `updateRecovery` on the public client; throws "Reset link is invalid or expired" |
 | `completeOnboarding` | `(input) → { success: true }` | `requirePrincipal()` | Sets name/category/platform/catalogSize + `onboarded: true` via `TablesDB.updateRow`; `updateLabels([role])`; no JWT refresh needed (Appwrite re-reads the row per request), revalidates 5 paths |
 | `getSessionPrincipal` | `() → { onboarded; role; sessionSecret } \| null` | Session | `requirePrincipal()` in try/catch — used by `SignInForm` for post-login routing (replaces deleted `preflightLogin`); also returns the cookie session secret so `SignInForm` can `client.setSession(...)` (SSR sign-in does not hydrate the client SDK — Phase 6 bug 1) |
 | `logout` | `() => Promise<void>` | Session | `Account.deleteSession({ sessionId: "current" })` + cookie delete + redirect `/` |
 
-### `src/app/actions/project.ts` (`project.ts:1`)
-| Export | Signature | Auth | Purpose |
+### `src/app/actions/project.ts` — thin adapter over `src/server/services/project.service.ts`
+| Export | Signature (client contract) | Auth | Purpose |
 |---|---|---|---|
-| `createProject` | `(name, assetIds: string[], sku?, instructions?, dimensions?) → { success; projectId; remaining }` | `Role.BRAND` | Pre-check `usageLimits > 0` (users row), then `runTransaction` (TablesDB): `decrementRowColumn(users, usageLimits, value: 1, min: 0)` — atomic quota guard, `usageLimits` is the **remaining budget**; verify all `assetIds` exist + READY + owned via `listRows(assets, equal("$id", assetIds))` (`.total` must equal `assetIds.length`; skipped when empty); `createRow(projects, ID.unique())` with JSON-stringified `dimensions`; `updateRows` links assets. Returns `{ success, projectId, remaining }` — only a **plain object**, never the raw Appwrite row (whose prototype/metadata breaks Server→Client serialization). Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. Throws "Usage limit exceeded…" / "One or more assets not found or not ready" |
-| `brandPublishProject` | `(projectId) → { success }` | `Role.BRAND` (owner) | Guarded `updateRows(projects, equal("$id") + equal("brandId") + equal("status", "COMPLETED"))` → 0 matched → "Project is not in a publishable state" / "Only projects awaiting your review can be published". Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks` |
-| `brandSendForRevisions` | `(projectId, note) → { success }` | `Role.BRAND` (owner) | Verifies ownership + non-empty note. `runTransaction`: in-tx precondition check — `getRowSafe(projects, id, txId)` must satisfy ownership + `status ∈ {COMPLETED, PUBLISHED}` (else "Project is not in a revisable state"), then staged `updateRow` by rowId → REVISIONS + `createRow(revision_requests)`. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`, and `/embed/[id]` if was PUBLISHED |
-| `getUserProjects` | `() → TaskJob[]` | any role | Batched TablesDB: projects by `equal("brandId")` + `orderDesc("$createdAt")`; assets + revision_requests by `equal("projectId", ids)`; brand via `getRow(users)` (principal fallback). Derived shape via `buildTaskJob()` (`lib/project-augment.ts`) |
+| `createProject` | `(name, assetIds, sku?, instructions?, dimensions?) → ActionResult<{ projectId; remaining }>` | `Role.BRAND` | Service (`createProjectService`): pre-check `usageLimits > 0` (users row), then `runTransaction` — `decrementRowColumn(users, usageLimits, value: 1, min: 0)` (atomic quota guard, `usageLimits` = **remaining budget**); verify all `assetIds` exist + READY + owned + `projectId` is null via `listRows` (`.total` must equal `assetIds.length`; skipped when empty) — the `isNull("projectId")` guard prevents silently stealing assets attached to another project; `createRow(projects, ID.unique())` with JSON-stringified `dimensions`; `updateRows` links assets. Returns only a **plain object** (never the raw Appwrite row). On `ok` revalidates `/tasks`, `/dashboard`, `/admin/tasks`. Errors: `QUOTA_EXCEEDED` "Usage limit exceeded…", `STATE_CONFLICT` "One or more assets not found, not ready, or already attached…" |
+| `brandPublishProject` | `(projectId) → ActionResult<{ success: true }>` | `Role.BRAND` (owner) | Service (`brandPublishProjectService`): **fail-closed publish** — every READY GLB/USDZ storage file gets `read:any` granted BEFORE the status flip; any grant failure revokes already-granted files and aborts. Requires ≥1 READY GLB. Guarded `updateRows` requiring `COMPLETED` + `brandId` → 0 matched → rollback grants + `STATE_CONFLICT`. On `ok` revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks` |
+| `brandSendForRevisions` | `(projectId, note) → ActionResult<{ success: true }>` | `Role.BRAND` (owner) | Service (`brandSendForRevisionsService`): in-tx precondition — row must satisfy ownership + status ∈ {COMPLETED, PUBLISHED} (from-state checked against the state machine, not re-entrant from REVISIONS), then staged `updateRow` → REVISIONS + `createRow(revision_requests)`. On `ok` revalidates `/tasks`, `/dashboard`, `/admin/tasks`; if it was PUBLISHED, revokes `read:any` on model files (`setFilePublicWithRetry` from `src/server/storage.ts`, 3 attempts / 250ms exp backoff, residual drift → nightly reconciliation) + revalidates `/embed/[id]` |
+| `getUserProjects` | `() → TaskJob[]` | any role | Passthrough to `getUserProjectsService`: batched TablesDB — projects by `equal("brandId")` + `orderDesc("$createdAt")`; assets + revision_requests by `equal("projectId", ids)`; brand via `getRowSafe(users)` (principal fallback). Derived shape via `buildTaskJob()` (`lib/project-augment.ts`) |
 
-### `src/app/actions/admin.ts` (`admin.ts:1`)
-| Export | Signature | Auth | Purpose |
+### `src/app/actions/admin.ts` — thin adapter over `project.service.ts`
+| Export | Signature (client contract) | Auth | Purpose |
 |---|---|---|---|
-| `getAllTasks` | `() → TaskJob[]` | `Role.ADMIN` | Batched TablesDB: all projects `orderDesc("$createdAt")`; assets/revisions by projectId IN-queries; brands by `$id` IN → `usersToTaskBrand` map. Same derived shape as `getUserProjects` |
-| `adminSubmitProject` | `(projectId, glbAssetId, usdzAssetId?) → { success }` | `Role.ADMIN` | Verifies GLB (and USDZ) are READY models via `getRowSafe(assets)` (throws "GLB asset not found or not ready" / "USDZ asset not found or not ready"). `runTransaction`: (1) in-tx precondition check — `getRowSafe(projects, id, txId)` must have `status ∈ {PENDING, REVISIONS}` (else "Project is no longer available to submit"), then staged `updateRow` by rowId → COMPLETED (guards must NOT rely on a staged bulk `updateRows` response — Appwrite returns `{ total: 0, rows: [] }` for staged operations regardless of matches, Phase 6 bug 2); (2) archives any prior READY MODEL_GLB/USDZ on this project (`updateRows` on `$id` list, excluding new ids — `projectId` unchanged for history); (3) links the new GLB/USDZ (`updateRows` with `isNull("projectId")`). **Archived files are always KEPT** (no post-commit cleanup — the legacy UploadThing delete branch was removed in Phase 5) |
+| `getAllTasks` | `() → TaskJob[]` | `Role.ADMIN` | Passthrough to `getAllTasksService`: all projects `orderDesc("$createdAt")`; assets/revisions by projectId IN-queries; brands by `$id` IN → `usersToTaskBrand` map. Same derived shape as `getUserProjects` |
+| `adminSubmitProject` | `(projectId, glbAssetId, usdzAssetId?) → ActionResult<{ success: true }>` | `Role.ADMIN` | Service (`adminSubmitProjectService`): verifies GLB (and USDZ) are READY models via `getRowSafe(assets)` (else `STATE_CONFLICT` "…not found or not ready"). `runTransaction`: (1) in-tx precondition — project row must have status ∈ {PENDING, REVISIONS} (checked against the state machine; staged bulk `updateRows` responses are unreliable — Appwrite returns `{ total: 0, rows: [] }` for staged ops); (2) **in-tx per-asset link verification** — each new model is re-read inside the tx and must be READY + `projectId === null` (prevents flipping to COMPLETED with a model that silently failed to link); (3) staged `updateRow` → COMPLETED; (4) archives prior READY MODEL_GLB/USDZ on this project (`projectId` unchanged for history — files KEPT in storage for "Previous models"); (5) links the new GLB/USDZ (`updateRows` with `isNull("projectId")`). On `ok` revalidates `/tasks`, `/admin/tasks` |
 
 **`TaskJob`** (derived in `buildTaskJob()` at `lib/project-augment.ts:1`): `{ id, name, sku, instructions, dimensions, status: ProjectStatus, createdAt, brand, assets, revisionRequests?: { id, note, createdAt, requester?: { id, name, email } }[], referenceUrls: string[], assetUrls: { glb, usdz } | null, archivedAssetUrls: { glb: AssetLite[]; usdz: AssetLite[] } }`. `assignedTo`/`assignedUser` removed. `revisionRequests` newest first; `archivedAssetUrls` = project's ARCHIVED MODEL_GLB/USDZ (newest `$updatedAt` first) — drives the admin modal "Previous models" collapsible. Live `assetUrls` picker is `status === "READY"` only. `createdAt` = `$createdAt`; `dimensions` parsed from the JSON string column.
 
-### `src/app/actions/admin-users.ts` (`admin-users.ts:1`)
-| Export | Signature | Auth | Purpose |
+### `src/app/actions/admin-users.ts` — thin adapter over `src/server/services/user-admin.service.ts`
+| Export | Signature (client contract) | Auth | Purpose |
 |---|---|---|---|
-| `adminGetUsers` | `(search?, roleFilter?, statusFilter?, page?) → { users, total, page, totalPages }` | `Role.ADMIN` | `listRows(users)` with role/status `equal` filters + `orderDesc("$createdAt")` + `limit(50)`/`offset`; **search is a JS case-insensitive substring filter** over `email`/`name` on the filtered page (fulltext search deliberately avoided — no fulltext index on the table). `total` from filtered length; `totalPages = ceil(total / 50)`. Used by `/admin/users` table |
-| `adminGetUser` | `(id) → { user }` | `Role.ADMIN` | `getRow(users, $id)`; `projectCount`/`assetCount`/`eventCount` via `countRows` (`listRows(...).total`); `recentProjects` = last 5 by `$createdAt`. Also returns `statusReason` and `suspendedAt`. Throws "User not found" |
-| `adminUpdateUser` | `(id, { role?, usageLimits?, subscriptionTier? }) → { success: true }` | `Role.ADMIN` | `updateRows(users, equal("$id"))` — 0 matched → "User not found". Cannot update own account — throws "Cannot update your own account". Revalidates `/admin/users` |
-| `adminSetUserStatus` | `(id, status, reason?) → { success: true }` | `Role.ADMIN` | `updateRows` to ACTIVE or SUSPENDED; when SUSPENDED sets `suspendedAt` (ISO string) + optional `statusReason`, else clears both. Cannot self-suspend. Revalidates `/admin/users` |
-| `adminDeleteUser` | `(id) → { success: true }` | `Role.ADMIN` | **Explicit cascade `runTransaction`** (TablesDB has no FK cascades): projects by `equal("brandId")`, assets by `equal("ownerId")` ∪ `equal("projectId")`, events by `equal("brandId")` ∪ `equal("projectId")`, revision_requests by `equal("requestedBy")` ∪ `equal("projectId")` — `deleteRows` each — then `deleteRows(users)` + Appwrite `Users.delete(id)` (try/catch). Fixes the latent Prisma FK-Restrict bug (deleting a user with revision requests failed). Cannot self-delete. Revalidates `/admin/users` |
+| `adminGetUsers` | `(search?, roleFilter?, statusFilter?, page?) → { users, total, page, totalPages }` | `Role.ADMIN` | Passthrough to `adminGetUsersService`: `listRows(users)` with role/status `equal` filters + `orderDesc("$createdAt")`; **search is a JS case-insensitive substring filter** over `email`/`name` (fulltext deliberately avoided — no fulltext index). `total` from filtered length; `totalPages = ceil(total / 50)`. Used by `/admin/users` table |
+| `adminGetUser` | `(id) → { user }` | `Role.ADMIN` | Passthrough to `adminGetUserService`: `getRowSafe(users, $id)`; `projectCount`/`assetCount`/`eventCount` via `countRows`; `recentProjects` = last 5 by `$createdAt`. Also returns `statusReason` + `suspendedAt`. Throws `NOT_FOUND` "User not found" |
+| `adminUpdateUser` | `(id, { role?, usageLimits?, subscriptionTier? }) → ActionResult<{ success: true }>` | `Role.ADMIN` | Service: `updateRows(users, equal("$id"))` — 0 matched → `NOT_FOUND`. Cannot update own account → `FORBIDDEN` "Cannot update your own account". On `ok` revalidates `/admin/users` |
+| `adminSetUserStatus` | `(id, status, reason?) → ActionResult<{ success: true }>` | `Role.ADMIN` | Service: `updateRows` to ACTIVE or SUSPENDED; when SUSPENDED sets `suspendedAt` (ISO) + optional `statusReason`, else clears both. Cannot self-suspend (`FORBIDDEN`). On `ok` revalidates `/admin/users` |
+| `adminDeleteUser` | `(id) → ActionResult<{ success: true }>` | `Role.ADMIN` | Service: **explicit cascade `runTransaction`** (TablesDB has no FK cascades): projects by `equal("brandId")`, assets by `equal("ownerId")` ∪ `equal("projectId")`, events by `equal("brandId")` ∪ `equal("projectId")`, revision_requests by `equal("requestedBy")` ∪ `equal("projectId")` — `deleteRows` each — then `deleteRows(users)` + Appwrite `Users.delete(id)` (try/catch). Fixes the latent Prisma FK-Restrict bug. Cannot self-delete (`FORBIDDEN`). On `ok` revalidates `/admin/users` |
 
-### `src/app/actions/admin-analytics.ts` (`admin-analytics.ts:1`)
+### `src/app/actions/admin-analytics.ts` — thin adapter over `src/server/services/analytics.service.ts`
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `getPlatformKPIs` | `() → { totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }` | `Role.ADMIN` | Platform-wide aggregate counts via `countRows` (`listRows(...).total` — documented cost: 1 read op per returned row on `total`). `projectsByStatus: { status: ProjectStatus; _count: number }[]` = 4 parallel status queries |
-| `getSignupsSeries` | `(months?) → { labels, counts }` | `Role.ADMIN` | Monthly signup counts: per-month `between("$createdAt", start, end)` via `countRows`. `labels` are `"YYYY-MM"` strings. Default 12 months |
-| `getProjectsByMonth` | `(months?) → { labels, counts }` | `Role.ADMIN` | `listAllRows(projects)` since the window start (max 100/page pagination) + JS month buckets |
-| `getTopBrands` | `(take?) → brands[]` | `Role.ADMIN` | All BRAND users + `listAllRows(projects)` → JS count by `brandId` → sort desc → slice. Returns `{ id, name, email, status, createdAt, _count: { projects } }`. Default take=10 |
+| `getPlatformKPIs` | `() → { totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }` | `Role.ADMIN` | Passthrough to service: aggregate counts via `countRows` (`listRows(...).total` — documented cost: 1 read op per returned row on `total`). `projectsByStatus: { status: ProjectStatus; _count: number }[]` = 4 parallel status queries |
+| `getSignupsSeries` | `(months?) → { labels, counts }` | `Role.ADMIN` | Passthrough to service: `listAllRows(users)` since window start + JS month buckets. `labels` are `"YYYY-MM"` strings. Default 12 months |
+| `getProjectsByMonth` | `(months?) → { labels, counts }` | `Role.ADMIN` | Passthrough to service: `listAllRows(projects)` since window start (max 100/page pagination) + JS month buckets |
+| `getTopBrands` | `(take?) → brands[]` | `Role.ADMIN` | Passthrough to service: all BRAND users + `listAllRows(projects)` → JS count by `brandId` → sort desc → slice. Returns `{ id, name, email, status, createdAt, _count: { projects } }`. Default take=10 |
 
-### `src/app/actions/analytics.ts` (`analytics.ts:1`)
+### `src/app/actions/analytics.ts` — thin adapter over `analytics.service.ts`
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `getProjectLiveness` | `(projectIds) → Record<string, { lastEventAt: Date \| null }>` | Session | Per project: `listRows(analytics_events, equal("projectId")[, equal("brandId") for non-admin], orderDesc("$createdAt"), limit(1))` → converts `$createdAt` to `Date`. Consumers (`embed-liveness.ts`) call `.getTime()` |
+| `getProjectLiveness` | `(projectIds) → Record<string, { lastEventAt: Date \| null }>` | Session | Passthrough to service: per project `listRows(analytics_events, equal("projectId")[, equal("brandId") for non-admin], orderDesc("$createdAt"), limit(1))` → converts `$createdAt` to `Date`. Consumers (`embed-liveness.ts`) call `.getTime()` |
+
+### `src/app/actions/record-asset.ts` — upload completion
+| Export | Signature | Auth | Purpose |
+|---|---|---|---|
+| `recordAssetUpload` | `({ fileId, type }) → { asset }` | by type (REFERENCE_IMAGE → BRAND, MODELS → ADMIN) | Idempotent by `rowId = fileId` (re-upload to the same file id updates the existing row instead of failing). Server-side validation via `ASSET_POLICY` (`src/server/domain/asset-policy.ts`): extension allowlist + size cap; rejects → best-effort storage `deleteFile`. `storage.getFile` for metadata, then `createRow(assets, { rowId: fileId, … status: READY, provider: "appwrite", url: buildFileUrl(...) })`. See §10 |
 
 ---
 
 ## 9. Data model (Appwrite TablesDB)
 
-**Phases 3–5 rewrote the data path from Prisma to Appwrite TablesDB.** The runtime data layer is entirely the TablesDB database `studiov` (id `studiov`), with type-safe helpers in `src/lib/db.ts:1`. Row types mirror the legacy Prisma models. **Prisma was fully removed in Phase 5** (`prisma/` folder, generated client, `src/lib/prisma.ts`, `@/generated/prisma/client` alias, deps, env vars — all gone). Enums live in the edge-safe `src/lib/enums.ts:1` (client-importable; re-exported by `db.ts` and `auth-guards.ts`) so no file depends on a generated client.
+**Phases 3–5 rewrote the data path from Prisma to Appwrite TablesDB.** The runtime data layer is entirely the TablesDB database `studiov` (id `studiov`), with type-safe helpers in `src/server/db/client.ts:1`. Row types mirror the legacy Prisma models. **Prisma was fully removed in Phase 5** (`prisma/` folder, generated client, `src/lib/prisma.ts`, `@/generated/prisma/client` alias, deps, env vars — all gone). Enums live in the edge-safe `src/lib/enums.ts:1` (client-importable; re-exported by `db/client.ts` and `auth-guards.ts`) so no file depends on a generated client.
 
-Table IDs (`src/lib/appwrite-config.ts:1`): `users`, `projects`, `assets`, `revision_requests`, `analytics_events`. Row identity: **`$id` is the canonical id everywhere** (users row `$id` == `userId` column == Appwrite auth user id; assets row `$id` == storage fileId since Phase 4). System columns `$createdAt`/`$updatedAt` are queryable + indexable; all tables have key indexes on `$createdAt` (added in Phases 0/3).
+Table IDs (`src/lib/appwrite-config.ts:1`): `users`, `projects`, `assets`, `revision_requests`, `analytics_events`, `rate_limits`. Row identity: **`$id` is the canonical id everywhere** (users row `$id` == `userId` column == Appwrite auth user id; assets row `$id` == storage fileId since Phase 4). System columns `$createdAt`/`$updatedAt` are queryable + indexable; all tables have key indexes on `$createdAt` (added in Phases 0/3).
 
 ### Tables
 - **`users`** — mirrors `User`: `$id`, `userId`, `email`, `role` (`BRAND`/`ADMIN`), `usageLimits` (Int, **remaining budget** since Phase 3), `name`, `onboarded`, `productCategory`, `storefrontPlatform`, `catalogSize`, `status` (`ACTIVE`/`SUSPENDED`), `suspendedAt` (ISO string), `statusReason`, `emailVerified`. Indexes: `idx_email`, `idx_role`, `idx_status`, `idx_createdAt` (`$createdAt`, added in Phase 3 for `adminGetUsers` ordering).
 - **`projects`** — mirrors `Project`: `$id`, `name`, `sku`, `instructions`, `dimensions` (JSON stringified on write, parsed in `buildTaskJob`), `status` (`PENDING`/`REVISIONS`/`COMPLETED`/`PUBLISHED`), `sdkConfig` (JSON string, forward-compat only), `brandId`. Indexes: `idx_brandId`, `idx_status`, `idx_createdAt`. **No `assignedTo`/`adminNotes`** (lifecycle simplification). The STUDIO.V embed uses hardcoded viewer config (see §11, `pages/embed.md`).
 - **`revision_requests`** — mirrors `RevisionRequest`: `$id`, `projectId`, `note`, `requestedBy` (userId). One row per brand revision request — full back-and-forth history. Indexes: `idx_projectId`, `idx_createdAt`.
-- **`assets`** — mirrors `Asset` minus storage-provider fields: `$id` (= **storage fileId** since Phase 4), `projectId` (nullable — null until linked by `createProject`/`adminSubmitProject`), `ownerId`, `type` (`REFERENCE_IMAGE`/`MODEL_GLB`/`MODEL_USDZ`), `status` (`READY`/`ARCHIVED` — rows never enter `UPLOADING`/`PUBLISHED`/`DELETED`), `provider` (`"appwrite"`; legacy `"uploadthing"`/`"external"` on old rows), `fileId` (nullable — null for legacy seed rows), `url` (absolute Appwrite `/view` URL for `provider: "appwrite"`; stored `*.ufs.sh`/external URL for legacy rows), `originalName`, `mimeType`, `size`, `checksum` (MD5). **No `key`/`backupSynced`/`gdriveFileId` columns.** Rows are written by `recordAssetUpload` (`src/app/actions/record-asset.ts:23`). Indexes: `idx_projectId`, `idx_ownerId`, `idx_project_type_status` (compound, added in Phase 0).
+- **`assets`** — mirrors `Asset` minus storage-provider fields: `$id` (= **storage fileId** since Phase 4), `projectId` (nullable — null until linked by `createProject`/`adminSubmitProject`), `ownerId`, `type` (`REFERENCE_IMAGE`/`MODEL_GLB`/`MODEL_USDZ`), `status` (`READY`/`ARCHIVED` — rows never enter `UPLOADING`/`PUBLISHED`/`DELETED`), `provider` (`"appwrite"`; legacy `"uploadthing"`/`"external"` on old rows), `fileId` (nullable — null for legacy seed rows), `url` (absolute Appwrite `/view` URL for `provider: "appwrite"`; stored `*.ufs.sh`/external URL for legacy rows), `originalName`, `mimeType`, `size`, `checksum` (MD5). **No `key`/`backupSynced`/`gdriveFileId` columns.** Rows are written by `recordAssetUpload` (`src/app/actions/record-asset.ts:38`). Indexes: `idx_projectId`, `idx_ownerId`, `idx_project_type_status` (compound, added in Phase 0).
 - **`analytics_events`** — mirrors `AnalyticsEvent`: `$id`, `eventType` (`VIEW`/`INTERACTION`/`AR_LAUNCH`), `sessionId`, `projectId`, `brandId`. Indexes: `idx_projectId`, `idx_brandId`, `idx_createdAt`.
+- **`rate_limits`** — created by `npm run ensure-backend`; consumed only by `consumeRateLimit` (`src/server/http/rate-limit.ts`). Columns: `remaining` (int, min 0 — decremented via `decrementRowColumn`), `windowStart` (datetime), `route` (string, size 64). Row id = `sha256(route|id|windowIndex).slice(0, 36)`. **Fail-open:** Appwrite errors during enforcement log + pass the request. See `backend-architecture.md` §4.
 
 ### Enums
 Declared in the edge-safe `src/lib/enums.ts:1` (client-importable; re-exported by `db.ts` and `auth-guards.ts`). Literal-value identical to the old Prisma enums — structural drop-in, `TaskJob.status` typed as `ProjectStatus`:
@@ -403,7 +433,7 @@ Permanent, idempotent admin management. Run with `npm run sync-admin`. Reads `AD
 **Flow:**
 1. Client instantiates `useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions })` (`src/lib/use-appwrite-upload.ts:40`) — uses the pre-built `storage` service from `useAppwrite()` (session-authenticated client, `@appwrite.io/react` provider) and exposes `{ upload, isUploading, progress, error, reset }`.
 2. `upload(file, type)` validates size/extensions, then `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress })` — the browser uploads **directly to Appwrite** (bypassing Vercel's serverless body limit — important for 100MB+ GLB files). `onProgress` receives `{ progress: 0-100 }` (client SDK `UploadProgress` is percent, not bytes) and drives the live progress bar in the upload tiles.
-3. On success → `recordAssetUpload({ fileId, type })` server action (`src/app/actions/record-asset.ts:23`): `requirePrincipal` by type (REFERENCE_IMAGE → BRAND, MODELS → ADMIN — mirrors the bucket `create` perms), admin-client `storage.getFile` for metadata, then `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size, checksum } })`.
+3. On success → `recordAssetUpload({ fileId, type })` server action (`src/app/actions/record-asset.ts:38`): `requirePrincipal` by type (REFERENCE_IMAGE → BRAND, MODELS → ADMIN — mirrors the bucket `create` perms), admin-client `storage.getFile` for metadata, server-side `ASSET_POLICY` enforcement (extension allowlist + size cap; rejection → best-effort `deleteFile`), then an **idempotent** `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size, checksum } })` — re-upload to an already-recorded file id updates/reuses the existing row (ownership-checked) instead of failing.
 4. The hook returns the `RecordedAsset` `{ id, url, type, status, mimeType, size, originalName }` (no `key`) — stored in `uploadedAssets` (brand) or `glbAsset`/`usdzAsset` (admin).
 5. Failure mapping: 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; best-effort `deleteFile` orphan cleanup.
 
@@ -492,14 +522,18 @@ Public, CORS `*`. Body `{ eventType, sessionId, projectId }`. Creates `Analytics
 File: `.env.example:1`. All required for full functionality.
 
 | Variable | Purpose |
-|---|---|
+|---|---|---|
 | `APPWRITE_API_KEY` | Appwrite server API key `studiov-server` — scopes: users/sessions/tables/columns/indexes/rows read+write, buckets/files read+write, messaging read+write, usage.read (per Phase 0 console log) |
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | e.g. `https://fra.cloud.appwrite.io/v1` — project "Peka.ar" (`6a8562a20037b62075e1`) |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` |
 | `NEXT_PUBLIC_APP_URL` | App URL for auth callbacks + generated embed code |
 | `ADMIN_EMAIL` | Permanent admin email (required for `npm run sync-admin` and `npm run seed:appwrite`) |
-| `ADMIN_PASSWORD` | Permanent admin password (≥ 6 chars, set via Appwrite `updatePassword` on sync) |
+| `ADMIN_PASSWORD` | Permanent admin password (≥ 8 chars, set via Appwrite `updatePassword` on sync) |
 | `ADMIN_NAME` | Admin display name (optional, defaults to "Studio Admin") |
+| `CRON_SECRET` | Optional (≥ 16 chars); guards `GET /api/cron/maintenance` (Vercel Cron sends `Authorization: Bearer ${CRON_SECRET}`; fail-closed when unset/mismatched) |
+| `LOG_LEVEL` | Optional; `debug`/`info`/`warn`/`error`, default `info` (`src/server/logging.ts`) |
+
+**Validated at boot** by `src/server/env.ts` (zod; fails fast listing every invalid var). Missing/malformed required vars block server startup — run `npm run dev` locally with `.env` present.
 
 **Removed in Phase 5** (no longer in `.env.example`): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN`, `GDRIVE_BACKUP_FOLDER_ID`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. Stripe vars were never wired (no handler exists) and were dropped from `.env.example`.
 
@@ -509,6 +543,7 @@ File: `.env.example:1`. All required for full functionality.
 
 ## 14. Deep-dive specs
 
+- **`backend-architecture.md`** — server-side architecture reference: layering (actions → services → domain/db), error taxonomy, `ActionResult`/`toActionResult`, rate limiting (`rate_limits` + `consumeRateLimit`), state machine, service inventory, storage helpers (`storage.ts`), db client, appwrite factory, auth-guards, testing (`npm run test`), nightly maintenance cron (`/api/cron/maintenance`), `ensure-backend`, module index.
 - **`pages/tasks.md`** — `/tasks` Kanban + list views, New Task modal, Job Details (admin claim/upload), Review modal (approve & publish), Published viewer, role-specific actions.
 - **`pages/dashboard.md`** — `/dashboard` metric computation (views, AR launches, interaction rate, conv. lift), 12-month chart, recent tasks, quick links, Suspense/error boundaries.
 - **`pages/auth.md`** — `/auth` 3-view flow (signin/signup/forgot), `/auth/verify` link-based email verification, `/auth/reset-password`, Appwrite session plumbing (`createPublicClient` public routes), security properties.

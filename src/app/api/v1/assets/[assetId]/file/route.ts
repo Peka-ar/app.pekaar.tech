@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
-import { APPWRITE_API_KEY } from "@/lib/appwrite";
+import { APPWRITE_API_KEY } from "@/server/appwrite";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, bucketForAssetType, defaultMimeTypeForAssetType } from "@/lib/appwrite-config";
-import { requirePrincipal, UnauthenticatedError, ForbiddenError, StaleSessionError, Role } from "@/lib/auth-guards";
-import { AssetStatus, AssetsRow, DB, ProjectsRow, getRowSafe } from "@/lib/db";
+import { requirePrincipal, UnauthenticatedError, ForbiddenError, StaleSessionError, Role } from "@/server/auth-guards";
+import { AssetStatus, AssetsRow, DB, ProjectsRow, getRowSafe } from "@/server/db/client";
 
 export const dynamic = "force-dynamic";
 

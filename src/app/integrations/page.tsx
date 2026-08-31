@@ -1,7 +1,7 @@
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
+import { requirePrincipalOrRedirect } from "@/server/auth-guards";
 import { generateEmbedCode } from "@/lib/utils";
 import { Query } from "node-appwrite";
-import { DB, getRowSafe, listAllRows, ProjectStatus, ProjectsRow, UsersRow } from "@/lib/db";
+import { DB, getRowSafe, listAllRows, ProjectStatus, ProjectsRow, UsersRow } from "@/server/db/client";
 import IntegrationsClient from "./IntegrationsClient";
 
 interface IntegrationProject {

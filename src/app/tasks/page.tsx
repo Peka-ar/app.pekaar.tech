@@ -1,8 +1,8 @@
 import TasksClient from "./TasksClient";
 import { getUserProjects } from "@/app/actions/project";
 import { getAllTasks } from "@/app/actions/admin";
-import { Role } from "@/lib/auth-guards";
-import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
+import { Role } from "@/server/auth-guards";
+import { requirePrincipalOrRedirect } from "@/server/auth-guards";
 
 import { Suspense } from 'react';
 

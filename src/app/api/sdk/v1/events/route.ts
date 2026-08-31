@@ -1,20 +1,27 @@
 import { NextResponse } from "next/server";
 import { ID } from "node-appwrite";
-import { AnalyticsEventRow, DB, EventType, ProjectStatus, ProjectsRow, getRowSafe, getTablesDB } from "@/lib/db";
+import { AnalyticsEventRow, DB, ProjectStatus, ProjectsRow, getRowSafe, getTablesDB } from "@/server/db/client";
+import { sdkEventSchema } from "@/server/http/schemas";
+import { withApi } from "@/server/http/handler";
+import { clientIpFromRequest, enforceRateLimit, rateLimitKey } from "@/server/http/rate-limit";
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { eventType, sessionId, projectId } = body;
-
-    if (!eventType || !sessionId || !projectId) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+export const POST = withApi(
+  async (request: Request) => {
+    let raw: unknown;
+    try {
+      raw = await request.json();
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
 
-    const validEventTypes = [EventType.VIEW, EventType.INTERACTION, EventType.AR_LAUNCH];
-    if (!validEventTypes.includes(eventType)) {
-      return NextResponse.json({ error: "Invalid event type" }, { status: 400 });
+    const parsed = sdkEventSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+    const { eventType, sessionId, projectId } = parsed.data;
+
+    const ip = clientIpFromRequest(request);
+    await enforceRateLimit(rateLimitKey("sdk-events", ip), { limit: 60, windowSeconds: 60 });
 
     const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
     if (!project || project.status !== ProjectStatus.PUBLISHED) {
@@ -35,8 +42,6 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ success: true, eventId }, { status: 201 });
-  } catch (error) {
-    console.error("SDK Events POST Error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-  }
-}
+  },
+  { route: "POST /api/sdk/v1/events" },
+);

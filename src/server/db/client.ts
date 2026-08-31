@@ -1,5 +1,6 @@
 import { Models, Query, TablesDB } from "node-appwrite";
-import { createAdminClient } from "@/lib/appwrite";
+import { createAdminClient } from "@/server/appwrite";
+import { mapAppwriteError, isNotFoundError } from "@/server/db/errors";
 import {
   APPWRITE_ANALYTICS_EVENTS_TABLE_ID,
   APPWRITE_ASSETS_TABLE_ID,
@@ -103,8 +104,10 @@ export async function getRowSafe<Row extends Models.Row>(
       rowId,
       transactionId,
     });
-  } catch {
-    return null;
+  } catch (err) {
+    if (isNotFoundError(err)) return null;
+    // Fail loud: outages, rate limits, and 5xx must not masquerade as "not found".
+    throw mapAppwriteError(err);
   }
 }
 
