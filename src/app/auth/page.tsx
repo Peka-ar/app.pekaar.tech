@@ -1,14 +1,20 @@
-import { auth } from "@/auth";
 import AuthClient from "./AuthClient";
 import { redirect } from "next/navigation";
+import { requirePrincipal } from "@/lib/auth-guards";
 
 export default async function AuthPage() {
-  const session = await auth();
-  const user = session?.user as { onboarded?: boolean } | undefined;
-
-  if (user && !user.onboarded) {
-    redirect("/onboarding");
+  let principal;
+  try {
+    principal = await requirePrincipal();
+  } catch {
+    return <AuthClient />;
   }
 
-  return <AuthClient />;
+  if (!principal.onboarded) {
+    redirect("/onboarding");
+  }
+  if (principal.role === "ADMIN") {
+    redirect("/admin/dashboard");
+  }
+  redirect("/dashboard");
 }

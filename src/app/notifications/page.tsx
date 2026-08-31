@@ -1,20 +1,20 @@
-import { prisma } from "@/lib/prisma";
 import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
+import { Query } from "node-appwrite";
+import { DB, listAllRows, ProjectStatus, ProjectsRow } from "@/lib/db";
 import NotificationsClient from "./NotificationsClient";
-import type { ProjectStatus } from "@/generated/prisma/client";
 
 export default async function NotificationsPage() {
   const principal = await requirePrincipalOrRedirect();
   let jobs: { id: string; product: string; date: string; completed: string; status: ProjectStatus }[] = [];
 
   try {
-    const projects = await prisma.project.findMany({
-      where: { brandId: principal.userId },
-      orderBy: { createdAt: "desc" },
-    });
+    const projects = await listAllRows<ProjectsRow>(DB.projects, [
+      Query.equal("brandId", principal.userId),
+      Query.orderDesc("$createdAt"),
+    ]);
 
     jobs = projects.map((p) => {
-      const createdDate = new Date(p.createdAt).toLocaleString("en-US", {
+      const createdDate = new Date(p.$createdAt).toLocaleString("en-US", {
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
@@ -24,11 +24,11 @@ export default async function NotificationsPage() {
       });
 
       return {
-        id: p.id.slice(0, 8).toUpperCase(),
+        id: p.$id.slice(0, 8).toUpperCase(),
         product: p.name,
         date: createdDate,
         completed: p.status === 'PUBLISHED' ? createdDate : "-",
-        status: p.status,
+        status: p.status as ProjectStatus,
       };
     });
   } catch (error) {

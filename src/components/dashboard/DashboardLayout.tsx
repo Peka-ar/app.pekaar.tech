@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { Box, LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, Menu } from 'lucide-react';
 import Link from "next/link";
-import { SessionProvider, useSession } from "next-auth/react";
+import { usePathname } from 'next/navigation';
+import { useAuth } from "@appwrite.io/react";
 import NotificationBell from './NotificationBell';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Button } from '../ui/Button';
@@ -14,23 +15,14 @@ interface DashboardLayoutProps {
   title: string;
   action?: React.ReactNode;
 }
-import { usePathname } from 'next/navigation';
 
-export default function DashboardLayout(props: DashboardLayoutProps) {
-  return (
-    <SessionProvider>
-      <DashboardLayoutInner {...props} />
-    </SessionProvider>
-  );
-}
-
-function DashboardLayoutInner({ children, title, action }: DashboardLayoutProps) {
+export default function DashboardLayout({ children, title, action }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { data: session } = useSession();
+  const { user } = useAuth();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
-  const userName = session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Brand";
-  const userEmail = session?.user?.email || "";
+  const userName = user?.name?.trim() || user?.email?.split("@")[0] || "Brand";
+  const userEmail = user?.email || "";
   const initials = userName
     .split(/\s+/)
     .filter(Boolean)

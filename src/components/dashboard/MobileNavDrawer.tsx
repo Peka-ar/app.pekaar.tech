@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useSession } from "next-auth/react";
+import { useAuth } from "@appwrite.io/react";
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
@@ -27,10 +27,10 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
   const drawerRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<Element | null>(null);
   const [mounted, setMounted] = React.useState(false);
-  const { data: session } = useSession();
+  const { user } = useAuth();
 
-  const userName = session?.user?.name?.trim() || session?.user?.email?.split("@")[0] || "Brand";
-  const userEmail = session?.user?.email || "";
+  const userName = user?.name?.trim() || user?.email?.split("@")[0] || "Brand";
+  const userEmail = user?.email || "";
   const initials = userName
     .split(/\s+/)
     .filter(Boolean)
@@ -109,7 +109,6 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
       )}
       onClick={handleBackdropClick}
       aria-hidden={!isOpen}
-      // @ts-expect-error - `inert` is a valid HTML attribute supported in React 19+; types may lag.
       inert={!isOpen ? true : undefined}
     >
       <div className="absolute inset-0 bg-black/50" />

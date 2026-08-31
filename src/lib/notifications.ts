@@ -1,20 +1,32 @@
-import { prisma } from "@/lib/prisma";
+import { Query } from "node-appwrite";
 import { requirePrincipal } from "@/lib/auth-guards";
-import { ProjectStatus } from "@/generated/prisma/client";
+import { DB, getTablesDB, ProjectsRow } from "@/lib/db";
 
 export interface NotificationProject {
   id: string;
   name: string;
-  status: ProjectStatus;
-  createdAt: Date;
+  status: string;
+  createdAt: string;
 }
 
 export async function getRecentProjectActivity(): Promise<NotificationProject[]> {
   const principal = await requirePrincipal();
-  return prisma.project.findMany({
-    where: { brandId: principal.userId },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    select: { id: true, name: true, status: true, createdAt: true },
+
+  const result = await getTablesDB().listRows<ProjectsRow>({
+    databaseId: DB.databaseId,
+    tableId: DB.projects,
+    queries: [
+      Query.equal("brandId", principal.userId),
+      Query.orderDesc("$createdAt"),
+      Query.limit(10),
+    ],
+    total: false,
   });
+
+  return result.rows.map((p) => ({
+    id: p.$id,
+    name: p.name,
+    status: p.status,
+    createdAt: p.$createdAt,
+  }));
 }

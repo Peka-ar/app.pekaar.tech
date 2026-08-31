@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
-import { ThemeProvider } from "@/components/ThemeProvider";
+import { Providers } from "./providers";
 import { TopNav } from "@/components/TopNav";
+import { createNextServerHelpers } from "@appwrite.io/react/server/next";
+import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "@/lib/appwrite-config";
 const cormorant = localFont({
   src: [
     { path: "../assets/fonts/cormorant-300.woff2", weight: "300", style: "normal" },
@@ -43,11 +45,14 @@ export const metadata: Metadata = {
   description: "Premium micro-SaaS for D2C brands. Convert standard product photography into interactive 3D assets.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const helpers = createNextServerHelpers({ endpoint: APPWRITE_ENDPOINT, projectId: APPWRITE_PROJECT_ID });
+  const session = await helpers.readSessionCookie();
+
   return (
     <html lang="en" className={`${cormorant.variable} ${inter.variable} ${jetbrains.variable} antialiased h-full`} suppressHydrationWarning>
       <head>
@@ -56,10 +61,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://ajax.googleapis.com" crossOrigin="anonymous" />
       </head>
       <body className="min-h-full flex flex-col font-sans bg-[var(--color-canvas)] text-[var(--color-text-primary)] transition-colors duration-300" suppressHydrationWarning>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+        <Providers session={session}>
           <TopNav />
           {children}
-        </ThemeProvider>
+        </Providers>
       </body>
     </html>
   );

@@ -16,10 +16,6 @@ export default function AuthClient() {
 
   const visualProduct = PRODUCTS[0];
 
-  const handleSignUpSuccess = () => {
-    setView('signin');
-  };
-
   return (
     <div className="min-h-screen bg-[var(--color-canvas)] text-[var(--color-text-primary)] flex font-sans antialiased overflow-hidden">
       <div className="hidden lg:flex lg:w-1/2 bg-[#1A1A1A] flex-col relative overflow-hidden">
@@ -73,7 +69,7 @@ export default function AuthClient() {
 
         <div className="max-w-md w-full mx-auto">
           {view === 'signin' && <SignInForm onNavigate={(v) => setView(v as AuthView)} />}
-          {view === 'signup' && <SignUpForm onNavigate={(v) => setView(v as AuthView)} onSuccess={handleSignUpSuccess} />}
+          {view === 'signup' && <SignUpForm onNavigate={(v) => setView(v as AuthView)} />}
           {view === 'forgot-password' && <ForgotPasswordForm onNavigate={(v) => setView(v as AuthView)} />}
         </div>
       </div>

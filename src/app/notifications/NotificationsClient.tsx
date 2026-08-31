@@ -5,7 +5,7 @@ import { Search, Filter } from 'lucide-react';
 import { PROJECT_STATUS_META } from "@/lib/status";
 import { Table, TableHead, TableBody, TableRow, TableCell, TableEmptyState } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
-import type { ProjectStatus } from "@/generated/prisma/client";
+import type { ProjectStatus } from "@/lib/enums";
 
 type Job = {
   id: string;

@@ -1,6 +1,7 @@
 import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 import { generateEmbedCode } from "@/lib/utils";
-import { prisma } from "@/lib/prisma";
+import { Query } from "node-appwrite";
+import { DB, getRowSafe, listAllRows, ProjectStatus, ProjectsRow, UsersRow } from "@/lib/db";
 import IntegrationsClient from "./IntegrationsClient";
 
 interface IntegrationProject {
@@ -15,20 +16,22 @@ export default async function IntegrationsPage() {
   let storefrontPlatform: string | null = null;
 
   try {
-    const user = await prisma.user.findUnique({
-      where: { id: principal.userId },
-      select: { storefrontPlatform: true },
-    });
-    storefrontPlatform = user?.storefrontPlatform ?? null;
+    const [userRow, published] = await Promise.all([
+      getRowSafe<UsersRow>(DB.users, principal.userId),
+      listAllRows<ProjectsRow>(DB.projects, [
+        Query.equal("brandId", principal.userId),
+        Query.equal("status", ProjectStatus.PUBLISHED),
+        Query.orderDesc("$createdAt"),
+      ]),
+    ]);
 
-    projects = await prisma.project.findMany({
-      where: { brandId: principal.userId, status: "PUBLISHED" },
-      select: { id: true, name: true },
-      orderBy: { createdAt: "desc" },
-    }).then((items) => items.map((project) => ({
-      ...project,
-      embedCode: generateEmbedCode(project.id).iframe,
-    })));
+    storefrontPlatform = userRow?.storefrontPlatform ?? null;
+
+    projects = published.map((project) => ({
+      id: project.$id,
+      name: project.name,
+      embedCode: generateEmbedCode(project.$id).iframe,
+    }));
   } catch (error) {
     console.error("Failed to fetch integration data:", error);
   }

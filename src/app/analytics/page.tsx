@@ -1,9 +1,9 @@
 import React from 'react';
-import type { Prisma } from '@/generated/prisma/client';
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Eye, Activity, Smartphone, Box, ArrowUpRight, ArrowDownRight, AlertTriangle } from 'lucide-react';
 import { requirePrincipalOrRedirect } from '@/lib/auth-guards';
-import { prisma } from '@/lib/prisma';
+import { Query } from "node-appwrite";
+import { AnalyticsEventRow, DB, ProjectsRow, countRows, groupBy, listAllRows } from '@/lib/db';
 import { formatCount, formatChange, subDays, startOfDay, startOfMonth, addMonths } from '@/lib/utils';
 import { Card, CardBody } from '@/components/ui/Card';
 import { Table, TableHead, TableBody, TableRow, TableCell, TableEmptyState } from '@/components/ui/Table';
@@ -72,19 +72,29 @@ function buildChartPeriods(range: DateRange, now: Date) {
   });
 }
 
-function whereForRange(baseWhere: Prisma.AnalyticsEventWhereInput, start?: Date, end?: Date): Prisma.AnalyticsEventWhereInput {
-  return {
-    ...baseWhere,
-    ...(start || end ? { createdAt: { ...(start ? { gte: start } : {}), ...(end ? { lt: end } : {}) } } : {}),
-  };
+function eventQueries(
+  brandId: string | undefined,
+  opts: { eventType?: (typeof EVENT_TYPES)[number]; from?: Date; to?: Date } = {},
+): string[] {
+  const queries: string[] = [];
+  if (brandId) queries.push(Query.equal("brandId", brandId));
+  if (opts.eventType) queries.push(Query.equal("eventType", opts.eventType));
+  if (opts.from) queries.push(Query.greaterThanEqual("$createdAt", opts.from.toISOString()));
+  if (opts.to) queries.push(Query.lessThan("$createdAt", opts.to.toISOString()));
+  return queries;
 }
 
-async function getCounts(where: Prisma.AnalyticsEventWhereInput): Promise<EventCounts> {
+async function getCounts(brandId: string | undefined, from?: Date, to?: Date): Promise<EventCounts> {
   const [views, interactions, arLaunches] = await Promise.all(
-    EVENT_TYPES.map((eventType) => prisma.analyticsEvent.count({ where: { ...where, eventType } }))
+    EVENT_TYPES.map((eventType) => countRows(DB.analyticsEvents, eventQueries(brandId, { eventType, from, to })))
   );
 
   return { VIEW: views, INTERACTION: interactions, AR_LAUNCH: arLaunches };
+}
+
+function projectCounts(rows: AnalyticsEventRow[]): { projectId: string; _count: { _all: number } }[] {
+  const groups = groupBy(rows, (row) => row.projectId);
+  return Array.from(groups.entries()).map(([projectId, items]) => ({ projectId, _count: { _all: items.length } }));
 }
 
 export default async function AnalyticsPage({
@@ -99,51 +109,42 @@ export default async function AnalyticsPage({
   const { range } = await searchParams;
   const dateRange = parseDateRange(range);
   const now = new Date();
-  const baseWhere: Prisma.AnalyticsEventWhereInput = role === 'ADMIN' ? {} : { brandId: userId };
+  const brandFilter = role === 'ADMIN' ? undefined : userId;
   const { currentStart, previousStart, previousEnd } = getMetricRanges(dateRange, now);
-  const currentWhere = whereForRange(baseWhere, currentStart, now);
-  const previousWhere = previousStart && previousEnd ? whereForRange(baseWhere, previousStart, previousEnd) : null;
 
   const periods = buildChartPeriods(dateRange, now);
   const chartStart = periods[0]?.start;
 
-  const [currentCounts, previousCounts, chartEvents, viewLeaderboard, arLeaderboard] = await Promise.all([
-    getCounts(currentWhere),
-    previousWhere ? getCounts(previousWhere) : Promise.resolve(null),
-    prisma.analyticsEvent.findMany({
-      where: whereForRange(baseWhere, chartStart, now),
-      select: { eventType: true, createdAt: true },
-    }),
-    prisma.analyticsEvent.groupBy({
-      by: ['projectId'],
-      where: { ...currentWhere, eventType: 'VIEW' },
-      _count: { _all: true },
-      orderBy: { _count: { projectId: 'desc' } },
-      take: 5,
-    }),
-    prisma.analyticsEvent.groupBy({
-      by: ['projectId'],
-      where: { ...currentWhere, eventType: 'AR_LAUNCH' },
-      _count: { _all: true },
-    }),
+  const [currentCounts, previousCounts, chartEvents, viewEvents, arEvents] = await Promise.all([
+    getCounts(brandFilter, currentStart, now),
+    previousStart && previousEnd ? getCounts(brandFilter, previousStart, previousEnd) : Promise.resolve(null),
+    listAllRows<AnalyticsEventRow>(DB.analyticsEvents, eventQueries(brandFilter, { from: chartStart, to: now })),
+    listAllRows<AnalyticsEventRow>(DB.analyticsEvents, eventQueries(brandFilter, { eventType: "VIEW", from: currentStart, to: now })),
+    listAllRows<AnalyticsEventRow>(DB.analyticsEvents, eventQueries(brandFilter, { eventType: "AR_LAUNCH", from: currentStart, to: now })),
   ]);
+
+  const viewLeaderboard = projectCounts(viewEvents)
+    .sort((a, b) => b._count._all - a._count._all)
+    .slice(0, 5);
+  const arLeaderboard = projectCounts(arEvents);
 
   const projectIds = viewLeaderboard.map((item) => item.projectId);
   const projects = projectIds.length
-    ? await prisma.project.findMany({
-        where: { id: { in: projectIds }, ...(role === 'ADMIN' ? {} : { brandId: userId }) },
-        select: { id: true, name: true },
-      })
+    ? await listAllRows<ProjectsRow>(DB.projects, [
+        Query.equal("$id", projectIds),
+        ...(role === 'ADMIN' ? [] : [Query.equal("brandId", userId)]),
+      ])
     : [];
 
   const liveness = await getProjectLiveness(projectIds);
 
-  const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const projectNames = new Map(projects.map((project) => [project.$id, project.name]));
   const arByProject = new Map(arLeaderboard.map((item) => [item.projectId, item._count._all]));
 
   for (const event of chartEvents) {
-    const period = periods.find((item) => event.createdAt >= item.start && event.createdAt < item.end);
-    if (period) period.counts[event.eventType] += 1;
+    const createdAt = new Date(event.$createdAt);
+    const period = periods.find((item) => createdAt >= item.start && createdAt < item.end);
+    if (period) period.counts[event.eventType as keyof EventCounts] += 1;
   }
 
   const interactionRate = currentCounts.VIEW > 0 ? (currentCounts.INTERACTION / currentCounts.VIEW) * 100 : 0;

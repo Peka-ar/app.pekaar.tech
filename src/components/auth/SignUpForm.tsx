@@ -1,27 +1,22 @@
 "use client";
 import React, { useState } from 'react';
 import { Mail, Lock, CheckCircle2 } from 'lucide-react';
-import { registerUser, verifyEmailOtp } from "@/app/actions/auth";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
+import { registerUser, resendVerificationEmail } from "@/app/actions/auth";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
-import OtpInput from "./OtpInput";
 
 interface SignUpFormProps {
   onNavigate: (view: string) => void;
-  onSuccess: () => void;
 }
 
-export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
+export default function SignUpForm({ onNavigate }: SignUpFormProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
-  const [otp, setOtp] = useState('');
-  const router = useRouter();
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const getPasswordStrength = () => {
     if (password.length === 0) return 0;
@@ -49,32 +44,18 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleResend = async () => {
     if (!submittedEmail) return;
 
     setError(null);
-    setLoading(true);
+    setResendState('sending');
 
     try {
-      await verifyEmailOtp(submittedEmail, otp);
-      const result = await signIn("credentials", {
-        email: submittedEmail,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        throw new Error("Email verified, but automatic sign-in failed. Please sign in manually.");
-      }
-
-      onSuccess();
-      router.push("/onboarding");
-      router.refresh();
+      await resendVerificationEmail(submittedEmail);
+      setResendState('sent');
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Verification failed");
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : "Unable to resend the verification email");
+      setResendState('idle');
     }
   };
 
@@ -84,33 +65,35 @@ export default function SignUpForm({ onNavigate, onSuccess }: SignUpFormProps) {
         <div className="w-16 h-16 bg-[var(--color-canvas-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
           <CheckCircle2 className="w-8 h-8 text-emerald-500" />
         </div>
-        <h2 className="text-3xl font-serif text-[var(--color-text-primary)] mb-3">Enter your code</h2>
+        <h2 className="text-3xl font-serif text-[var(--color-text-primary)] mb-3">Check your inbox</h2>
         <p className="text-[var(--color-text-secondary)] text-sm mb-8">
-          We sent a 6-digit verification code to {submittedEmail}.
+          We sent a verification link to <strong>{submittedEmail}</strong>. Click it to activate your account, then sign in.
         </p>
-        <form className="space-y-5" onSubmit={handleVerifyOtp}>
-          <div className="flex justify-center">
-            <OtpInput value={otp} onChange={setOtp} id="signup-otp" />
-          </div>
 
-          <Alert tone="info">
-            Didn&apos;t get the email? Check your <strong>spam</strong> or <strong>promotions</strong> folder, then try again.
-          </Alert>
+        <Alert tone="info">
+          Didn&apos;t get the email? Check your <strong>spam</strong> or <strong>promotions</strong> folder, then try again.
+        </Alert>
 
-          {error && <Alert tone="error">{error}</Alert>}
+        {resendState === 'sent' && (
+          <Alert tone="success" className="mt-4">Verification email sent. Check your inbox.</Alert>
+        )}
 
-          <Button
-            type="submit"
-            variant="primary"
-            size="lg"
-            isLoading={loading}
-          >
-            {loading ? 'Verifying...' : 'Verify and Sign In'}
-          </Button>
-        </form>
+        {error && <Alert tone="error" className="mt-4">{error}</Alert>}
+
+        <Button
+          type="button"
+          variant="secondary"
+          size="lg"
+          className="mt-6"
+          isLoading={resendState === 'sending'}
+          onClick={handleResend}
+        >
+          Resend verification email
+        </Button>
+
         <button
           onClick={() => onNavigate('signin')}
-          className="mt-6 text-sm font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="mt-6 block w-full text-sm font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
         >
           Back to Sign In
         </button>

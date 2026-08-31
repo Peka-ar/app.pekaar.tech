@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { prisma } from "@/lib/prisma";
-import { ProjectStatus } from "@/generated/prisma/client";
+import { Query } from "node-appwrite";
+import { AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -11,16 +11,13 @@ export async function GET(
 ) {
   const { projectId } = await params;
 
-  const project = await prisma.project.findFirst({
-    where: { id: projectId, status: ProjectStatus.PUBLISHED },
-    select: { id: true, assets: { select: { type: true, url: true } } },
-  });
-
-  if (!project) {
+  const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
+  if (!project || project.status !== ProjectStatus.PUBLISHED) {
     return new Response("Not found", { status: 404 });
   }
 
-  const hasGlb = project.assets.some((asset) => asset.type === "MODEL_GLB");
+  const assets = await listAllRows<AssetsRow>(DB.assets, [Query.equal("projectId", projectId)]);
+  const hasGlb = assets.some((asset) => asset.type === AssetType.MODEL_GLB);
   if (!hasGlb) {
     return new Response("Not found", { status: 404 });
   }

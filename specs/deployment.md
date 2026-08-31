@@ -1,32 +1,30 @@
-# Deployment — Vercel + Supabase + UploadThing + GDrive + Gmail SMTP
+# Deployment — Appwrite Sites + Appwrite Cloud
 
 > Parent: [`./WEBSITE.md`](./WEBSITE.md)
 
-Production runtime for STUDIO.V. This document is the **operational handbook** for working with the live deployment: what is deployed, where, how to inspect it, how to update it, how to recover from a bad deploy, how to add a custom domain, and how to do day-to-day code changes safely.
+Production runtime for STUDIO.V. This document is the **operational handbook** for the live deployment: what is deployed, where, how to inspect it, how to update it, how to recover from a bad deploy, and how to do day-to-day code changes safely.
 
-**Last verified against live deployment:** `studio-k67lsw9pk` (Sun Jul 26 2026).
+**Hosting is fully inside Appwrite**: the Next.js app runs on **Appwrite Sites** (SSR), and Auth/TablesDB/Storage/email are Appwrite Cloud services in the same project. The previous Vercel deployment was deleted after migration (commit "v2 - appwrite migration").
 
 ---
 
-## 1. Live deployment (as of this commit)
+## 1. Live deployment
 
 | Field | Value |
 |---|---|
-| **Production URL** | `https://studio-v-indol.vercel.app` |
-| **Project name** | `studio-v` |
-| **Vercel project ID** | `prj_RjTtGXyFvNs7fGf1nsqCOSr71gv1` |
-| **Vercel scope** | `kaizens-projects-89bbbf37` (personal account, `kaizen3424`) |
-| **GitHub repo** | `https://github.com/Kaizen3424/StudioV` |
-| **Branch deployed** | `main` (auto-deploys on push) |
-| **Latest deployment ID** | `dpl_47c7cKPQkvcphNUBL6p8WXmEQoYE` (alias: `studio-k67lsw9pk`) |
-| **Build region** | `iad1` (Washington, D.C., USA — East) |
-| **Build machine** | 2 cores, 8 GB |
-| **Node version** | Vercel default (currently 20.x — auto-detected) |
-| **Build command** | `next build` (default; no override) |
-| **Framework** | Next.js 16.2.10 (auto-detected) |
-| **Build time** | ~50s compile + ~45s TypeScript = ~1m 30s typical |
+| **Host** | Appwrite Sites — site ID `peka-ar`, project "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) |
+| **Production URL** | (generated domain — see console: Sites → peka-ar → Domains; recorded in §1.1 below after first deploy) |
+| **GitHub repo** | `https://github.com/Peka-ar/website` (org repo; Appwrite GitHub App installed on the Peka-ar org) |
+| **Branch deployed** | `main` (every push to `main` auto-builds + auto-activates a new deployment) |
+| **Framework / adapter** | Next.js (16, App Router) / **SSR** adapter — default output mode, no `output` config in `next.config.mjs` |
+| **Build runtime** | Node 22 (`node-22`) |
+| **Build commands** | install `npm install` · build `npm run build` · output `./.next` |
+| **VCS installation** | `6a94f8463518365b9872` (provider github, org Peka-ar); repo ID `1339382325` |
 
-**Every push to `main` triggers a new production deploy automatically.** The Vercel GitHub integration watches the repo; no manual "Deploy" button is required.
+Pushes to non-`main` branches build preview deployments (visible to Appwrite org members only) — see Appwrite docs "Previews". PRs get a comment with the preview URL unless silent mode is on.
+
+### 1.1 Live values recorded after first deployment
+> To be filled in `specs/deployment.md` on the follow-up docs commit: generated domain, first deployment ID, web platform ID.
 
 ---
 
@@ -34,115 +32,68 @@ Production runtime for STUDIO.V. This document is the **operational handbook** f
 
 | Service | Role | Where it's configured |
 |---|---|---|
-| **Supabase** | Postgres DB (transaction + session pooler) | `DATABASE_URL`, `DIRECT_URL` in Vercel + local `.env` |
-| **UploadThing** | Primary file storage (`*.ufs.sh` CDN) | `UPLOADTHING_TOKEN` |
-| **Google Drive** | Backup of every uploaded asset (best-effort) | `GOOGLE_OAUTH_*`, `GDRIVE_BACKUP_FOLDER_ID` |
-| **Gmail SMTP** | Transactional auth emails (OTP, password reset) via Nodemailer | `GMAIL_USER`, `GMAIL_APP_PASSWORD` |
-| **GitHub** | Source control; Vercel watches the repo | OAuth-linked in Vercel project settings |
-| **Vercel** | Hosting + serverless + edge middleware + build pipeline | CLI + dashboard |
+| **Appwrite Cloud** | Hosting (Sites) + Auth + TablesDB (`studiov`, 5 tables) + Storage (2 buckets) + transactional email | console at https://cloud.appwrite.io (project "Peka.ar") |
+| **GitHub** | Source control; Appwrite Sites watches `Peka-ar/website` | Appwrite Console → Sites → peka-ar → Settings → Git repository |
 
-Stripe is **not** wired yet — the `STRIPE_*` env vars are documented in `.env.example` and `WEBSITE.md §13` but no `/api/webhooks/stripe` handler exists in the codebase. Billing is a post-launch add.
+Stripe is **not** wired — no `/api/webhooks/stripe` handler exists and the `STRIPE_*` env vars were dropped from `.env.example` in Phase 5. Billing is a post-launch add.
 
 ---
 
-## 3. Environment variables (current production values)
+## 3. Environment variables
 
-All 14 are set in Vercel → Project → Settings → Environment Variables, **Production only** (Preview/Development deliberately left empty so branch deploys don't touch the prod DB or send real emails).
+Appwrite Sites reads variables in this precedence: **Appwrite-injected `APPWRITE_*` (highest, cannot be overridden)** → **site variables** → **project variables**. **Never set user variables with the `APPWRITE_` prefix** — Appwrite reserves it (injected vars include `APPWRITE_SITE_API_KEY`, `APPWRITE_SITE_PROJECT_ID`, `APPWRITE_VCS_*`, etc.).
 
-| Variable | Current production value (redacted/masked) |
-|---|---|
-| `DATABASE_URL` | `postgresql://postgres.<ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true` |
-| `DIRECT_URL` | `postgresql://postgres.<ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres` |
-| `AUTH_SECRET` | 32-byte base64 (use `openssl rand -base64 32` to generate new) |
-| `NEXT_PUBLIC_APP_URL` | `https://studio-v-indol.vercel.app` |
-| `UPLOADTHING_TOKEN` | `eyJ...` (JWT) |
-| `GMAIL_USER` | `kaizen3242@gmail.com` (full Gmail address used as both SMTP auth user and `from` sender) |
-| `GMAIL_APP_PASSWORD` | 16-char Google App Password (regenerable at https://myaccount.google.com/apppasswords) |
-| `GOOGLE_OAUTH_CLIENT_ID` | `...apps.googleusercontent.com` |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | `GOCSPX-...` |
-| `GOOGLE_OAUTH_REFRESH_TOKEN` | `1//0...` (long-lived, from one-time consent flow) |
-| `GDRIVE_BACKUP_FOLDER_ID` | Drive folder ID |
-| `ADMIN_EMAIL` | `werewolfiscool404@gmail.com` |
-| `ADMIN_PASSWORD` | (16+ char) |
-| `ADMIN_NAME` | `StudioV Admin` |
+| Variable | Value on Sites | Notes |
+|---|---|---|
+| `STUDIOV_API_KEY` | Appwrite server API key `studiov-server` (secret site variable) | Read by `src/lib/appwrite.ts` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY`. Scopes: users/sessions/tables/columns/indexes/rows read+write, buckets/files read+write, messaging read+write, usage.read |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Public |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Public |
+| `NEXT_PUBLIC_APP_URL` | `https://<generated-domain>` | **Baked into the client bundle at build time** — must be set before the first build; changing it requires a new deployment |
 
-**If you ever need to recreate these from scratch** (e.g. you joined a new dev machine), the local `.env` file is the source of truth — copy from there. **Never commit `.env`** (it's in `.gitignore`).
+Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_KEY` (the fallback handles both). `ADMIN_*` vars are only needed by `npm run sync-admin` / `npm run seed:appwrite` — never set on the site (they would let anyone with console access reset the admin password; they are run locally against the same Appwrite project).
 
-To rotate `AUTH_SECRET` (e.g. suspected compromise):
-1. `openssl rand -base64 32` → new value
-2. Vercel → Settings → Environment Variables → edit `AUTH_SECRET`
-3. **Redeploy** (Deployments → ⋯ → Redeploy) — old JWTs become invalid, all users get signed out
-4. Communicate to active users before doing this
+**Variable changes only take effect on the next deployment** — after creating/updating/deleting a site variable, trigger a redeploy (Sites → Deployments → … or `sites_create_duplicate_deployment`).
+
+**Appwrite sessions** are tied to the project's API keys, not env secrets. Rotating the server API key requires updating the `STUDIOV_API_KEY` site variable + redeploying. Passwords live only inside Appwrite (Argon2).
 
 ---
 
-## 4. Database (Supabase Postgres)
+## 4. Appwrite Cloud (auth, database, storage)
 
-### Connection modes
-- **Transaction mode** (port 6543, `?pgbouncer=true`) → `DATABASE_URL` → app runtime. Use this from the Next.js app.
-- **Session mode** (port 5432) → `DIRECT_URL` → Prisma CLI (migrations, `prisma studio`). PgBouncer in transaction mode does **not** support the DDL statements Prisma uses for migrations.
+**Project:** "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) at https://cloud.appwrite.io. Managed via the console — there are **no code-declared schema migrations**. Database schema (TablesDB database `studiov`, 5 tables), indexes, buckets (`models`, `reference-images`), and email SMTP are configured in the console and documented in `WEBSITE.md` §9/§10 and `file-storage-architecture.md`.
 
-### Migrations
-```bash
-# Run from local machine against prod DB
-$env:DATABASE_URL="<prod-transaction-url>"
-$env:DIRECT_URL="<prod-session-url>"
-npx prisma migrate deploy
-```
-**Non-destructive** — only creates tables/columns/enums, never drops them. Idempotent: running twice is safe.
+### Web platform registration
+The site's generated domain is registered as a **web platform** on the project (Console → Overview → Platforms). Browser-direct Storage uploads (`useAppwriteUpload`) are made from this hostname; keep the platform entry in sync if the domain changes.
 
-**When migrations fail mid-way:** Prisma records the failed migration in `_prisma_migrations` and refuses to apply anything else until you `resolve` it. The fix is either:
-- `npx prisma migrate resolve --applied <name>` — mark as "applied by some other means" (use this if the SQL did actually run, e.g. an enum value was already present)
-- `npx prisma migrate resolve --rolled-back <name>` — mark as "rolled back, please retry"
-
-Verify state before resolving:
-```bash
-# See which migrations are marked done vs not
-node -e "/* pg query against _prisma_migrations */"
-```
+### Schema changes
+Tables/columns/indexes are edited in the Appwrite console → Databases → `studiov` → table → Columns/Indexes. After changing a schema, update `WEBSITE.md` §9 and the relevant deep-dive. There is no `prisma migrate` equivalent — **make schema changes manually and update docs**.
 
 ### Admin bootstrap
-```bash
-$env:DATABASE_URL="<prod-transaction-url>"
-$env:DIRECT_URL="<prod-session-url>"
+```powershell
 $env:ADMIN_EMAIL="<email>"
 $env:ADMIN_PASSWORD="<password>"
 $env:ADMIN_NAME="<name>"
 npm run sync-admin
 ```
-**Idempotent.** Re-running is safe; it preserves all admin data, refreshes the password hash, and deletes any stray `ADMIN` users whose email is not the env-driven one. Run this after any rotation of `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME`.
+**Idempotent.** Re-running is safe; it upserts the env-driven admin (Appwrite user with `ADMIN` label + `users` row) and deletes any stray `ADMIN` users whose email is not the env-driven one. Run this after any rotation of `ADMIN_EMAIL`/`ADMIN_PASSWORD`/`ADMIN_NAME`.
 
-### Direct DB access (psql-style)
-If you need to query the DB directly (debugging, manual cleanup), the simplest path is a one-off Node script using the `pg` package that's already in `node_modules`:
-```js
-// db-probe.cjs
-const { Client } = require("pg");
-const c = new Client({
-  connectionString: "postgresql://postgres.<ref>:<password>@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
-});
-(async () => {
-  await c.connect();
-  const r = await c.query("SELECT * FROM \"User\" LIMIT 5");
-  console.log(r.rows);
-  await c.end();
-})();
+### Demo seed (optional, local/dev only)
+```powershell
+npm run seed:appwrite
 ```
-```bash
-node db-probe.cjs
-# remember to delete the script when done
-```
-The port is **5432** (session mode) for direct queries — PgBouncer's transaction mode can hold connections open and break ad-hoc queries.
+**Do not run against production** — the demo brand and sample projects are junk for prod.
 
 ### What NOT to do
-- **Do not run `prisma db seed` against production.** The seed creates a demo `brand@example.com` user and 3 sample projects — fine for local dev, junk for prod. The `seed.ts` is skip-on-existence but the *first* run on a fresh DB will populate the demo data. If you need a fresh prod-like dataset, sign up via the UI instead.
-- **Do not run `prisma migrate reset`** against prod. It drops everything.
+- **Do not delete Appwrite Auth users directly from the console if a `users` row exists** — delete the `users` table row first (or use `adminDeleteUser`, which cascades). An auth user without a `users` row becomes a `StaleSessionError` for their next request.
+- **Do not wipe tables** without a plan — archived assets, project history, and analytics are the app's working data.
+- **Do not delete the site's deployment history** — previous deployments are the rollback mechanism (§7).
 
 ---
 
 ## 5. Day-to-day development workflow
 
 ### The 4-step loop
-```bash
+```powershell
 # 1. Edit code locally
 # 2. Verify
 npm run lint
@@ -150,245 +101,99 @@ npm run build
 # 3. Commit atomically (one logical change per commit)
 git add -p
 git commit -m "type(scope): subject" -m "Body explains the *why*, not the *what*."
-# 4. Push → Vercel auto-builds and auto-deploys
+# 4. Push → Appwrite Sites auto-builds and auto-activates
 git push origin main
 ```
 
 ### Commit message style
-Follow the project's existing convention (see `git log --oneline -20` for examples):
 - **Conventional Commits prefix** — `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
 - **Optional scope** in parens — `feat(auth):`, `fix(admin):`, `chore(deps):`
 - **Subject** in imperative mood, ≤ 72 chars, no period
-- **Body** (after blank line) — explain *why*, not *what*. Reference the symptom, the root cause, and the verification
-
-**On Windows PowerShell**, the `git commit` multi-line body via `-m "..." -m "..."` is safer than using a literal newline (which can be mis-interpreted). Watch out for `;` separators between `git add` and `git commit` — PowerShell may eat the second command; chain with `&&` or run them as two separate calls.
+- **Body** (after blank line) — explain *why*, not *what*
+- On Windows PowerShell, use two `-m` flags rather than a literal newline; chain commands with `&&` (not `;`).
 
 ### Branching
-Trunk-based: `main` is the only long-lived branch, every commit goes through a PR review (even self-review) before merging. For risky work, use a feature branch + Vercel Preview deploys:
-```bash
-git checkout -b feat/some-thing
-# ... commits ...
-git push -u origin feat/some-thing
-# Vercel creates a Preview deployment for the branch
-# URL like: https://studio-v-git-feat-some-thing-kaizens-projects-89bbbf37.vercel.app
-# (no production env vars, no production data — isolated)
-```
-**Preview deploys currently have NO env vars set** (we set Production-only on purpose). If you need DB access in a Preview, you must either (a) temporarily allow Preview env access for testing, or (b) test against a staging DB.
+Trunk-based: `main` is the only long-lived branch. For risky work, use a feature branch — pushes to non-production branches create **preview deployments** (Appwrite org members only). Note: preview deployments share the same site env vars as production (there is no per-env var separation like Vercel's) — do not point previews at a different DB via env; gate in code if needed.
 
 ### Before every push
 1. `npm run lint` — must be silent (no output = pass)
 2. `npm run build` — must compile + pass TypeScript
 3. **Check `git status`** — no stray files, no debug `console.log`s
-4. **Read your own diff** — `git log -p HEAD~1` and ask "would a code reviewer approve this?"
+4. **Read your own diff** — `git log -p HEAD~1`
 
 ### After every push
-1. Vercel → Deployments tab → watch the new build (typically ~1m 30s)
-2. **Wait for "Ready"** — don't assume it succeeded
-3. Click into the deployment, open the **Logs** tab
-4. Hit the live URL (`https://studio-v-indol.vercel.app`) and smoke-test
+1. Appwrite Console → Sites → peka-ar → **Deployments** tab → watch the new build
+2. **Wait for "Ready"** — don't assume it succeeded (failed builds do NOT replace the active deployment)
+3. Open the build logs if it failed
+4. Hit the live URL and smoke-test
 
 ---
 
-## 6. Using the Vercel CLI
+## 6. Operating the site (Console + MCP)
 
-The CLI is the fastest way to inspect and operate on the live deployment. After `npm i -g vercel` and `vercel login`, all commands work from any directory.
+The Appwrite Console (https://cloud.appwrite.io → Peka.ar → Sites → peka-ar) is the primary interface. The Appwrite MCP server (this repo's tooling) can do the same operations programmatically (`sites_create`, `sites_update`, `sites_create_variable`, `sites_create_vcs_deployment`, `sites_get_deployment`, `sites_list_logs`, etc. — authenticated against the console).
 
-### One-time setup (already done in this project)
-```bash
-# Link the local repo to the Vercel project so commands default to it
-vercel link
-# Already linked. Verified: project is "studio-v" under scope "kaizens-projects-89bbbf37"
-```
+| Task | Where |
+|---|---|
+| Watch deployments / build logs | Sites → peka-ar → Deployments → click a deployment |
+| Runtime + error logs | Sites → peka-ar → Logs |
+| Update env vars | Sites → peka-ar → Settings → Environment variables (**redeploy after**) |
+| Update build settings / Git config | Sites → peka-ar → Settings → Build settings / Git repository |
+| Add a custom domain | Sites → peka-ar → Domains → Add domain (CNAME for subdomains; NS delegation for apex) |
+| Disable the site (maintenance) | Sites → peka-ar → Settings → disable toggle (Server SDK access continues to work) |
+| Rebuild without new code | Deployments → create duplicate deployment (picks up changed env vars/commands) |
 
-### Daily commands
-
-**List recent deployments:**
-```bash
-vercel ls
-# Shows: age, project, deployment URL, status, environment, duration
-# Statuses: ● Building  ● Ready  ● Error  ● Canceled
-```
-
-**Pull live logs (any deployment, filtered):**
-```bash
-# All logs from latest production deploy, last 1 hour
-vercel logs --since 1h
-
-# Just errors from a specific deployment URL
-vercel logs https://studio-v-indol.vercel.app --level error
-
-# Filter by HTTP status code (5xx = server crash, 4xx = client bug)
-vercel logs --status-code 500 --since 1h
-
-# Live stream of a deployment's runtime logs (Ctrl+C to stop)
-vercel logs https://studio-v-indol.vercel.app --follow
-
-# Filter to a specific source
-vercel logs --source edge-middleware --since 30m
-vercel logs --source serverless --since 30m
-
-# JSON output for piping into jq
-vercel logs --status-code 500 --json | jq '.message'
-```
-
-**Inspect a single deployment:**
-```bash
-vercel inspect <deployment-url-or-id>
-# Shows: id, name, target (production/preview), status, url, created time, aliases, builds
-```
-
-**Promote / rollback:**
-```bash
-# Promote any past deployment to production
-vercel promote <deployment-id-or-url>
-
-# Quick rollback path
-# 1. Find the last-known-good deployment
-vercel ls
-# 2. Promote it
-vercel promote dpl_xxxxx
-```
-
-**Manage env vars from CLI:**
-```bash
-# Pull all env vars (USE WITH CARE — exposes secrets in terminal)
-vercel env pull .env.production.local
-
-# Push a single var (interactive)
-vercel env add VARIABLE_NAME production
-
-# Remove
-vercel env rm VARIABLE_NAME production
-```
-
-**Other useful commands:**
-```bash
-vercel whoami                 # confirm which account is logged in
-vercel projects ls            # list all projects in the scope
-vercel domains ls             # list domains attached to the project
-vercel certs ls               # list SSL certificates
-vercel logs --help            # full options reference
-```
-
-### Gotchas
-- `vercel env pull` writes to `.env.production.local` — make sure this is in `.gitignore` (it is by default). Delete the file after you're done with it.
-- The CLI is auto-detected as running inside an agent in some cases; if a command hangs on a prompt, pass `--yes` (most commands) or pipe `n` to skip.
+**Debugging rules of thumb** (from Appwrite docs):
+- If config changes don't seem to apply — **redeploy the site**; variable/command changes only take effect on the next deployment.
+- SSR request logs (including `console.log`/`console.error` from server code) appear in the site **Logs** tab.
+- `APPWRITE_DEPLOYMENT_TYPE` env var tells the app how the running deployment was created (`vcs`, `cli`, `manual`).
 
 ---
 
 ## 7. Rollback strategy
 
-**Every Vercel deployment is preserved forever.** Rollback = promote a previous deployment to production. No git revert, no rebuild, no DB changes.
+Rollback = **re-activate a previous deployment**. Every deployment is preserved (subject to deployment retention settings).
 
-```bash
-# Find the last-known-good deployment
-vercel ls
-
-# Promote it (takes ~5 seconds — Vercel just re-points the alias)
-vercel promote dpl_47c7cKPQkvcphNUBL6p8WXmEQoYE
+```text
+Console: Sites → peka-ar → Deployments → (previous Ready deployment) → Activate
+MCP:     sites_update_site_deployment { site_id: "peka-ar", deployment_id: <id> }
 ```
 
-**Trigger conditions** (roll back immediately if any of these):
-- HTTP 5xx error rate > 1% (server crashes)
-- P95 latency > 2x pre-deploy baseline
+No git revert, no rebuild, no DB changes — Appwrite re-points the site at the stored deployment.
+
+**Trigger conditions** (roll back immediately if any):
+- HTTP 5xx error rate spikes (server crashes)
 - Auth flow broken (no one can sign in)
-- `/embed/[id]` returning 500 for any published project
-- Data integrity issue (state machine broken, missing rows, etc.)
-- Security vulnerability introduced
+- `/embed/[id]` failing for any published project
+- Data integrity issue (state machine broken, missing rows)
 
-**Database considerations:**
-- All Prisma migrations in this repo are **additive** (new tables, new columns, new enum values) — no drops, no destructive changes
-- A code rollback does **NOT** require a DB rollback
-- The only DB writes that happen on deploy are: `prisma migrate deploy` (run manually, not by Vercel) and the `sync-admin` script
+**Database considerations:** Appwrite TablesDB has **no code-declared migrations** — a code rollback never requires a schema change. There is no point-in-time restore; treat console deletes as destructive.
 
-**If you also need to roll back a migration:** see `prisma migrate resolve --rolled-back` in §4 above. The DB itself can be reset to a snapshot via Supabase dashboard (Project → Settings → Database → "Restore to point in time") — destructive, last resort.
-
-### One quirk specific to this app
-`/embed/[projectId]` is a route handler that reads `public/embed-viewer.html` from disk and substitutes `{PROJECT_ID}`. If a deploy breaks that template (typo in HTML, missing closing tag), **every third-party embed breaks simultaneously** because the same static template is served for all projects. If a customer reports "the embed is broken" and you see a 5xx on `/embed/*`, check `public/embed-viewer.html` in the deployed build via `vercel inspect <url>` → build output.
+**One quirk specific to this app:** `/embed/[projectId]` is a route handler that reads `public/embed-viewer.html` from disk and substitutes `{PROJECT_ID}`. If a deploy breaks that template, **every third-party embed breaks simultaneously**. If customers report "the embed is broken" and you see 5xx on `/embed/*`, check `public/embed-viewer.html` in the deployed commit.
 
 ---
 
-## 8. Adding a custom domain
+## 8. Custom domains (deferred)
 
-Currently on `https://studio-v-indol.vercel.app` (Vercel's auto-assigned domain). To add a real domain like `studiov.app`:
-
-### 1. Buy the domain
-Any registrar works (Namecheap, Cloudflare, Google Domains, Porkbun). **Cloudflare Registrar** is recommended — at-cost pricing, free DNS, easy Vercel integration.
-
-### 2. Add the domain to Vercel
-**Via dashboard:**
-1. Vercel → Project → **Settings** → **Domains**
-2. Type the domain (e.g. `studiov.app` and/or `www.studiov.app`)
-3. Click **Add**
-4. Vercel shows the DNS records you need to add at your registrar
-
-**Via CLI:**
-```bash
-vercel domains add studiov.app
-# Follow the prompt to add the DNS records shown
-```
-
-### 3. Configure DNS at the registrar
-Vercel will show one of these patterns:
-
-**Apex domain (`studiov.app`):**
-- Type: `A`, Name: `@`, Value: `76.76.21.21`
-- Type: `CNAME`, Name: `www`, Value: `cname.vercel-dns.com`
-
-**Subdomain (`app.studiov.app`):**
-- Type: `CNAME`, Name: `app`, Value: `cname.vercel-dns.com`
-
-(Exact IPs/values may change — copy from what Vercel shows you, not from this doc.)
-
-### 4. Wait for SSL
-Vercel auto-provisions a Let's Encrypt certificate. Takes 1–10 minutes after DNS propagates. The domain status in the dashboard goes from "Invalid Configuration" → "Valid Configuration" → ✅.
-
-### 5. Update env vars
-1. Vercel → Settings → Environment Variables
-2. Edit `NEXT_PUBLIC_APP_URL` → change to `https://studiov.app` (no trailing slash)
-3. **Redeploy** (the env var is baked into the client bundle at build time)
-4. Auth emails, embed code snippets, and the "Back to home" link will all use the new domain automatically
-
-### 6. (Optional) Make it the primary domain
-In Vercel → Settings → Domains, click the three dots next to the new domain → **Set as Primary**. This redirects all traffic from the old `*.vercel.app` URL to the new domain.
-
-### 7. Set up redirects (optional)
-If you want `studio-v-indol.vercel.app` to redirect to `studiov.app` instead of just being an alias:
-- Vercel → Settings → Domains → click the old domain → "Redirect to primary"
-
-### Cost
-- Domain: $10–15/yr (depends on TLD)
-- DNS: free (Cloudflare) or free with most registrars
-- SSL: free (Let's Encrypt via Vercel)
-- Vercel hosting: free tier covers this app (Hobby plan) — no extra cost for adding a domain
+Currently on the generated `*.appwrite.global`-style domain. To add a custom domain later:
+1. Console → Sites → peka-ar → **Domains** → Add domain
+2. **Subdomain** (recommended): add a CNAME record at your DNS provider pointing to the hostname Appwrite shows
+3. **Apex domain**: either delegate NS records to `ns1.appwrite.zone` / `ns2.appwrite.zone` (Appwrite then manages all DNS — recreate any MX/TXT records there) or use CNAME flattening if your provider supports it
+4. Wait for verification (DNS can take up to 48h) — SSL is provisioned automatically
+5. Update `NEXT_PUBLIC_APP_URL` site variable to the new domain and **redeploy** (it's baked into the client bundle)
+6. Register the new domain as a web platform on the project (Console → Overview → Platforms) so browser-direct uploads keep working
+7. Add the domain to the project's **Allowed Domains** (Settings) so API calls from it are accepted
 
 ---
 
 ## 9. Monitoring and error reporting
 
-**Current state:** Vercel function logs only. No external error tracking. The `vercel logs` command (see §6) is the primary tool for post-deploy diagnosis.
+**Current state:** Appwrite site logs (Console → Sites → peka-ar → Logs) only. No external error tracking.
 
-**Recommended week-1 add — Sentry:**
-1. Sign up at https://sentry.io (free tier: 5K errors/month)
-2. Create a new Next.js project
-3. `npm install @sentry/nextjs`
-4. `npx @sentry/wizard@latest` (auto-configures)
-5. Add `SENTRY_DSN` and `NEXT_PUBLIC_SENTRY_DSN` to Vercel env vars
-6. Redeploy — Sentry now captures server errors, client errors, and performance traces
-
-**Recommended week-1 add — Uptime monitoring:**
-1. https://uptimerobot.com (free tier: 50 monitors, 5-min interval)
-2. Add a monitor for `https://studio-v-indol.vercel.app/` (HTTP 200 check)
-3. Add a monitor for `/api/notifications` (auth-gated, but a 401 response still proves the server is up)
-4. Set up email/Telegram/Slack alerts for downtime
-
-**Recommended week-1 add — Auth rate limiting:**
-The `/api/auth/*` and server action endpoints are public and currently unrate-limited. Brute-forceable in theory. The cleanest fix is Upstash Ratelimit:
-1. Sign up at https://upstash.com (free tier: 10K requests/day)
-2. Create a Redis database
-3. `npm install @upstash/ratelimit @upstash/redis`
-4. Wrap the auth actions and `/api/auth/*` route handlers
-5. Add `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` to Vercel env vars
+**Recommended week-1 adds:**
+- **Sentry** (`@sentry/nextjs`, `npx @sentry/wizard@latest`) — add `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` as site variables, redeploy
+- **Uptime monitoring** (https://uptimerobot.com free tier) — HTTP 200 checks on `/` and `/api/notifications` (a 401 still proves the server is up)
+- **Auth rate limiting** — the auth actions/routes are public; brute-forceable in theory (Upstash Ratelimit)
 
 ---
 
@@ -396,24 +201,20 @@ The `/api/auth/*` and server action endpoints are public and currently unrate-li
 
 | Task | Command |
 |---|---|
-| First-time setup on a new laptop | `npm install` (regenerates Prisma client via postinstall) |
+| First-time setup on a new laptop | `npm install` |
 | Run dev server | `npm run dev` |
 | Lint | `npm run lint` |
 | Build | `npm run build` |
-| Migrate prod DB | `npx prisma migrate deploy` (with prod env vars set) |
-| Sync admin user | `npm run sync-admin` (with prod env vars set) |
-| Pull prod env vars locally | `vercel env pull .env.production.local` |
-| Stream live logs | `vercel logs --follow` |
-| Tail a specific deployment's errors | `vercel logs <url> --level error --follow` |
-| Roll back to a previous deploy | `vercel promote <deployment-id>` |
-| List all deployments | `vercel ls` |
-| Inspect a deployment | `vercel inspect <url>` |
-| Open the live site | https://studio-v-indol.vercel.app |
-| Open Vercel dashboard | https://vercel.com/dashboard |
-| Open Supabase dashboard | https://supabase.com/dashboard |
-| Open Gmail App Passwords | https://myaccount.google.com/apppasswords |
-| Open UploadThing dashboard | https://uploadthing.com/dashboard |
-| Open Google Drive backup folder | (open the folder by ID via drive.google.com) |
+| Sync admin user | `npm run sync-admin` (with `ADMIN_*` env vars set locally) |
+| Seed demo data (local/dev only) | `npm run seed:appwrite` |
+| Deploy | `git push origin main` (auto-build + auto-activate) |
+| Rebuild without new code | Console → Deployments → duplicate deployment |
+| Roll back | Console → Deployments → activate a previous Ready deployment |
+| Watch build logs | Console → Sites → peka-ar → Deployments → deployment |
+| Watch runtime logs | Console → Sites → peka-ar → Logs |
+| Open the live site | Sites → peka-ar → Domains (generated domain) |
+| Open Appwrite console | https://cloud.appwrite.io |
+| Open GitHub repo | https://github.com/Peka-ar/website |
 
 ---
 
@@ -421,40 +222,36 @@ The `/api/auth/*` and server action endpoints are public and currently unrate-li
 
 For full detail, read `WEBSITE.md` first, then the relevant deep-dive in `specs/pages/`.
 
-```
-studiov-website/
-├── prisma/                  schema.prisma + migrations + seed.ts (DO NOT seed prod)
+```text
+website/
 ├── public/                  embed-viewer.html (static HTML served by /embed route)
-├── scripts/                 sync-admin.ts, get-gdrive-refresh-token.ts (one-time setup)
+├── scripts/                 sync-admin.ts (admin bootstrap), seed-appwrite.ts (demo seed)
 ├── src/
 │   ├── app/                 App Router pages + server actions + API routes
-│   │   ├── actions/         auth.ts, project.ts, admin.ts, admin-users.ts, admin-analytics.ts
-│   │   ├── api/             auth/[...nextauth], uploadthing, notifications, sdk/v1/{config,events}
+│   │   ├── actions/         auth.ts, project.ts, admin.ts, admin-users.ts, admin-analytics.ts, analytics.ts, record-asset.ts
+│   │   ├── api/             appwrite/[...appwrite], notifications, sdk/v1/{config,events}, v1/assets/[id]/file
 │   │   ├── embed/[id]/      public 3D viewer route handler
 │   │   ├── admin/           /admin/{dashboard,users,tasks,analytics}
 │   │   ├── auth/            /auth, /auth/verify, /auth/reset-password
 │   │   └── dashboard, tasks, notifications, integrations, analytics, onboarding
 │   ├── components/          auth, admin, dashboard, ui, TopNav, Hero, ThreeDConfigurator
-│   ├── lib/                 prisma, auth-guards, password, emails, status, embed-liveness, hooks
-│   ├── auth.ts              NextAuth instance
-│   ├── auth.config.ts       Edge-safe config (used by middleware)
-│   ├── proxy.ts             middleware (route gating + onboarding enforcement)
+│   ├── lib/                 appwrite.ts (STUDIOV_API_KEY ?? APPWRITE_API_KEY), db, enums, appwrite-config, auth-guards, status, embed-liveness, notifications, utils, hooks
+│   ├── proxy.ts             proxy (middleware) — cookie-presence route gating only
 │   └── types/               ambient type augmentations
 ├── specs/                   WEBSITE.md (source of truth) + per-page deep-dives + this file
 ├── design.md                design system spec
-├── .env                     local env vars (gitignored, source of truth for prod values)
-├── .env.example             env var template (committed)
-├── package.json             scripts: dev, build, start, lint, sync-admin; postinstall: prisma generate
+├── .env                     local env vars (gitignored; APPWRITE_API_KEY locally)
+├── .env.example             env var template (committed; documents both key names)
+├── package.json             scripts: dev, build, start, lint, sync-admin, seed:appwrite
 └── next.config.mjs          headers (CORS for /api/sdk/*, resilience for /embed/*), images
 ```
 
 **Conventions to know before editing code:**
 - Pages are server components; interactivity lives in `*Client.tsx` (note the suffix)
 - UI primitives in `src/components/ui/` are server-compatible (except `Modal` which uses `createPortal`)
-- Auth: never trust `session.user.id`/`role` directly — always go through `requirePrincipal()` (DB-backed)
-- For pages, use `requirePrincipalOrRedirect()` which auto-redirects on stale/absent sessions
+- Auth: never trust `user.id`/`role` directly — always go through `requirePrincipal()` (Appwrite session + `users` TableDB row)
+- For pages, use `requirePrincipalOrRedirect()`
 - Use Tailwind v4 design tokens (CSS custom properties from `globals.css`) — never raw hex
-- The `part: string` parameter in `slice` callbacks and similar TS strictness fixes
 - `transition-colors` / `transition-transform` / `transition-opacity` only (never `transition-all`)
 
 ---
@@ -463,25 +260,25 @@ studiov-website/
 
 | Element | Location |
 |---|---|
-| Vercel project config | (none — auto-detected; no `vercel.json`) |
-| Local env var template | `.env.example:1` |
-| Live env vars (gitignored) | `.env:1` |
+| Server API key env fallback (`STUDIOV_API_KEY ?? APPWRITE_API_KEY`) | `src/lib/appwrite.ts:4` |
+| Local env var template (documents both key names) | `.env.example:1` |
 | Next.js config (CORS, security headers, image patterns) | `next.config.mjs:1` |
 | Tailwind v4 + design tokens | `src/app/globals.css:1` |
-| Postinstall hook (prisma generate) | `package.json:11` |
-| Vercel function log streaming | `vercel logs --follow` (no in-code instrumentation) |
+| Admin bootstrap script | `scripts/sync-admin.ts:1` |
+| Demo seed script | `scripts/seed-appwrite.ts:1` |
+| Deployment plan (this migration) | `tasks/plan.md` |
+| Appwrite SSR auth handlers | `src/app/api/appwrite/[...appwrite]/route.ts:1` |
 
 ---
 
 ## 13. See also
 
 - [`./WEBSITE.md`](./WEBSITE.md) — full app reference, data model, route map, server action reference
-- [`./file-storage-architecture.md`](./file-storage-architecture.md) — UploadThing + GDrive backup architecture
-- [`./auth-stabilization.md`](./auth-stabilization.md) — historical task plan (now implemented; explains `requirePrincipal` + `StaleSessionError` rationale)
-- [`./pages/auth.md`](./pages/auth.md) — `/auth*` flow deep dive + email-failure recovery
-- [`./pages/admin.md`](./pages/admin.md) — `/admin/*` deep dive + SessionProvider wrapper note
+- [`./file-storage-architecture.md`](./file-storage-architecture.md) — Appwrite Storage architecture (browser-direct uploads, proxy, publish grants/revokes)
+- [`./auth-stabilization.md`](./auth-stabilization.md) — historical task plan (implemented; explains `requirePrincipal` + `StaleSessionError` rationale)
+- [`./pages/auth.md`](./pages/auth.md`) — `/auth*` flow deep dive + email-failure recovery
+- [`./pages/admin.md`](./pages/admin.md`) — `/admin/*` deep dive
 - [`../AGENTS.md`](../AGENTS.md) — repo-wide agent rules (read first, keep `specs/` accurate)
 - [`../design.md`](../design.md) — design system spec
 - [`../.env.example`](../.env.example) — env var template
-- Vercel CLI docs: https://vercel.com/docs/cli
-- Prisma migration reference: https://www.prisma.io/docs/orm/prisma-migrate
+- Appwrite Sites docs: https://appwrite.io/docs/products/sites

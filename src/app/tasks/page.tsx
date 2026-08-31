@@ -1,7 +1,7 @@
 import TasksClient from "./TasksClient";
 import { getUserProjects } from "@/app/actions/project";
 import { getAllTasks } from "@/app/actions/admin";
-import { Role } from "@/generated/prisma/client";
+import { Role } from "@/lib/auth-guards";
 import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 
 import { Suspense } from 'react';

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { adminGetUsers, adminGetUser, adminUpdateUser, adminSetUserStatus, adminDeleteUser } from "@/app/actions/admin-users";
-import { Role, UserStatus } from "@/generated/prisma/client";
+import { Role, UserStatus } from "@/lib/enums";
 import { formatDistanceToNow } from "date-fns";
 
 type UserListItem = {
@@ -22,7 +22,7 @@ type UserListItem = {
   status: string;
   usageLimits: number | null;
   subscriptionTier: string | null;
-  createdAt: Date;
+  createdAt: Date | string;
   onboarded: boolean;
 };
 
@@ -30,12 +30,12 @@ type RecentProject = {
   id: string;
   name: string;
   status: string;
-  createdAt: Date;
+  createdAt: Date | string;
 };
 
 type DetailedUser = UserListItem & {
   statusReason: string | null;
-  suspendedAt: Date | null;
+  suspendedAt: Date | string | null;
   projectCount: number;
   assetCount: number;
   eventCount: number;

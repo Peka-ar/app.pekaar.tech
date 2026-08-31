@@ -2,7 +2,7 @@ import React from 'react';
 import AdminLayout from "@/components/admin/AdminLayout";
 import { Users, Box, UserPlus, Activity, ArrowRight } from 'lucide-react';
 import { requirePrincipalOrRedirect } from '@/lib/auth-guards';
-import { Role } from '@/generated/prisma/client';
+import { Role } from '@/lib/auth-guards';
 import { formatCount } from '@/lib/utils';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Table, TableHead, TableBody, TableRow, TableCell, TableEmptyState } from '@/components/ui/Table';

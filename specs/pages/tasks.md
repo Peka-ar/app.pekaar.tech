@@ -24,7 +24,7 @@ type TaskJob = {
   createdAt: Date | string;
   brand: TaskBrand;                     // { id, name, email, role, productCategory?, storefrontPlatform?, catalogSize? }
   referenceUrls: string[];              // derived: REFERENCE_IMAGE asset urls
-  assetUrls: { glb: string; usdz?: string } | null;  // derived: proxy URL `/api/v1/assets/{id}/file` for live MODEL_GLB / MODEL_USDZ — transparent UT→GDrive fallback, see ../WEBSITE.md §5
+  assetUrls: { glb: string; usdz?: string } | null;  // derived: proxy URL `/api/v1/assets/{id}/file` for live MODEL_GLB / MODEL_USDZ — auth-gated streaming proxy, see ../WEBSITE.md §5
   revisionRequests?: { id: string; note: string; createdAt: Date | string }[];
 };
 ```
@@ -84,7 +84,7 @@ A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), S
 **Form sections:**
 1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional textarea).
 2. **Physical Dimensions (CM)** — `dimWidth`, `dimHeight`, `dimDepth` (all required, `min="1"`).
-3. **Reference Images** — dashed dropzone. Max **5 images** (`MAX_IMAGES = 5`). Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `usePresignedUpload("referenceImageUploader")` and appends the returned `Asset` to `uploadedAssets`. Thumbnails show in a wrap grid with `<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` (proxy; UT→GDrive fallback; `unoptimized` because the proxy is cookie-gated), remove buttons, and a click-to-enlarge lightbox (fixed `z-[100]` black overlay) whose `<Image>` reads `lightboxUrl` — itself a proxy URL by construction, also `unoptimized`.
+3. **Reference Images** — dashed dropzone. Max **5 images** (`MAX_IMAGES = 5`). Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `useAppwriteUpload({ bucketId: "reference-images", maxSizeMB: 16, allowedExtensions: [...] })` (`src/lib/use-appwrite-upload.ts`) and appends the returned `RecordedAsset` to `uploadedAssets`. Thumbnails show in a wrap grid with `<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` (auth-gated proxy; `unoptimized` because the proxy is cookie-gated), remove buttons, and a click-to-enlarge lightbox (fixed `z-[100]` black overlay) whose `<Image>` reads `lightboxUrl` — itself a proxy URL by construction, also `unoptimized`.
 
 **Submit handler** `submitNewJob`:
 1. Validates `uploadedAssets.length > 0`.
@@ -93,7 +93,7 @@ A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), S
 4. On success: clears `uploadedAssets`, resets upload state, `router.refresh()` inside `startTransition`.
 5. On error: surfaces the error message in a red banner.
 
-**Server side** (`src/app/actions/project.ts:8`): `createProject` requires `Role.BRAND`, runs a `Serializable` transaction — quota check (`projectCount < usageLimits`), verifies all `assetIds` are `READY` + owned by the caller, creates the project as `PENDING`, links assets via `asset.updateMany({ data: { projectId } })`. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
+**Server side** (`src/app/actions/project.ts:8`): `createProject` requires `Role.BRAND`, runs a TablesDB `runTransaction` — atomic quota decrement (`decrementRowColumn(users, usageLimits, value: 1, min: 0)`), verifies all `assetIds` are `READY` + owned by the caller (`listRows` total check), creates the project as `PENDING` (`createRow`), links assets via staged `updateRows`.
 
 > File upload mechanics are in `../file-storage-architecture.md`.
 
@@ -129,14 +129,14 @@ The body is a 2-column CSS grid. The left column (`aside`) is a fixed-width 420p
 - Project metadata grid: Name, SKU, Created, Brand.
 - Additional instructions (`whitespace-pre-wrap`) if `instructions` is non-empty.
 - Physical Dimensions (W / H / D cards) with unit fallback `cm`.
-- Reference Images — 2-column grid (`<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` — proxy URL, UT→GDrive fallback in place; `unoptimized` because the proxy is cookie-gated, see `file-storage-architecture.md` §4b), clickable (`cursor-zoom-in`) to open the lightbox. `failedRefImages` Set tracks `<Image onError>`; broken assets render a placeholder with `ImageIcon` and `title="Image unavailable"`.
+- Reference Images — 2-column grid (`<Image src="/api/v1/assets/{asset.id}/file" unoptimized>` — auth-gated proxy URL; `unoptimized` because the proxy is cookie-gated, see `file-storage-architecture.md` §5), clickable (`cursor-zoom-in`) to open the lightbox. `failedRefImages` Set tracks `<Image onError>`; broken assets render a placeholder with `ImageIcon` and `title="Image unavailable"`.
 - Request Changes sub-form (BRAND only, when toggled): textarea + Cancel + "Send Request" button. `sendForRevisions` calls `brandSendForRevisions(reviewJob.id, note)`. Disabled until note has content.
 
 **Right pane**:
 - If `reviewViewerProduct` is truthy, mount `<ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />` where `reviewViewerProduct` is a `useMemo` of `getViewerProduct(reviewJob)` keyed on `reviewJob`. Memoizing the product reference prevents a new object literal per render.
 - The viewer is **always mounted** while the modal is open. It is not paused/unmounted when the textarea is focused — the original "viewer pause" hack was removed because the underlying issue was a focus-stealing effect in `Modal` (fixed in `src/components/ui/Modal.tsx:78-105`). Once a user has rotated/panned/zoomed the model, the camera state is preserved across re-renders; the configurator only resets the camera on a fresh `product.src` *and* only if the user has not yet interacted (see `src/components/ThreeDConfigurator.tsx:42-46`).
 - The viewer exposes the **"View in your space"** AR button (bottom-right pill, `Smartphone` icon, `slot="ar-button"`) whenever the device supports AR — `canActivateAR` is true on Android Chrome (WebXR), other Android browsers (Scene Viewer app), and iOS Safari (Quick Look); the button is hidden on desktop. `product.usdz` is forwarded as `ios-src` when present for higher-fidelity Quick Look. See `src/components/ThreeDConfigurator.tsx:121-131` and `../pages/embed.md` §"AR button".
-- Below the viewer, a thin border-top + small mono caption **"Model last updated <relative>"** appears when the project has any `READY` MODEL_GLB/USDZ — `getLatestModelUpdatedAt()` picks the newest `updatedAt` and `formatRelativeShort()` renders "just now" / "Nm ago" / "Nh ago" / "Nd ago" / `<locale date>`. Tells the brand at-a-glance whether they're looking at the most recent resubmission. The viewer's GLB src is the proxy URL `/api/v1/assets/{id}/file` (`getViewerProduct()` reads `assetUrls.glb` which is rewritten to the proxy in `getUserProjects`), so a UT outage or deleted UT copy transparently falls back to the GDrive backup.
+- Below the viewer, a thin border-top + small mono caption **"Model last updated <relative>"** appears when the project has any `READY` MODEL_GLB/USDZ — `getLatestModelUpdatedAt()` picks the newest `updatedAt` and `formatRelativeShort()` renders "just now" / "Nm ago" / "Nh ago" / "Nd ago" / `<locale date>`. Tells the brand at-a-glance whether they're looking at the most recent resubmission. The viewer's GLB src is the proxy URL `/api/v1/assets/{id}/file` (`getViewerProduct()` reads `assetUrls.glb` which is rewritten to the proxy in `getUserProjects`), streamed from Appwrite Storage with the server API key — no public file access needed.
 - If no GLB is available, render "No GLB asset is available for review."
 
 ADMIN role does not see the sub-form, but the metadata rail + viewer still render.
@@ -167,14 +167,14 @@ ADMIN role does not see the sub-form.
 ## Server side — actions
 
 `src/app/actions/project.ts`:
-- **`createProject`** — BRAND only. Serializable transaction. Quota + asset check. Creates PENDING project, links assets. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
-- **`brandPublishProject`** — BRAND owner only. Verifies ownership + `status === COMPLETED`. Atomic `updateMany` → sets `PUBLISHED`. Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks`.
-- **`brandSendForRevisions`** — BRAND owner only. Verifies ownership, non-empty note, `status ∈ {COMPLETED, PUBLISHED}`. Serializable transaction: atomic `updateMany` to REVISIONS + create `RevisionRequest { projectId, note, requestedBy }` row. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. If was PUBLISHED, additionally revalidates `/embed/[id]`.
-- **`getUserProjects`** — caller's projects (newest first) with assets + brand + revisionRequests (newest first). Derived `referenceUrls`, `assetUrls { glb, usdz }`.
+- **`createProject`** — BRAND only. TablesDB transaction: atomic quota decrement (`usageLimits` = remaining budget), asset ownership/READY check. Creates PENDING project, links assets. Returns `{ success, projectId, remaining }` — only a plain object, never the raw Appwrite row. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
+- **`brandPublishProject`** — BRAND owner only. Guarded `updateRows` requiring ownership + `status === COMPLETED` → sets `PUBLISHED` (0 matched → error). Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks`.
+- **`brandSendForRevisions`** — BRAND owner only. Verifies ownership, non-empty note, `status ∈ {COMPLETED, PUBLISHED}`. TablesDB transaction: in-tx precondition check (`getRowSafe(projects, id, txId)` — ownership + status; failure → "Project is not in a revisable state") then staged `updateRow` by rowId → REVISIONS + `createRow(revision_requests)`. (Staged bulk `updateRows` responses cannot be used for guards — Appwrite returns `{ total: 0, rows: [] }` for staged operations, Phase 6 bug 2.) Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. If was PUBLISHED, additionally revalidates `/embed/[id]`.
+- **`getUserProjects`** — caller's projects (newest first) with assets + brand + revisionRequests (newest first), via batched TablesDB queries + `buildTaskJob()`. Derived `referenceUrls`, `assetUrls { glb, usdz }`.
 
 `src/app/actions/admin.ts`:
-- **`getAllTasks`** — ADMIN only. All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email).
-- **`adminSubmitProject`** — ADMIN only. Verifies GLB (and USDZ) are READY models. Single `prisma.$transaction`: atomic `updateMany` requiring `status ∈ {PENDING, REVISIONS}` → sets `COMPLETED`; archives any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED` (keeps `projectId`); links the new GLB/USDZ. Post-commit, fires `UTApi.deleteFiles(archivedKeys)` fire-and-forget so old UploadThing copies are removed (GDrive backups retained). Same action covers initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED). See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` "Model archival on replacement" for the storage view.
+- **`getAllTasks`** — ADMIN only. All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email), via batched TablesDB queries + `buildTaskJob()`.
+- **`adminSubmitProject`** — ADMIN only. Verifies GLB (and USDZ) are READY models. TablesDB `runTransaction`: in-tx precondition check (`getRowSafe(projects, id, txId)` requires `status ∈ {PENDING, REVISIONS}`; failure → "Project is no longer available to submit") then staged `updateRow` by rowId → sets `COMPLETED`; archives any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED` (keeps `projectId`); links the new GLB/USDZ. **No post-commit cleanup** — archived files are always kept (archived models stay viewable via the proxy; the legacy `utapi.deleteFiles` branch was removed in Phase 5). Same action covers initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED). See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` §10 for the storage view.
 
 ---
 
@@ -197,15 +197,15 @@ ADMIN role does not see the sub-form.
 | Published modal | `src/app/tasks/TasksClient.tsx:1045` |
 | Lightbox | `src/app/tasks/TasksClient.tsx:1212` |
 | `BRAND_LABEL` / `getStatusLabel` | `src/lib/status.ts` |
-| `createProject` action | `src/app/actions/project.ts:8` |
-| `brandPublishProject` action | `src/app/actions/project.ts:60` |
-| `brandSendForRevisions` action | `src/app/actions/project.ts:89` |
-| `getUserProjects` action | `src/app/actions/project.ts:135` |
-| `adminSubmitProject` action | `src/app/actions/admin.ts:72` |
-| `getAllTasks` action | `src/app/actions/admin.ts:8` |
+| `createProject` action | `src/app/actions/project.ts:28` |
+| `brandPublishProject` action | `src/app/actions/project.ts:115` |
+| `brandSendForRevisions` action | `src/app/actions/project.ts:162` |
+| `getUserProjects` action | `src/app/actions/project.ts:252` |
+| `adminSubmitProject` action | `src/app/actions/admin.ts:73` |
+| `getAllTasks` action | `src/app/actions/admin.ts:26` |
 
 ## See also
 
 - [`./admin.md`](./admin.md) — admin-only `/admin/tasks` board and modal flows.
-- [`../file-storage-architecture.md`](../file-storage-architecture.md) — UploadThing + GDrive + `usePresignedUpload` hook.
+- [`../file-storage-architecture.md`](../file-storage-architecture.md) — Appwrite Storage + `useAppwriteUpload` hook.
 - [`../WEBSITE.md`](../WEBSITE.md) §6, §9, §10 — full state machine, data model, action reference.

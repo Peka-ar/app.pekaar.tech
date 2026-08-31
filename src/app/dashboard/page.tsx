@@ -5,7 +5,8 @@ import { getUserProjects } from "@/app/actions/project";
 import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 import { formatDistanceToNow } from 'date-fns';
 import { Suspense } from 'react';
-import { prisma } from "@/lib/prisma";
+import { Query } from "node-appwrite";
+import { DB, AnalyticsEventRow, listAllRows } from "@/lib/db";
 import { formatCount } from "@/lib/utils";
 import { Card, CardHeader, CardBody } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -38,8 +39,14 @@ async function fetchDashboardData(): Promise<DashboardData> {
 }
 
 async function DashboardContent() {
-  await requirePrincipalOrRedirect();
-  const data = await fetchDashboardData();
+  const principal = await requirePrincipalOrRedirect();
+
+  const [data, allEvents] = await Promise.all([
+    fetchDashboardData(),
+    listAllRows<AnalyticsEventRow>(DB.analyticsEvents, [
+      Query.equal("brandId", principal.userId),
+    ]).catch(() => [] as AnalyticsEventRow[]),
+  ]);
 
   if (data.error) {
     return <DashboardError />;
@@ -48,22 +55,17 @@ async function DashboardContent() {
   const projects = data.projects;
   const recentProjects = projects.slice(0, 3);
 
-  const projectIds = projects.map(p => p.id);
-  const userId = projects[0]?.brand.id;
+  const projectIds = projects.map((p) => p.id);
+  const projectIdSet = new Set(projectIds);
+  const events = allEvents.filter((e) => projectIdSet.has(e.projectId));
 
   let totalViews = 0;
   let arLaunches = 0;
-  let totalInteractions = 0;
-
-  if (projectIds.length > 0 && userId) {
-    const events = await prisma.analyticsEvent.findMany({
-      where: { brandId: userId, projectId: { in: projectIds } },
-    });
-
-    totalViews = events.filter(e => e.eventType === 'VIEW').length;
-    arLaunches = events.filter(e => e.eventType === 'AR_LAUNCH').length;
-    totalInteractions = events.length;
+  for (const event of events) {
+    if (event.eventType === 'VIEW') totalViews++;
+    else if (event.eventType === 'AR_LAUNCH') arLaunches++;
   }
+  const totalInteractions = events.length;
 
   const interactionRate = totalViews > 0 ? Math.round((totalInteractions / totalViews) * 100) : 0;
   const conversionLift = totalViews > 0 ? ((totalInteractions / totalViews) * 100).toFixed(1) : '0.0';
@@ -99,54 +101,33 @@ async function DashboardContent() {
     }
   ];
 
+  const now = new Date();
   const monthlyViewCounts: number[] = [];
   const monthLabels: string[] = [];
 
+  const monthMap = new Map<string, number>();
   for (let i = 0; i < 12; i++) {
-    const d = new Date();
-    d.setMonth(d.getMonth() - (11 - i));
-    d.setDate(1);
-    d.setHours(0, 0, 0, 0);
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
     monthLabels.push(d.toLocaleDateString('en-US', { month: 'short' }));
-    monthlyViewCounts.push(0);
+    monthMap.set(`${d.getFullYear()}-${d.getMonth()}`, 0);
   }
 
-  if (projectIds.length > 0 && userId) {
-    const twelveMonthsAgo = new Date();
-    twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
-    twelveMonthsAgo.setDate(1);
-    twelveMonthsAgo.setHours(0, 0, 0, 0);
+  const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
 
-    const recentEvents = await prisma.analyticsEvent.findMany({
-      where: {
-        brandId: userId,
-        projectId: { in: projectIds },
-        eventType: 'VIEW',
-        createdAt: { gte: twelveMonthsAgo }
-      },
-      select: { createdAt: true }
-    });
-
-    const monthMap = new Map<string, number>();
-    for (let i = 0; i < 12; i++) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - (11 - i));
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      monthMap.set(key, 0);
-    }
-
-    for (const event of recentEvents) {
-      const d = new Date(event.createdAt);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
+  for (const event of events) {
+    if (event.eventType !== 'VIEW') continue;
+    const d = new Date(event.$createdAt);
+    if (d < twelveMonthsAgo) continue;
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    if (monthMap.has(key)) {
       monthMap.set(key, (monthMap.get(key) || 0) + 1);
     }
+  }
 
-    for (let i = 0; i < 12; i++) {
-      const d = new Date();
-      d.setMonth(d.getMonth() - (11 - i));
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      monthlyViewCounts[i] = monthMap.get(key) || 0;
-    }
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - (11 - i));
+    const key = `${d.getFullYear()}-${d.getMonth()}`;
+    monthlyViewCounts[i] = monthMap.get(key) || 0;
   }
 
   const maxCount = Math.max(...monthlyViewCounts, 1);

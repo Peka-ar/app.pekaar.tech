@@ -43,19 +43,21 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 
 | Layer | Tech | Notes |
 |---|---|---|
-| Framework | **Next.js 16** (App Router, Turbopack) | `next.config.mjs` — `images.remotePatterns` retains `*.ufs.sh` for direct uploads + seed URLs. Asset proxy is reached through `unoptimized` `<Image>` consumers, not via `/_next/image` (see §5). |
+| Framework | **Next.js 16** (App Router, Turbopack) | `next.config.mjs` — `images.remotePatterns` retains `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (Appwrite CDN). Asset proxy is reached through `unoptimized` `<Image>` consumers, not via `/_next/image` (see §5). |
+| Hosting | **Appwrite Sites** — site `peka-ar`, SSR adapter, Node 22, auto-deploy from `Peka-ar/website` `main` | Production handbook: `specs/deployment.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/lib/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars). Vercel project deleted at migration (commit "v2 - appwrite migration"). |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | PostCSS-based, tokens in `globals.css` |
 | 3D | **Google `<model-viewer>` 4.1.0/4.2.0** via `next/script` | No SSR — dynamically imported |
-| Auth | **NextAuth v5** (`next-auth@5.0.0-beta.31`), JWT strategy, Credentials provider | `src/auth.ts`, `src/auth.config.ts`, `src/proxy.ts` |
-| DB | **Prisma 7** + `@prisma/adapter-pg` on **Supabase Postgres** | `prisma/schema.prisma`, `src/lib/prisma.ts` |
-| File storage | **UploadThing v7** (`uploadthing@7.7.4`, `@uploadthing/react@7.3.3`) | appId `7r8xhgyw3k`, region `sea1`, CDN `*.ufs.sh` |
-| Backup storage | **Google Drive** via OAuth2 refresh token (`googleapis@173`) | primary backup + transparent fallback for asset reads via `GET /api/v1/assets/[assetId]/file` |
-| Email | **Nodemailer** (`nodemailer@7.0.0`) via **Gmail SMTP** (`smtp.gmail.com:587`) | transactional auth emails (OTP, password reset). Requires `GMAIL_USER` + `GMAIL_APP_PASSWORD` (App Password generated from a 2FA-enabled Google account). |
+| Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client hooks + SSR helpers) + `node-appwrite` (server) | `src/app/api/appwrite/[...appwrite]/route.ts` (handlers), `src/app/providers.tsx`, `src/lib/appwrite.ts`, `src/lib/auth-guards.ts` |
+| DB | **Appwrite TablesDB** (`studiov`, 5 tables) + `node-appwrite` client | `src/lib/db.ts`, `src/lib/appwrite-config.ts`, `src/lib/enums.ts` (edge-safe enum module). **Prisma removed entirely in Phase 5** |
+| File storage | **Appwrite Storage** — 2 buckets: `models` (ADMIN-create, 150 MB) + `reference-images` (BRAND-create, 16 MB) | browser-direct uploads via session-authenticated client; in-app reads via auth-gated proxy; published embeds via direct CDN URLs with publish-time `read:any` grants. Full spec: `file-storage-architecture.md` |
+| Email | **Appwrite Cloud email** (Gmail SMTP configured in console: sender "Peka.ar", `studiov3242@gmail.com`) | transactional auth emails — Appwrite's built-in **verification** + **recovery** templates; click URL passed per-call via `createVerification({ url })` / `createRecovery({ url })`. Legacy Nodemailer stack (`src/lib/emails.ts`, `mail.ts`) is dead code (zero consumers, deleted in Phase 5) |
 | Theming | **next-themes** (`next-themes@0.4.6`) | light/dark, `attribute="class"` |
 | Dates | **date-fns** (`date-fns@4.4.0`) | `formatDistanceToNow` on dashboard |
-| Passwords | **bcryptjs** (12-round salt) | `src/lib/password.ts` |
+| Passwords | **Appwrite** (Argon2, hashed server-side, app never stores them) | |
 
 **Scripts:** `npm run dev` · `npm run build` · `npm run start` · `npm run lint` (eslint)
+
+**Env vars:** `APPWRITE_API_KEY` (local/Vercel) — on Appwrite Sites the same key is set as the site variable `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved there); read via the fallback in `src/lib/appwrite.ts`. Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`. Full reference: `specs/deployment.md` §3 + `.env.example`.
 
 ---
 
@@ -63,19 +65,16 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 
 ```
 website/
-├── prisma/
-│   ├── schema.prisma          # User, Project, Asset, Token, AnalyticsEvent + enums
-│   ├── seed.ts                # env-driven admin + demo brand + 3 projects (Khronos/Unsplash URLs)
-│   ├── migrations/            # Prisma migrations
-│   └── generated/client/      # generated Prisma client (imported as @/generated/prisma/client)
 ├── public/
 │   └── embed-viewer.html      # static template for the public 3D embed (read by /embed route handler)
 ├── src/
 │   ├── app/                   # Next.js App Router
-│   │   ├── layout.tsx         # root layout: fonts + ThemeProvider + TopNav
+│   │   ├── layout.tsx         # root layout: fonts + <Providers> (AppwriteProvider + ThemeProvider) + TopNav
+│   │   ├── providers.tsx      # "use client" — AppwriteProvider (SSR session) wrapping ThemeProvider
 │   │   ├── page.tsx           # / landing
 │   │   ├── globals.css        # Tailwind v4 + design tokens + component classes
 │   │   ├── loading.tsx        # root loading spinner
+│   │   │                      # + segment loading.tsx in auth/, onboarding/, dashboard/, tasks/, analytics/, integrations/, notifications/, admin/ — framed nav feedback during RSC navigation (Phase 6)
 │   │   ├── auth/              # /auth, /auth/verify, /auth/reset-password
 │   │   ├── onboarding/        # /onboarding (5-step wizard)
 │   │   ├── dashboard/         # /dashboard + DashboardSkeleton + DashboardError
@@ -86,10 +85,10 @@ website/
 │   │   ├── admin/             # /admin/dashboard, /admin/users, /admin/tasks, /admin/analytics
 │   │   ├── embed/[projectId]/ # public iframe 3D viewer (route handler + static HTML)
 │   │   ├── privacy/ terms/    # static placeholder legal pages
-│   │   ├── actions/           # server actions: auth.ts, project.ts, admin.ts
+│   │   ├── actions/           # server actions: auth.ts, project.ts, admin.ts, admin-users.ts, admin-analytics.ts, analytics.ts
 │   │   └── api/               # see §5 API routes
 │   ├── components/
-│   │   ├── auth/              # SignInForm, SignUpForm, ForgotPasswordForm, ResetPasswordForm, OtpInput
+│   │   ├── auth/              # SignInForm, SignUpForm, ForgotPasswordForm, ResetPasswordForm
 │   │   ├── dashboard/         # DashboardLayout, NotificationBell, MobileNavDrawer
 │   │   ├── admin/             # AdminLayout, AdminMobileNavDrawer
 │   │   ├── ui/                # Alert, Badge, Button, Card, EmptyState, FormField, Input, Label, LinkButton, Modal, Select, Skeleton, Table, Textarea, cn
@@ -98,31 +97,30 @@ website/
 │   │   ├── ThreeDConfigurator.tsx
 │   │   └── ThemeProvider.tsx, ThemeToggle.tsx
 │   ├── lib/
-│   │   ├── prisma.ts          # singleton Prisma client
-│   │   ├── auth-guards.ts     # requirePrincipal() — canonical auth resolver
-│   │   ├── password.ts        # hashPassword / verifyPassword (bcrypt, 12 rounds)
-│   │   ├── emails.ts          # sendVerificationOtpEmail / sendPasswordResetEmail (Nodemailer)
-│   │   ├── mail.ts            # getTransporter() factory (Gmail SMTP)
-│   │   ├── notifications.ts   # getRecentProjectActivity()
-│   │   ├── status.ts          # PROJECT_STATUS_META map → Badge tone/icon/label
+│   │   ├── db.ts              # TablesDB data layer: row types, getTablesDB(), getRowSafe, listAllRows, countRows, runTransaction, groupBy
+│   │   ├── enums.ts           # edge-safe const enums + types (ProjectStatus/AssetStatus/AssetType/UserStatus/EventType/Role) — client-importable, zero SDK imports
+│   │   ├── project-augment.ts # buildTaskJob()/usersToTaskBrand()/requesterLiteFromUsers() — TablesDB row → client TaskJob shape
+│   │   ├── appwrite-config.ts # edge-safe Appwrite constants (endpoint, projectId, SESSION_COOKIE, DB/table/bucket ids) + buildFileUrl/bucketForAssetType/mime defaults — no SDK imports
+│   │   ├── appwrite.ts        # APPWRITE_API_KEY + createAdminClient() / createSessionClient() / createPublicClient() factories
+│   │   ├── auth-guards.ts     # requirePrincipal() — canonical auth resolver (Appwrite session + users-table row), React cache()-deduped per request (Phase 6); re-exports Role from enums.ts
+│   │   ├── notifications.ts   # getRecentProjectActivity() (TablesDB `listRows`)
+│   │   ├── status.ts          # PROJECT_STATUS_META map → Badge tone/icon/label (imports enums from @/lib/enums)
 │   │   ├── embed-liveness.ts  # EMBED_LIVENESS_THRESHOLDS + getLivenessBadge + formatLastSeen
 │   │   ├── types.ts           # Product interface + PRODUCTS[] demo data
 │   │   ├── utils.ts           # generateEmbedCode, formatCount, formatChange, date helpers
-│   │   ├── uploadthing.ts     # generated useUploadThing helpers
+│   │   ├── use-appwrite-upload.ts # client upload hook: useAppwriteUpload → { upload, isUploading, progress, error, reset }
 │   │   ├── use-click-outside.ts, use-media-query.ts
-│   │   ├── hooks/use-presigned-upload.ts   # wraps useUploadThing → {upload, isUploading, error, reset}
-│   │   └── storage/           # types.ts, gdrive-adapter.ts, index.ts (no S3 adapter — UploadThing handles it)
+│   │   └── (removed in Phase 4/5: prisma.ts, password.ts, emails.ts, mail.ts, uploadthing-server.ts, uploadthing.ts, hooks/use-presigned-upload.ts, storage/)
 │   ├── assets/fonts/          # local woff2: Cormorant, Inter, JetBrains
-│   ├── auth.ts                # NextAuth instance (Credentials + JWT)
-│   ├── auth.config.ts        # Edge-compatible config (callbacks: jwt, session)
-│   ├── proxy.ts               # middleware (route gating + onboarding enforcement)
+│   ├── proxy.ts               # proxy (middleware) — cookie-presence route gating only
 │   └── types/                 # ambient type augmentations
+├── scripts/                   # sync-admin.ts (Appwrite bootstrap), seed-appwrite.ts (demo seed)
 ├── design.md                  # design system spec (read alongside §9 below)
 ├── specs/                     # ← you are here
-└── tasks/                     # migration records (plan.md, todo.md, revert-to-uploadthing.md)
+└── tasks/                     # migration records (plan.md, todo.md, revert-to-uploadthing.md, appwrite-migration.md)
 ```
 
-**Key path aliases** (tsconfig): `@/*` → `src/*`, `@/generated/prisma/client` → `prisma/generated/client`.
+**Key path alias** (tsconfig): `@/*` → `src/*`.
 
 ---
 
@@ -134,9 +132,9 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 |---|---|---|---|---|
 | `/` | `src/app/page.tsx` | Public | Marketing landing: Hero, TrustMarquee, sandbox (ProductCatalog + ThreeDConfigurator), Stats, BentoFeatures, GradientCTA, footer with **Privacy** (`/privacy`) + **Terms** (`/terms`) links. The footer is a single `max-w-7xl` flex row (`page.tsx:25-43`) — three brand badges (W3C WebXR, CORS, Model-Viewer 4.0) on the left, two legal links on the right, separated by `•` characters. Legal links are bare `<Link href="/privacy">` / `<Link href="/terms">` with the same mono-uppercase styling as the badges. |
 | `/terms` `/privacy` | `src/app/{terms,privacy}/page.tsx` | Public | Static placeholder legal pages (replace before launch) |
-| `/auth` | `src/app/auth/page.tsx` → `AuthClient.tsx` | Public (redirects logged-in+onboarded → `/dashboard`) | 3-view form: signin / signup / forgot-password. Sign-in screen's CTA reads **"Sign Up"** (`SignInForm.tsx:136`) — renamed from the prior "Request Access" copy. TopNav is hidden on this route (and all `/auth/*` sub-routes) via `HIDDEN_ROUTES` in `TopNav.tsx:8`. |
-| `/auth/verify` | `src/app/auth/verify/page.tsx` | Public | Magic-link email verification (`?token=...` → `verifyEmail`) |
-| `/auth/reset-password` | `src/app/auth/reset-password/page.tsx` | Public | New-password form (`?token=...` → `resetPassword`) |
+| `/auth` | `src/app/auth/page.tsx` → `AuthClient.tsx` | Public (existing session → role-aware redirect: not onboarded → `/onboarding`, ADMIN → `/admin/dashboard`, BRAND → `/dashboard`) | 3-view form: signin / signup / forgot-password. Sign-in screen's CTA reads **"Sign Up"** (`SignInForm.tsx:136`) — renamed from the prior "Request Access" copy. TopNav is hidden on this route (and all `/auth/*` sub-routes) via `HIDDEN_ROUTES` in `TopNav.tsx:8`. |
+| `/auth/verify` | `src/app/auth/verify/page.tsx` | Public | Appwrite email-verification link (`?userId=...&secret=...` → `updateVerification` via public client). Success card, **no auto session** — user signs in manually |
+| `/auth/reset-password` | `src/app/auth/reset-password/page.tsx` → `ResetPasswordForm` | Public | New-password form (`?userId=...&secret=...` → `updateRecovery` via public client, 1-hr expiry) |
 | `/onboarding` | `src/app/onboarding/page.tsx` → `OnboardingClient.tsx` | Logged-in, not onboarded | 5-step wizard → `completeOnboarding` |
 | `/dashboard` | `src/app/dashboard/page.tsx` | BRAND/ADMIN + onboarded | Metrics, 12-mo chart, recent tasks, quick links — **see `pages/dashboard.md`** |
 | `/tasks` | `src/app/tasks/page.tsx` → `TasksClient.tsx` | BRAND/ADMIN + onboarded | Kanban + list; create/approve/upload — **see `pages/tasks.md`** |
@@ -155,59 +153,43 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 
 ## 5. API routes (`src/app/api/`)
 
+### `GET|POST /api/appwrite/[...appwrite]` — Appwrite SSR auth handlers
+- **File:** `src/app/api/appwrite/[...appwrite]/route.ts:1` (`createAppwriteHandlers` from `@appwrite.io/react/handlers/next`)
+- Exposes sign-in/sign-up/sign-out/OAuth-callback routes under `/api/appwrite/*`. Creates the session cookie (`appwrite-session-<projectId>`, httpOnly, secure, sameSite=lax) and redirects to `redirects.success` (`/dashboard`) or `redirects.failure` (`/auth`). Requires the server API key (scopes `users.read/write` + `sessions.write`).
+
 ### `GET /api/notifications`
 - **Auth:** delegated to `getRecentProjectActivity()` → `requirePrincipal()`.
 - **Responses:** `200` `NotificationProject[] = { id, name, status, createdAt }[]` (10 newest of caller's projects) · `401`/`403`/`500` all return `[]` (graceful degrade for `NotificationBell`).
 - **File:** `src/app/api/notifications/route.ts:1`
 
-### `GET|POST /api/uploadthing`
-- **File:** `src/app/api/uploadthing/route.ts:1` (`createRouteHandler`) · router in `src/app/api/uploadthing/core.ts:1`
-- **Three uploaders** (all call `createAssetAndBackup` on completion → create `Asset` READY + fire-and-forget GDrive backup):
-
-| Endpoint | File type | Max size | Auth | AssetType |
-|---|---|---|---|---|
-| `referenceImageUploader` | `image` | 16MB, 1 file | `Role.BRAND` | `REFERENCE_IMAGE` |
-| `modelGlbUploader` | `blob` | 128MB, 1 file | `Role.ADMIN` | `MODEL_GLB` |
-| `modelUsdzUploader` | `blob` | 128MB, 1 file | `Role.ADMIN` | `MODEL_USDZ` |
-
-- `createAssetAndBackup` (`core.ts:10`) persists `{ id: assetId (UUID), key: file.key (real UT key), url: file.ufsUrl, ownerId, originalName, ... }`, then async-backs-up to GDrive with `<assetId>.<ext>` as the backup filename. `asset.id` = UploadThing `customId` = GDrive filename base — the single cross-storage tracker. See `file-storage-architecture.md` §12.
+### Uploads — no API route (Phase 4)
+Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage directly (`storage.createFile` via the session-authenticated `useAppwrite()` client), then the `recordAssetUpload` **server action** (`src/app/actions/record-asset.ts:23`) creates the TablesDB `assets` row. Bucket `create` permissions gate the role (BRAND → `reference-images`, ADMIN → `models`).
 
 ### `GET /api/auth/clear-session`
-- **File:** `src/app/api/auth/clear-session/route.ts:1`
-- **Purpose:** Clears stale JWT session cookies when the DB user record is gone. Called by `requirePrincipalOrRedirect()` on `StaleSessionError`. Calls `signOut({ redirect: false })` (works in route handlers, unlike server components where `cookies().set()` is read-only), then redirects to `/auth`. Route is intentionally omitted from the proxy matcher to avoid bounce loops.
+- **File:** DELETED in Appwrite migration Phase 1. `StaleSessionError` now redirects directly to `/auth` from `requirePrincipalOrRedirect()` (see §7).
 
 ### `GET|POST /api/auth/[...nextauth]`
-- **File:** `src/app/api/auth/[...nextauth]/route.ts:1` (re-export of `handlers` from `src/auth.ts:8`)
-- Standard NextAuth v5 endpoints (`/signin`, `/callback/credentials`, `/session`, …). Credentials provider verifies email+password via `verifyPassword`; requires `emailVerified`.
+- **File:** DELETED in Appwrite migration Phase 1 — replaced by `GET|POST /api/appwrite/[...appwrite]` above.
 
 ### `POST /api/sdk/v1/events` — **public**
-- **File:** `src/app/api/sdk/v1/events/route.ts:5`
+- **File:** `src/app/api/sdk/v1/events/route.ts:1`
 - **Body:** `{ eventType: "VIEW"\|"INTERACTION"\|"AR_LAUNCH", sessionId: string, projectId: string }`
 - **Responses:** `201 { success: true, eventId }` · `400` missing/invalid · `404` project not PUBLISHED · `500`
-- Creates `analyticsEvent` with the project's `brandId`. CORS `*` via `next.config.mjs` headers for `/api/sdk/*`.
+- Creates a TablesDB `analytics_events` row with the project's `brandId` (`createRow`, `rowId: ID.unique()`). CORS `*` via `next.config.mjs` headers for `/api/sdk/*`.
 
 ### `GET /api/sdk/v1/config/[projectId]` — **public, cached**
-- **File:** `src/app/api/sdk/v1/config/[projectId]/route.ts:5`
-- **Response `200`:** `{ assetUrls: { glb, usdz }, sdkConfig }` with `Cache-Control: public, s-maxage=60, stale-while-revalidate=86400, Vary: Accept-Encoding`
-- `404` if project missing, not `PUBLISHED`, or has no GLB. `500` on error.
+- **File:** `src/app/api/sdk/v1/config/[projectId]/route.ts:1`
+- **Response `200`:** `{ assetUrls: { glb, usdz }, sdkConfig }` — `glb`/`usdz` derived on-the-fly by `resolveAssetUrl(asset)` (`route.ts:6`): `buildFileUrl(bucketForAssetType(type), fileId)` for `provider === "appwrite"` rows (always includes the required `?project=<id>` param — Phase 6 bug 3), else the stored `url` (legacy/external providers). Publicly readable because the storage file carries `read:any` after publish — see §6. Fallback to the first non-READY row per type when no READY exists. `Cache-Control: public, s-maxage=60, stale-while-revalidate=86400, Vary: Accept-Encoding`
+- `404` if project missing or not `PUBLISHED` (the GLB check is implicit — an empty `glb` key yields the embed's "not currently available" state). `500` on error.
 
-### `GET /api/admin/assets/[assetId]/gdrive-download` — **admin-only redirect**
-- **File:** `src/app/api/admin/assets/[assetId]/gdrive-download/route.ts:1`
-- **Auth:** `requirePrincipal({ roles: [Role.ADMIN] })`; any non-admin gets the error JSON (status codes from the auth guard).
-- **Responses:** `302 → https://drive.google.com/file/d/{gdriveFileId}/view` · `404 { error: "No GDrive backup available" }` · `500` on error
-- Looks up the `Asset` row by id and 302-redirects to the GDrive web UI for the file id stored in `asset.gdriveFileId`. Used by the "Previous models" UI in the admin modal to let an admin retrieve a backup of an archived model that has already been deleted from UploadThing. No signed-URL minting — admin-only auth gate is sufficient for MVP.
-
-### `GET /api/v1/assets/[assetId]/file` — **proxy with UT→GDrive transparent fallback**
+### `GET /api/v1/assets/[assetId]/file` — **auth-gated streaming proxy**
 - **File:** `src/app/api/v1/assets/[assetId]/file/route.ts:1`
-- **Auth gate:** when `asset.project.status === PUBLISHED` the route is **public**. For any other status it calls `requirePrincipal({ roles: [ADMIN, BRAND] })` and verifies `asset.project.brandId === principal.userId` when the principal is a `BRAND` (admins always pass). 401/403 JSON for unauthenticated/forbidden.
-- **Delivery flow:** invokes `deliverAsset({ url, gdriveFileId, mimeType, originalName, preferGDrive }, request.signal)` (`src/lib/storage/asset-delivery.ts:1`):
-  - **Default (non-`ARCHIVED` assets):** GET `asset.url` (UploadThing public CDN) with `AbortController` timeout `UT_PRIMARY_TIMEOUT_MS = 8_000` and chained external signal from Next. Any non-2xx, network error, or timeout → fall back.
-  - **`ARCHIVED` assets (`AssetStatus.ARCHIVED`) — `preferGDrive: true`:** GDrive is consulted **first** with a tight `GDRIVE_PRIMARY_TIMEOUT_MS = 2_000` budget (UT URLs for archived assets are historically the ones that 404). If the GDrive stream fails or times out, we fall through to the UT 8s path; if both fail, `502`. Logs `[asset-delivery] ARCHIVED/legacy asset=… preferring GDrive over flaky UT URL` at entry.
-  - GDrive fallback path (default): requires a non-null `asset.gdriveFileId` and a configured `getGDriveClient()` (see `gdrive-client.ts:1`). On success returns the stream from `drive.files.get({ fileId, alt: "media" }, { responseType: "stream", signal })`.
-- **Responses:** `200` with `Content-Type` (UT `content-type` header or `asset.mimeType`), `Content-Length` if known, `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control` (`public, max-age=300, swr=86400` for PUBLISHED; `private, max-age=60` otherwise), and `x-source: uploadthing|gdrive` for observability. `404 { error: "asset unavailable" }` if both providers fail or `gdriveFileId` is null; `502 { error: "backup provider not configured" | "asset unavailable" }` on GDrive env-miss / stream-error.
-- **Consumers:** every place that previously embedded an `Asset.url` now points to `/api/v1/assets/{assetId}/file` instead. **Server-side rewrites:** `getAllTasks` (`src/app/actions/admin.ts:65`) rewrites `referenceUrls` (REFERENCE_IMAGE) + `assetUrls` (MODEL_GLB/USDZ) + every `archivedAssetUrls[].url` row; `getUserProjects` (`src/app/actions/project.ts:191`) mirrors the same. The SDK config endpoint (`src/app/api/sdk/v1/config/[projectId]/route.ts:24`) emits proxy URLs for the public embed. **Client-side reads:** the public `<model-viewer>` in `public/embed-viewer.html:164`; every `<Image>` and `<a target="_blank">` in `src/app/admin/tasks/AdminTasksClient.tsx:253 (thumbnail), :383 (reference thumb), :453 (live GLB View), :510 (live USDZ View)`; reference thumbnails, lightbox, and `getViewerProduct`/`getAssets` helpers in `src/app/tasks/TasksClient.tsx` (lines `:81–93, :390, :479, :729, :821, :1253`).
-- **`<Image>` consumers:** every `<Image>` that points at the proxy carries the `unoptimized` prop — see `AdminTasksClient.tsx:253, :383` and `TasksClient.tsx:390, :479, :729, :821, :1253`. **Why:** Next's image optimizer at `/_next/image` does a server-side `fetch(href)` without forwarding request headers (per official Next docs at https://nextjs.org/docs/app/api-reference/components/image#src). The proxy's `requirePrincipal` cookie check therefore always rejects `/_next/image`'s no-cookie fetch and surfaces a misleading "received null" error. `unoptimized` makes the **browser** fetch the proxy URL directly (cookies attached), the proxy resolves the session, and bytes stream through. Reference thumbnails/lighboxes don't benefit meaningfully from Next image optimization (small fixed-size, already WebP-friendly). Public embed thumbnails use the same `unoptimized` pattern. `next.config.mjs` no longer needs `images.localPatterns` because no `<Image>` optimizes local-relative paths to the proxy anymore; we keep `remotePatterns: ['*.ufs.sh', 'images.unsplash.com']` for direct CDN uploads and seed URLs.
-- **Trade-off:** every asset read proxies through Vercel (single hop), giving us robust transparent GDrive fallback but doubled egress vs. embedding `Asset.url` directly. Acceptable at our scale; revisit if bandwidth becomes a constraint.
+- **Auth gate:** always `requirePrincipal({ roles: [ADMIN, BRAND] })`. BRAND passes if `asset.ownerId === principal.userId` **or** the linked project's `brandId === principal.userId` (unlinked uploads are viewable by their owner — fixes the pre-Phase-4 404-on-unlinked-assets bug). 401/403 JSON via the auth-guard error classes.
+- **Delivery flow** (`fetchAssetStream`, `route.ts:72`): `provider === "appwrite"` → `fetch("{endpoint}/storage/buckets/{bucket}/files/{fileId}/download")` with `X-Appwrite-Project` + `X-Appwrite-Key` headers, **streaming `res.body`** (web stream, no buffering); `provider ∈ {external, uploadthing}` (seed/legacy) → plain `fetch(asset.url)`.
+- **Responses:** `200` with stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present, and a `[asset-proxy]` log line. `404 { error: "asset unavailable" }` if the row is missing, status ∉ {READY, PUBLISHED, ARCHIVED}, or the upstream fetch fails.
+- **Consumers:** every in-app asset read — server-side rewrites in `getAllTasks`/`getUserProjects` (`src/lib/project-augment.ts:61` `proxyUrl`), and client-side compositions in `TasksClient.tsx` (`:81-93, :390, :479, :729, :821, :1253`) + `AdminTasksClient.tsx` (`:253, :383, :453, :510`). The public embed does **not** use this route (it reads direct CDN URLs from the SDK config — see §11).
+- **`<Image>` consumers:** every `<Image>` that points at the proxy carries the `unoptimized` prop. **Why:** Next's image optimizer at `/_next/image` does a server-side `fetch(href)` without forwarding request headers (per official Next docs at https://nextjs.org/docs/app/api-reference/components/image#src). The proxy's `requirePrincipal` cookie check therefore always rejects `/_next/image`'s no-cookie fetch and surfaces a misleading "received null" error. `unoptimized` makes the **browser** fetch the proxy URL directly (cookies attached), the proxy resolves the session, and bytes stream through. Reference thumbnails/lighboxes don't benefit meaningfully from Next image optimization (small fixed-size, already WebP-friendly). `next.config.mjs` keeps `remotePatterns: ['images.unsplash.com', 'fra.cloud.appwrite.io']` for seed + potential direct CDN reads.
+- **Trade-off:** every in-app read proxies through Vercel (single hop) — the public embed path avoids it entirely via CDN URLs. Acceptable at our scale; revisit if bandwidth becomes a constraint.
 
 ---
 
@@ -253,18 +235,18 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 ```
 
 **State machine (`ProjectStatus`):**
-- `PENDING` → `COMPLETED`: only via `adminSubmitProject` (ADMIN, atomic `updateMany` requiring `status: { in: [PENDING, REVISIONS] }`)
-- `REVISIONS` → `COMPLETED`: only via `adminSubmitProject` (ADMIN, same atomic guard as above)
-- `COMPLETED` → `PUBLISHED`: only via `brandPublishProject` (BRAND owner only, atomic `updateMany` requiring `COMPLETED` + `brandId: caller`)
-- `COMPLETED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner only, requires non-empty note; creates a `RevisionRequest` row in the same transaction)
-- `PUBLISHED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner only, requires note; embed stops serving on transition)
-- `REVISIONS` is re-entrant: the brand can request more revisions on a project that's already in REVISIONS (creates another `RevisionRequest` row; status remains REVISIONS)
+- `PENDING` → `COMPLETED`: only via `adminSubmitProject` (ADMIN; in-tx precondition check in a TablesDB transaction — `getRowSafe` read inside the transaction requires `status ∈ {PENDING, REVISIONS}` — failure → "Project is no longer available to submit")
+- `REVISIONS` → `COMPLETED`: only via `adminSubmitProject` (ADMIN, same guard)
+- `COMPLETED` → `PUBLISHED`: only via `brandPublishProject` (BRAND owner; guarded `updateRows` requiring `COMPLETED` + `brandId`)
+- `COMPLETED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner, requires non-empty note; creates a `revision_requests` row in the same transaction)
+- `PUBLISHED` → `REVISIONS`: only via `brandSendForRevisions` (BRAND owner, requires note; embed stops serving on transition)
+- `REVISIONS` is re-entrant: the brand can request more revisions on a project that's already in REVISIONS (creates another `revision_requests` row; status remains REVISIONS)
 - `PUBLISHED` is the only embed-servable state. All other states render the embed's "not available" placeholder.
 - The admin board shows 3 columns: `PENDING` (Queued), `REVISIONS` (Revisions Required), `COMPLETED` (Completed). `PUBLISHED` projects are read-only (show "Live on storefront" banner).
 - The brand's `/tasks` shows 4 columns. Labels are role-dependent — see `src/lib/status.ts`: `ADMIN_LABEL` and `BRAND_LABEL` with `getStatusLabel(status, role)` helper.
-- **Model replacement on REVISIONS:** when an admin resubmits a project that's already in `REVISIONS` (or any state with a prior model), the previous `MODEL_GLB`/`MODEL_USDZ` assets are atomically flipped to `AssetStatus.ARCHIVED` in the same `prisma.$transaction` as the new link + status flip. The old `Asset` rows stay linked to the project (`projectId` unchanged) so they appear under a "Previous models" collapsible in the admin modal. After commit, `UTApi.deleteFiles(keys)` is fired fire-and-forget to remove the UploadThing copies; the GDrive backup is intentionally retained (the asset's `gdriveFileId` remains valid) so any previous version can be retrieved directly from Drive. See `pages/admin.md` §3 and `file-storage-architecture.md` §"Model archival on replacement".
+- **Model replacement on REVISIONS:** when an admin resubmits a project that's already in `REVISIONS` (or any state with a prior model), the previous `MODEL_GLB`/`MODEL_USDZ` assets are flipped to `AssetStatus.ARCHIVED` inside the same TablesDB transaction as the new link + status flip (`runTransaction` in `lib/db.ts`). The old `assets` rows stay linked to the project (`projectId` unchanged) so they appear under a "Previous models" collapsible in the admin modal. **Archived files are always KEPT in Appwrite Storage** (user decision — archived models stay viewable via the proxy) with read:any preserved while the project is published; the legacy UploadThing cleanup branch was removed with the package in Phase 5. See `pages/admin.md` §3 and `file-storage-architecture.md` §10.
 
-**Quota:** `createProject` runs a `Serializable` transaction checking `project.count < user.usageLimits` (default 10 for BRAND; 9999 for seeded ADMIN). Throws "Usage limit exceeded. Please upgrade your plan."
+**Quota:** `createProject` runs a TablesDB transaction that atomically `decrementRowColumn(users, usageLimits, value: 1, min: 0)` — `usageLimits` is the **remaining budget** (default 10 for BRAND; 9999 for seeded ADMIN). Friendly error: "Usage limit exceeded. Please upgrade your plan."
 
 **Full action reference:** §8 below.
 
@@ -273,54 +255,51 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 ## 7. Auth & onboarding workflow
 
 ### Registration
-1. `SignUpForm` → `registerUser(formData)` (`auth.ts:82`): normalizes email, enforces password ≥ 6 chars. If an unverified user exists, re-hashes password + re-issues OTP; otherwise creates `BRAND` user with `usageLimits: 10`. Always issues a 6-digit OTP (hashed, 10-min expiry) via `issueVerificationOtp` → `sendVerificationOtpEmail` (Nodemailer via Gmail SMTP).
-2. Returns `{ email, verificationRequired: true }`; `SignUpForm` swaps to OTP view (`OtpInput` 6-box).
-3. `verifyEmailOtp(email, otp)` (`auth.ts:190`): validates against hashed `email_verification_otp` tokens (oldest-first via `verifyPassword`), sets `emailVerified`, deletes all OTP tokens.
-4. Auto `signIn("credentials")` → redirect to `/onboarding` (not onboarded) or `/dashboard`.
+1. `SignUpForm` → `registerUser(formData)` (`auth.ts:61`, admin client): normalizes email, enforces password ≥ 6 chars. Verified existing user ⇒ throw `Email already registered`; unverified ⇒ `updatePassword` + re-send; new ⇒ `Users.create(ID.unique(), email, password)` + `users` TableDB row (`role: "BRAND"`, `usageLimits: 10`, `onboarded: false`, `status: "ACTIVE"`) + `updateLabels(["BRAND"])`.
+2. Always sends a **link-based verification email** via `sendVerificationEmail(userId)` (mint session → `createVerification({ url })` → delete session; Appwrite appends `userId`+`secret` to the link).
+3. Returns `{ email, verificationRequired: true }`; `SignUpForm` swaps to a **"Check your inbox"** screen with a spam hint + resend button (`resendVerificationEmail`, `auth.ts:121`).
+4. User clicks the email link → `/auth/verify` → `updateVerification` → success card → **manual sign-in** (no auto session, deviation D2) → `getSessionPrincipal` routes to `/onboarding` (not onboarded) or `/dashboard`/`/admin/dashboard`.
 
 ### Login
-1. `SignInForm` → `preflightLogin(email, password)` (`auth.ts:51`): validates credentials **without** creating a session. Returns `{ status: "invalid_credentials" }` or `{ status: "valid", onboarded }`.
-2. On valid → `signIn("credentials")` (NextAuth). The Credentials `authorize` (`auth.ts:18`) requires `emailVerified` + valid `hashedPassword`; returns `null` if `user.status === 'SUSPENDED'` — preventing login for suspended users.
-3. JWT callback (`auth.config.ts:8`) copies `sub`, `role`, `id`, `onboarded` onto the token. Session callback surfaces them as `session.user.{id,role,onboarded}`.
+1. `SignInForm` → `signIn.emailPassword({ email, password, ... })` (`useAuth()` → `POST /api/appwrite/signin/email-password` → sets the session cookie). No `preflightLogin` anymore (deleted, deviation D5).
+2. On success → `getSessionPrincipal()` (`auth.ts:203`) reads the `users` row **and returns the session secret** → `SignInForm` calls `client.setSession(secret)` (provider client via `useAppwrite()`) so browser-direct SDK calls (uploads) are authenticated — SSR sign-in does not hydrate the client SDK (Phase 6 bug 1) → `router.push(postLoginPath(onboarded, role))`: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`.
+3. Errors mapped client-side from the `AppwriteException`: 401 / `user_invalid_credentials` / `user_not_found` → "Invalid email or password."; 429 / `*rate_limit*` → "Too many attempts. Please try again later."
+4. Role/onboarded gating happens per-request in `requirePrincipal` / `requirePrincipalOrRedirect` (reads the `users` TableDB row) — suspended users are rejected at the page boundary, not at login.
 
-### Magic-link verify (alt path)
-- `/auth/verify?token=...` → `verifyEmail(token)` (`auth.ts:125`): looks up `email_verification` UUID token (1-hr expiry), marks `emailVerified`, deletes token.
+### Email verify (Appwrite link-based — replaces the OTP + magic-link paths)
+- `/auth/verify?userId=...&secret=...` → `Account(createPublicClient()).updateVerification({ userId, secret })` directly in the page (`src/app/auth/verify/page.tsx:1`). Invalid/missing/expired → "Verification link is invalid or expired." Success card links to `/auth`. No session is created.
 
 ### Password reset
-- `ForgotPasswordForm` → `requestPasswordReset(email)` (`auth.ts:144`): always returns `{ success: true }` (no enumeration). If user exists, creates `password_reset` UUID (1-hr expiry), emails link.
-- `/auth/reset-password?token=...` → `ResetPasswordForm` → `resetPassword(token, password)` (`auth.ts:167`): enforces ≥ 6 chars, validates token, updates `hashedPassword`, deletes token.
+- `ForgotPasswordForm` → `requestPasswordReset(email)` (`auth.ts:134`, public client): **always returns `{ success: true }`** (no enumeration; failures logged). Appwrite emails the recovery link (1-hr expiry).
+- `/auth/reset-password?userId=...&secret=...` → `ResetPasswordForm({ userId, secret })` → `resetPassword(userId, secret, password)` (`auth.ts:150`): enforces ≥ 6 chars, `updateRecovery` on the public client. Invalid/expired → "Reset link is invalid or expired."
 
 ### Onboarding
 - `OnboardingClient` 5 steps: (1) company name [required], (2) pipeline explainer, (3) product category, (4) storefront platform, (5) catalog size. Steps 3–5 optional/skippable.
-- Final step → `completeOnboarding({ companyName, productCategory?, storefrontPlatform?, catalogSize? })` (`auth.ts:225`): requires principal, updates `User.{name, productCategory, storefrontPlatform, catalogSize, onboarded: true}`, calls `unstable_update({ user: { onboarded: true } })` to refresh the JWT, revalidates 5 paths, redirects to `/dashboard`.
+- Final step → `completeOnboarding({ companyName, productCategory?, storefrontPlatform?, catalogSize? })` (`auth.ts:245`): requires principal, updates `User.{name, productCategory, storefrontPlatform, catalogSize, onboarded: true}`. Appwrite sessions re-read the `users` row per request, so no JWT refresh is needed. Revalidates 5 paths, redirects to `/dashboard`.
 
 ### `requirePrincipal()` — canonical auth resolver
-- **File:** `src/lib/auth-guards.ts:40`
-- Calls `auth()`, then loads user from DB by `session.user.id` (falls back to `session.user.email` if not found — handles JWT ID mismatch gracefully). Returns typed `Principal { userId, email, role, onboarded, companyName }`.
-- Throws `UnauthenticatedError` (no session), `StaleSessionError extends UnauthenticatedError` (session valid but user not in DB — e.g., DB wiped), or `ForbiddenError` (role mismatch / not onboarded / account suspended).
-- **Suspended check:** after loading the user, if `user.status === 'SUSPENDED'` it throws `ForbiddenError("Account suspended")` (`auth-guards.ts:63`). This blocks access to every protected page, server action, and API route for suspended users.
-- Options: `{ roles?: Role[], requireOnboarded?: boolean }`. Used by **every** server action, protected page, and API handler.
+- **File:** `src/lib/auth-guards.ts:64`
+- Calls `createNextServerHelpers({ endpoint, projectId }).getLoggedInUser()` (reads the `appwrite-session-<projectId>` cookie), then loads the `users` TableDB row by `user.$id` via the admin client (`TablesDB.getRow({ databaseId: "studiov", tableId: "users", rowId })`). Returns typed `Principal { userId, email, role, onboarded, companyName }` — contract unchanged from the NextAuth era, so zero consumer edits were needed in the migration.
+- Throws `UnauthenticatedError` (no/invalid session), `StaleSessionError extends UnauthenticatedError` (session valid but no `users` row — e.g. DB wiped), or `ForbiddenError` (role mismatch / not onboarded / account suspended).
+- **Suspended check:** after loading the row, if `user.status === 'SUSPENDED'` it throws `ForbiddenError("Account suspended")`. Unlike the NextAuth era (which blocked login for suspended users), Appwrite allows login — this per-request check blocks every protected page, action, and API route for suspended users.
+- Options: `{ roles?: Role[], requireOnboarded?: boolean, allowUnonboarded?: boolean }`. `Role` is a string-literal const/type pair from the edge-safe `src/lib/enums.ts:1` (re-exported by `auth-guards.ts`). Used by **every** server action, protected page, and API handler.
 
 ### `requirePrincipalOrRedirect()` — page auth helper
-- **File:** `src/lib/auth-guards.ts:79`
-- Wraps `requirePrincipal()` specifically for pages (server components). On `StaleSessionError`: `redirect("/api/auth/clear-session")` — the route handler calls `signOut()` and redirects to `/auth`. On `UnauthenticatedError`: `redirect("/auth")`. On `ForbiddenError` (role/onboarding): `redirect("/dashboard")`. On success returns `Principal`. Route handler indirection is necessary because `cookies().set()` is read-only in server components — `signOut` cannot clear cookies from a page render.
+- **File:** `src/lib/auth-guards.ts:108`
+- Wraps `requirePrincipal()` for pages (server components). Redirect map: `UnauthenticatedError`/`StaleSessionError` → `/auth` (the `/api/auth/clear-session` route was deleted — Appwrite expires the cookie itself); suspended → `/auth`; role error → `/dashboard`; **not onboarded** → `/onboarding` (replaces the middleware's old onboarded check, which the edge runtime can no longer perform). The only page that renders for a not-onboarded user (`/onboarding`) opts out via `allowUnonboarded: true`.
 - 11 pages use it: `/tasks`, `/notifications`, `/integrations`, `/dashboard`, `/analytics`, `/onboarding`, `/admin/dashboard`, `/admin/users`, `/admin/tasks`, `/admin/analytics`.
 - **Not used** in API routes or server actions — those catch auth errors and return appropriate status codes.
 
-### Middleware (`src/proxy.ts:16`)
-**Protected route table** (prefix → required roles): `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics` → `["BRAND","ADMIN"]`. `/admin` → `["ADMIN"]`.
+### Proxy/middleware (`src/proxy.ts:1`)
+**Protected route table** (prefix → required roles): `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics` → `["BRAND","ADMIN"]`. `/admin` → `["ADMIN"]`. The table is retained for documentation; the edge runtime cannot call the Appwrite API, so it cannot verify role/onboarded — those checks run per-request in `requirePrincipalOrRedirect`/`requirePrincipal` (the pages already call them).
 
-**Logic order:**
-1. Logged-in + onboarded + on `/auth` → redirect `/dashboard`
-2. On `/onboarding` + not logged in → redirect `/auth`
-3. On `/onboarding` + onboarded → redirect `/dashboard`
-4. Public bypass: `/`, `/auth/*`, `/embed/*` → `next()`
-5. Protected + not logged in → redirect `/auth`
-6. Protected + logged in + wrong/missing role → redirect `/dashboard`
-7. Protected + logged in + `onboarded === false` → redirect `/onboarding`
-8. Otherwise → `next()`
+**Logic (Next 16 `export function proxy`, cookie-presence only):**
+1. `/onboarding` + no `appwrite-session-<projectId>` cookie → redirect `/auth`
+2. Public bypass: `/`, `/auth/*`, `/embed/*` → `next()`
+3. Protected route + no session cookie → redirect `/auth`
+4. Otherwise → `next()`
 
-**Matcher** (`proxy.ts:64`): `/dashboard/:path*`, `/tasks/:path*`, `/notifications/:path*`, `/integrations/:path*`, `/analytics/:path*`, `/admin/:path*`, `/auth/:path*`, `/onboarding/:path*`, `/embed/:path*`. **API routes are NOT in the matcher** — auth is enforced in-handler.
+**Matcher** (`proxy.ts:47`): `/dashboard/:path*`, `/tasks/:path*`, `/notifications/:path*`, `/integrations/:path*`, `/analytics/:path*`, `/admin/:path*`, `/auth/:path*`, `/onboarding/:path*`, `/embed/:path*`. **API routes are NOT in the matcher** — auth is enforced in-handler.
 
 > Deep dive: `pages/auth.md`.
 
@@ -333,118 +312,119 @@ All files start with `"use server"`. All auth via `requirePrincipal()`.
 ### `src/app/actions/auth.ts` (`auth.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `preflightLogin` | `(email, password) → { status: "invalid_credentials" } \| { status: "valid"; onboarded }` | None | Validate credentials without session (used before `signIn`) |
-| `resendVerificationOtp` | `(email) → { success; status: "invalid"\|"sent" }` | None | Re-issue OTP for unverified user (no-enumeration on verified/missing) |
-| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | Create BRAND user (usageLimits 10) or re-verify existing unverified; issues OTP |
-| `verifyEmail` | `(token) → { success: true }` | None | Magic-link verify; throws "Verification link is invalid or expired" |
-| `requestPasswordReset` | `(email) → { success: true }` | None | Always returns success; emails reset link if user exists |
-| `resetPassword` | `(token, password) → { success: true }` | None | ≥ 6 chars; throws "Reset link is invalid or expired" |
-| `verifyEmailOtp` | `(email, otp) → { success: true }` | None | 6-digit OTP verify; throws "Verification code is invalid or expired" |
-| `completeOnboarding` | `(input) → { success: true }` | `requirePrincipal()` | Sets name/category/platform/catalogSize + `onboarded: true`, refreshes JWT, revalidates 5 paths |
-| `logout` | `() => Promise<void>` | (signOut) | `signOut({ redirectTo: "/" })` |
+| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | Admin client: create BRAND user (`Users.create` + `users` TableDB row `{ role: "BRAND", usageLimits: 10, onboarded: false, status: "ACTIVE" }` + `updateLabels(["BRAND"])`) or re-verify existing unverified; sends link-based verification email. Throws "Email already registered" (verified existing), "Password must be at least 6 characters" |
+| `resendVerificationEmail` | `(email) → { success; status: "invalid"\|"sent" }` | None | Re-send verification email for unverified user (no-enumeration on verified/missing) |
+| `requestPasswordReset` | `(email) → { success: true }` | None | `createRecovery` on the **public client**; always returns success (no enumeration, failures logged) |
+| `resetPassword` | `(userId, secret, password) → { success: true }` | None | ≥ 6 chars; `updateRecovery` on the public client; throws "Reset link is invalid or expired" |
+| `completeOnboarding` | `(input) → { success: true }` | `requirePrincipal()` | Sets name/category/platform/catalogSize + `onboarded: true` via `TablesDB.updateRow`; `updateLabels([role])`; no JWT refresh needed (Appwrite re-reads the row per request), revalidates 5 paths |
+| `getSessionPrincipal` | `() → { onboarded; role; sessionSecret } \| null` | Session | `requirePrincipal()` in try/catch — used by `SignInForm` for post-login routing (replaces deleted `preflightLogin`); also returns the cookie session secret so `SignInForm` can `client.setSession(...)` (SSR sign-in does not hydrate the client SDK — Phase 6 bug 1) |
+| `logout` | `() => Promise<void>` | Session | `Account.deleteSession({ sessionId: "current" })` + cookie delete + redirect `/` |
 
 ### `src/app/actions/project.ts` (`project.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `createProject` | `(name, assetIds: string[], sku?, instructions?, dimensions?) → { success; project }` | `Role.BRAND` | Serializable txn: quota check, verify all `assetIds` are READY + owned, create PENDING project, link assets. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. Throws "Usage limit exceeded…" / "One or more assets not found or not ready" |
-| `brandPublishProject` | `(projectId) → { success }` | `Role.BRAND` (owner) | Verifies `project.brandId === principal.userId` and `project.status === COMPLETED`. Atomic `updateMany` → sets `PUBLISHED`. Throws "Only projects awaiting your review can be published" / "Project is not in a publishable state". Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks` |
-| `brandSendForRevisions` | `(projectId, note) → { success }` | `Role.BRAND` (owner) | Verifies ownership, non-empty note, and `status ∈ {COMPLETED, PUBLISHED}`. Serializable txn: atomic `updateMany` to REVISIONS + create `RevisionRequest { projectId, note, requestedBy }` row. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`, and `/embed/[id]` if was PUBLISHED |
-| `getUserProjects` | `() → AugmentedProject[]` | any role | Caller's projects (newest first) with assets + brand + revisionRequests; derived `referenceUrls`, `assetUrls { glb, usdz }` |
+| `createProject` | `(name, assetIds: string[], sku?, instructions?, dimensions?) → { success; projectId; remaining }` | `Role.BRAND` | Pre-check `usageLimits > 0` (users row), then `runTransaction` (TablesDB): `decrementRowColumn(users, usageLimits, value: 1, min: 0)` — atomic quota guard, `usageLimits` is the **remaining budget**; verify all `assetIds` exist + READY + owned via `listRows(assets, equal("$id", assetIds))` (`.total` must equal `assetIds.length`; skipped when empty); `createRow(projects, ID.unique())` with JSON-stringified `dimensions`; `updateRows` links assets. Returns `{ success, projectId, remaining }` — only a **plain object**, never the raw Appwrite row (whose prototype/metadata breaks Server→Client serialization). Revalidates `/tasks`, `/dashboard`, `/admin/tasks`. Throws "Usage limit exceeded…" / "One or more assets not found or not ready" |
+| `brandPublishProject` | `(projectId) → { success }` | `Role.BRAND` (owner) | Guarded `updateRows(projects, equal("$id") + equal("brandId") + equal("status", "COMPLETED"))` → 0 matched → "Project is not in a publishable state" / "Only projects awaiting your review can be published". Revalidates `/tasks`, `/dashboard`, `/embed/[id]`, `/admin/tasks` |
+| `brandSendForRevisions` | `(projectId, note) → { success }` | `Role.BRAND` (owner) | Verifies ownership + non-empty note. `runTransaction`: in-tx precondition check — `getRowSafe(projects, id, txId)` must satisfy ownership + `status ∈ {COMPLETED, PUBLISHED}` (else "Project is not in a revisable state"), then staged `updateRow` by rowId → REVISIONS + `createRow(revision_requests)`. Revalidates `/tasks`, `/dashboard`, `/admin/tasks`, and `/embed/[id]` if was PUBLISHED |
+| `getUserProjects` | `() → TaskJob[]` | any role | Batched TablesDB: projects by `equal("brandId")` + `orderDesc("$createdAt")`; assets + revision_requests by `equal("projectId", ids)`; brand via `getRow(users)` (principal fallback). Derived shape via `buildTaskJob()` (`lib/project-augment.ts`) |
 
 ### `src/app/actions/admin.ts` (`admin.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `getAllTasks` | `() → AugmentedTask[]` | `Role.ADMIN` | All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email). Same derived shape as `getUserProjects` |
-| `getAllTasks` | `() → AugmentedTask[]` | `Role.ADMIN` | All projects (newest first) with brand + assets + sdkConfig + revisionRequests (with requester name/email). Same derived shape as `getUserProjects` |
-| `adminSubmitProject` | `(projectId, glbAssetId, usdzAssetId?) → { success }` | `Role.ADMIN` | Verifies GLB (and USDZ) are READY models. In a single `prisma.$transaction`: (1) atomic `updateMany` requiring `status ∈ {PENDING, REVISIONS}` → sets `COMPLETED`; (2) for any pre-existing `READY` MODEL_GLB/USDZ on this project (excluding the new asset ids) — `updateMany` to `status: ARCHIVED` (keeps `projectId` linked for history queries) and collects their UT `key`s; (3) links the new GLB/USDZ (`updateMany` setting `projectId` from `null`). Post-commit, fires `UTApi.deleteFiles(archivedKeys)` fire-and-forget (errors logged, never thrown) — UploadThing copies of archived models are removed; GDrive backups are intentionally retained (asset `gdriveFileId` stays valid). Throws "GLB asset not found or not ready" / "USDZ asset not found or not ready" / "Project is not in a submittable state" / "Project is no longer available to submit" |
+| `getAllTasks` | `() → TaskJob[]` | `Role.ADMIN` | Batched TablesDB: all projects `orderDesc("$createdAt")`; assets/revisions by projectId IN-queries; brands by `$id` IN → `usersToTaskBrand` map. Same derived shape as `getUserProjects` |
+| `adminSubmitProject` | `(projectId, glbAssetId, usdzAssetId?) → { success }` | `Role.ADMIN` | Verifies GLB (and USDZ) are READY models via `getRowSafe(assets)` (throws "GLB asset not found or not ready" / "USDZ asset not found or not ready"). `runTransaction`: (1) in-tx precondition check — `getRowSafe(projects, id, txId)` must have `status ∈ {PENDING, REVISIONS}` (else "Project is no longer available to submit"), then staged `updateRow` by rowId → COMPLETED (guards must NOT rely on a staged bulk `updateRows` response — Appwrite returns `{ total: 0, rows: [] }` for staged operations regardless of matches, Phase 6 bug 2); (2) archives any prior READY MODEL_GLB/USDZ on this project (`updateRows` on `$id` list, excluding new ids — `projectId` unchanged for history); (3) links the new GLB/USDZ (`updateRows` with `isNull("projectId")`). **Archived files are always KEPT** (no post-commit cleanup — the legacy UploadThing delete branch was removed in Phase 5) |
 
-**`AugmentedProject`/`AugmentedTask`** (derived in `getUserProjects`/`getAllTasks`): `{ id, name, sku, instructions, dimensions, status, createdAt, brand, assets, revisionRequests?: { id, note, createdAt, requester?: { id, name, email } }[], referenceUrls: string[], assetUrls: { glb, usdz } \| null, archivedAssetUrls: { glb: AssetLite[]; usdz: AssetLite[] } }`. `assignedTo` and `assignedUser` are removed. `revisionRequests` is sorted newest first. `archivedAssetUrls` lists each project's `ARCHIVED` MODEL_GLB/USDZ (newest `updatedAt` first) — drives the admin modal's "Previous models" collapsible. The live `assetUrls` picker is `status === 'READY'` only, so at most one live GLB and one live USDZ per project can exist.
+**`TaskJob`** (derived in `buildTaskJob()` at `lib/project-augment.ts:1`): `{ id, name, sku, instructions, dimensions, status: ProjectStatus, createdAt, brand, assets, revisionRequests?: { id, note, createdAt, requester?: { id, name, email } }[], referenceUrls: string[], assetUrls: { glb, usdz } | null, archivedAssetUrls: { glb: AssetLite[]; usdz: AssetLite[] } }`. `assignedTo`/`assignedUser` removed. `revisionRequests` newest first; `archivedAssetUrls` = project's ARCHIVED MODEL_GLB/USDZ (newest `$updatedAt` first) — drives the admin modal "Previous models" collapsible. Live `assetUrls` picker is `status === "READY"` only. `createdAt` = `$createdAt`; `dimensions` parsed from the JSON string column.
 
 ### `src/app/actions/admin-users.ts` (`admin-users.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `adminGetUsers` | `(search?, roleFilter?, statusFilter?, page?) → { users, total, page, totalPages }` | `Role.ADMIN` | List all users with optional search/filter/pagination. `search` matches email or name (case-insensitive). Used by `/admin/tasks` reassign dropdown and `/admin/users` table. 50 per page |
-| `adminGetUser` | `(id) → { user }` | `Role.ADMIN` | Single user with `projectCount`, `assetCount`, `eventCount` (from `_count`), plus `recentProjects` (last 5). Also returns `statusReason` and `suspendedAt`. Throws "User not found" |
-| `adminUpdateUser` | `(id, { role?, usageLimits?, subscriptionTier? }) → { success: true }` | `Role.ADMIN` | Update user metadata. Cannot update own account — throws "Cannot update your own account". Revalidates `/admin/users` |
-| `adminSetUserStatus` | `(id, status, reason?) → { success: true }` | `Role.ADMIN` | Set user to ACTIVE or SUSPENDED. When SUSPENDED, sets `suspendedAt: new Date()` and optional `statusReason`. Cannot self-suspend. Revalidates `/admin/users` |
-| `adminDeleteUser` | `(id) → { success: true }` | `Role.ADMIN` | Permanently deletes user and all related data (cascading Prisma delete). Cannot self-delete. Revalidates `/admin/users` |
+| `adminGetUsers` | `(search?, roleFilter?, statusFilter?, page?) → { users, total, page, totalPages }` | `Role.ADMIN` | `listRows(users)` with role/status `equal` filters + `orderDesc("$createdAt")` + `limit(50)`/`offset`; **search is a JS case-insensitive substring filter** over `email`/`name` on the filtered page (fulltext search deliberately avoided — no fulltext index on the table). `total` from filtered length; `totalPages = ceil(total / 50)`. Used by `/admin/users` table |
+| `adminGetUser` | `(id) → { user }` | `Role.ADMIN` | `getRow(users, $id)`; `projectCount`/`assetCount`/`eventCount` via `countRows` (`listRows(...).total`); `recentProjects` = last 5 by `$createdAt`. Also returns `statusReason` and `suspendedAt`. Throws "User not found" |
+| `adminUpdateUser` | `(id, { role?, usageLimits?, subscriptionTier? }) → { success: true }` | `Role.ADMIN` | `updateRows(users, equal("$id"))` — 0 matched → "User not found". Cannot update own account — throws "Cannot update your own account". Revalidates `/admin/users` |
+| `adminSetUserStatus` | `(id, status, reason?) → { success: true }` | `Role.ADMIN` | `updateRows` to ACTIVE or SUSPENDED; when SUSPENDED sets `suspendedAt` (ISO string) + optional `statusReason`, else clears both. Cannot self-suspend. Revalidates `/admin/users` |
+| `adminDeleteUser` | `(id) → { success: true }` | `Role.ADMIN` | **Explicit cascade `runTransaction`** (TablesDB has no FK cascades): projects by `equal("brandId")`, assets by `equal("ownerId")` ∪ `equal("projectId")`, events by `equal("brandId")` ∪ `equal("projectId")`, revision_requests by `equal("requestedBy")` ∪ `equal("projectId")` — `deleteRows` each — then `deleteRows(users)` + Appwrite `Users.delete(id)` (try/catch). Fixes the latent Prisma FK-Restrict bug (deleting a user with revision requests failed). Cannot self-delete. Revalidates `/admin/users` |
 
 ### `src/app/actions/admin-analytics.ts` (`admin-analytics.ts:1`)
 | Export | Signature | Auth | Purpose |
 |---|---|---|---|
-| `getPlatformKPIs` | `() → { totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }` | `Role.ADMIN` | Platform-wide aggregate counts. `projectsByStatus` is a `ProjectStatus[]` group-by with `_count`. All values computed via parallel `prisma` queries |
-| `getSignupsSeries` | `(months?) → { labels, counts }` | `Role.ADMIN` | Monthly signup counts for the last N months (default 12). `labels` are `"YYYY-MM"` strings; `counts` are integers. Iterates month-by-month |
-| `getTopBrands` | `(take?) → brands[]` | `Role.ADMIN` | Top N BRAND users by project count (JS-sorted after fetch). Returns `{ id, name, email, status, createdAt, _count: { projects } }`. Default take=10 |
+| `getPlatformKPIs` | `() → { totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }` | `Role.ADMIN` | Platform-wide aggregate counts via `countRows` (`listRows(...).total` — documented cost: 1 read op per returned row on `total`). `projectsByStatus: { status: ProjectStatus; _count: number }[]` = 4 parallel status queries |
+| `getSignupsSeries` | `(months?) → { labels, counts }` | `Role.ADMIN` | Monthly signup counts: per-month `between("$createdAt", start, end)` via `countRows`. `labels` are `"YYYY-MM"` strings. Default 12 months |
+| `getProjectsByMonth` | `(months?) → { labels, counts }` | `Role.ADMIN` | `listAllRows(projects)` since the window start (max 100/page pagination) + JS month buckets |
+| `getTopBrands` | `(take?) → brands[]` | `Role.ADMIN` | All BRAND users + `listAllRows(projects)` → JS count by `brandId` → sort desc → slice. Returns `{ id, name, email, status, createdAt, _count: { projects } }`. Default take=10 |
+
+### `src/app/actions/analytics.ts` (`analytics.ts:1`)
+| Export | Signature | Auth | Purpose |
+|---|---|---|---|
+| `getProjectLiveness` | `(projectIds) → Record<string, { lastEventAt: Date \| null }>` | Session | Per project: `listRows(analytics_events, equal("projectId")[, equal("brandId") for non-admin], orderDesc("$createdAt"), limit(1))` → converts `$createdAt` to `Date`. Consumers (`embed-liveness.ts`) call `.getTime()` |
 
 ---
 
-## 9. Data model (Prisma)
+## 9. Data model (Appwrite TablesDB)
 
-File: `prisma/schema.prisma:1`. Client import: `@/generated/prisma/client`.
+**Phases 3–5 rewrote the data path from Prisma to Appwrite TablesDB.** The runtime data layer is entirely the TablesDB database `studiov` (id `studiov`), with type-safe helpers in `src/lib/db.ts:1`. Row types mirror the legacy Prisma models. **Prisma was fully removed in Phase 5** (`prisma/` folder, generated client, `src/lib/prisma.ts`, `@/generated/prisma/client` alias, deps, env vars — all gone). Enums live in the edge-safe `src/lib/enums.ts:1` (client-importable; re-exported by `db.ts` and `auth-guards.ts`) so no file depends on a generated client.
 
-### Models
-- **`User`** (`schema.prisma:10`): `id (cuid)`, `email @unique`, `emailVerified DateTime?`, `role Role @default(BRAND)`, `subscriptionTier String?`, `usageLimits Int @default(10)`, `name String?`, `onboarded Boolean @default(false)`, `productCategory String?`, `storefrontPlatform String?`, `catalogSize String?`, `hashedPassword String?`, `status UserStatus @default(ACTIVE)`, `suspendedAt DateTime?`, `statusReason String?`, relations: `projects Project[]`, `assets Asset[]`, `analyticsEvents AnalyticsEvent[]`, `revisionRequests RevisionRequest[]`.
-- **`Project`** (`schema.prisma:44`): `id`, `name`, `sku?`, `instructions?`, `dimensions Json?`, `status ProjectStatus @default(PENDING)`, `sdkConfig Json?`, `brandId`, relations: `brand User`, `analytics AnalyticsEvent[]`, `assets Asset[]`, `revisionRequests RevisionRequest[]`. `@@index([brandId])`. **No `assignedTo` / `adminNotes`** (removed in the lifecycle simplification). The `sdkConfig Json?` field is **not currently consumed by the STUDIO.V embed** (embed uses hardcoded viewer config — see §11 and `pages/embed.md`); it is kept for forward-compat and third-party JS SDK consumers.
-- **`RevisionRequest`** (`schema.prisma:70`): `id`, `projectId`, `note`, `requestedBy` (userId), relations: `project Project @relation(onDelete: Cascade)`, `requester User`. `@@index([projectId])`, `@@index([createdAt])`. One row per brand revision request — preserves the full back-and-forth history.
-- **`Asset`** (`schema.prisma:104`): `id`, `projectId String?`, `ownerId`, `type AssetType`, `status AssetStatus @default(UPLOADING)`, `provider String @default("uploadthing")`, `key`, `url`, `originalName`, `mimeType`, `size Int`, `checksum String?`, `backupSynced Boolean @default(false)`, `gdriveFileId String?`, relations: `project Project?`, `owner User`. `@@index([projectId])`, `@@index([ownerId])`, `@@index([projectId, type, status])` (added for the admin's "previous models" history lookup and the live-model picker).
-- **`Token`** (`schema.prisma:61`): `id`, `identifier`, `token @unique`, `type` (`email_verification` / `email_verification_otp` / `password_reset`), `expires DateTime`, `createdAt`. Used by auth flows.
-- **`AnalyticsEvent`** (`schema.prisma:70`): `id`, `eventType EventType`, `sessionId`, `projectId`, `brandId`, relations to `Project` + `User`. `@@index([projectId])`, `@@index([brandId])`.
+Table IDs (`src/lib/appwrite-config.ts:1`): `users`, `projects`, `assets`, `revision_requests`, `analytics_events`. Row identity: **`$id` is the canonical id everywhere** (users row `$id` == `userId` column == Appwrite auth user id; assets row `$id` == storage fileId since Phase 4). System columns `$createdAt`/`$updatedAt` are queryable + indexable; all tables have key indexes on `$createdAt` (added in Phases 0/3).
+
+### Tables
+- **`users`** — mirrors `User`: `$id`, `userId`, `email`, `role` (`BRAND`/`ADMIN`), `usageLimits` (Int, **remaining budget** since Phase 3), `name`, `onboarded`, `productCategory`, `storefrontPlatform`, `catalogSize`, `status` (`ACTIVE`/`SUSPENDED`), `suspendedAt` (ISO string), `statusReason`, `emailVerified`. Indexes: `idx_email`, `idx_role`, `idx_status`, `idx_createdAt` (`$createdAt`, added in Phase 3 for `adminGetUsers` ordering).
+- **`projects`** — mirrors `Project`: `$id`, `name`, `sku`, `instructions`, `dimensions` (JSON stringified on write, parsed in `buildTaskJob`), `status` (`PENDING`/`REVISIONS`/`COMPLETED`/`PUBLISHED`), `sdkConfig` (JSON string, forward-compat only), `brandId`. Indexes: `idx_brandId`, `idx_status`, `idx_createdAt`. **No `assignedTo`/`adminNotes`** (lifecycle simplification). The STUDIO.V embed uses hardcoded viewer config (see §11, `pages/embed.md`).
+- **`revision_requests`** — mirrors `RevisionRequest`: `$id`, `projectId`, `note`, `requestedBy` (userId). One row per brand revision request — full back-and-forth history. Indexes: `idx_projectId`, `idx_createdAt`.
+- **`assets`** — mirrors `Asset` minus storage-provider fields: `$id` (= **storage fileId** since Phase 4), `projectId` (nullable — null until linked by `createProject`/`adminSubmitProject`), `ownerId`, `type` (`REFERENCE_IMAGE`/`MODEL_GLB`/`MODEL_USDZ`), `status` (`READY`/`ARCHIVED` — rows never enter `UPLOADING`/`PUBLISHED`/`DELETED`), `provider` (`"appwrite"`; legacy `"uploadthing"`/`"external"` on old rows), `fileId` (nullable — null for legacy seed rows), `url` (absolute Appwrite `/view` URL for `provider: "appwrite"`; stored `*.ufs.sh`/external URL for legacy rows), `originalName`, `mimeType`, `size`, `checksum` (MD5). **No `key`/`backupSynced`/`gdriveFileId` columns.** Rows are written by `recordAssetUpload` (`src/app/actions/record-asset.ts:23`). Indexes: `idx_projectId`, `idx_ownerId`, `idx_project_type_status` (compound, added in Phase 0).
+- **`analytics_events`** — mirrors `AnalyticsEvent`: `$id`, `eventType` (`VIEW`/`INTERACTION`/`AR_LAUNCH`), `sessionId`, `projectId`, `brandId`. Indexes: `idx_projectId`, `idx_brandId`, `idx_createdAt`.
 
 ### Enums
-- `UserStatus { ACTIVE, SUSPENDED }` (`schema.prisma:33`)
-- `Role { BRAND, ADMIN }` (`schema.prisma:38`)
-- `ProjectStatus { PENDING, REVISIONS, COMPLETED, PUBLISHED }` (`schema.prisma:63`)
-- `AssetType { REFERENCE_IMAGE, MODEL_GLB, MODEL_USDZ }` (`schema.prisma:101`)
-- `AssetStatus { UPLOADING, READY, PUBLISHED, ARCHIVED, DELETED }` (`schema.prisma:107`)
-- `EventType { VIEW, INTERACTION, AR_LAUNCH }` (`schema.prisma:95`)
+Declared in the edge-safe `src/lib/enums.ts:1` (client-importable; re-exported by `db.ts` and `auth-guards.ts`). Literal-value identical to the old Prisma enums — structural drop-in, `TaskJob.status` typed as `ProjectStatus`:
+- `UserStatus { ACTIVE, SUSPENDED }`
+- `Role { BRAND, ADMIN }`
+- `ProjectStatus { PENDING, REVISIONS, COMPLETED, PUBLISHED }`
+- `AssetType { REFERENCE_IMAGE, MODEL_GLB, MODEL_USDZ }`
+- `AssetStatus { UPLOADING, READY, PUBLISHED, ARCHIVED, DELETED }`
+- `EventType { VIEW, INTERACTION, AR_LAUNCH }`
 
-### Seed (`prisma/seed.ts:1`)
-- **Admin is env-driven** — read from `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` in `.env`. If set, the seed upserts the admin user (promote if exists, create if not). The same env vars are used by `npm run sync-admin` (see below) for ongoing management.
-- BRAND `brand@example.com` / `brand123` (usageLimits 10, name "Acme Furniture Co.") — demo only, skip-on-existence.
-- 3 projects: "Velvet Sheen Armchair" (PUBLISHED, GLB from Khronos sample, Unsplash ref), "Nordic Oak Table" (COMPLETED, GLB), "Eames Lounge Replica" (PENDING, no GLB). Assets use `provider: "external"` with GitHub raw / Unsplash URLs. Skip-on-existence — won't recreate projects that already exist.
+### Seed (`scripts/seed-appwrite.ts:1` — Appwrite-native, replaces the Prisma-era `prisma/seed.ts`)
+Run with `npm run seed:appwrite`. Admin-client upserts against the TablesDB database + Appwrite Auth (labels + email verification). Skip-on-existence throughout.
+- **Admin is env-driven** — read from `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` in `.env`. If set, upserts the admin (promote if exists, create if not) with label `ADMIN`, `users` row (`role: "ADMIN"`, `usageLimits: 9999`, `onboarded: true`, `status: "ACTIVE"`). Skipped with a notice if the env vars are absent (delegates to `sync-admin`).
+- BRAND `brand@example.com` / `brand123` (usageLimits 10, name "Acme Furniture Co.", label `BRAND`) — demo only, upserted every run.
+- 3 projects: "Velvet Sheen Armchair" (PUBLISHED, `sdkConfig` JSON, GLB from Khronos sample + Unsplash ref), "Nordic Oak Table" (COMPLETED, GLB), "Eames Lounge Replica" (PENDING, no GLB). Assets use `provider: "external"` with GitHub raw / Unsplash URLs, GLB `status: READY` (the live-model picker + SDK config route require READY). Skip-on-existence by project name.
 
 ### Admin bootstrap (`scripts/sync-admin.ts:1`)
 Permanent, idempotent admin management. Run with `npm run sync-admin`. Reads `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` from `.env` and:
-- **Upserts** the env-driven admin user (preserves all data — promotes a BRAND to ADMIN if the email already exists, or creates a new ADMIN with `status: ACTIVE`, `onboarded: true`, `emailVerified: now`, `usageLimits: 9999`).
-- Refreshes `hashedPassword` (bcrypt 12 rounds) and `name` on every run.
-- **Deletes any stray ADMIN** user whose email is not the env-driven one (removes legacy `admin@studiov.com` and any other non-env admin accounts). Ensures exactly one permanent admin.
+- **Upserts** the env-driven admin via `Users.list` email lookup → create or update (`updateName` / `updatePassword` / `updateLabels(["ADMIN"])` / `updateEmailVerification(true)`), plus a `users` row upsert (`role: "ADMIN"`, `usageLimits: 9999`, `onboarded: true`, `status: "ACTIVE"`).
+- **Deletes any stray ADMIN** user whose email is not the env-driven one (queries the `users` table for `role === "ADMIN"` rows where email ≠ env email → `Users.delete` + `deleteRow`). Ensures exactly one permanent admin.
 - **Does NOT** touch any other data, projects, assets, or events. Safe to re-run.
 
 ---
 
-## 10. File upload workflow (current state — UploadThing)
+## 10. File upload workflow (current state — Appwrite Storage)
 
-> Historical context: a Filebase presigned-URL architecture was built then reverted to UploadThing (see `tasks/revert-to-uploadthing.md`). Full current-state spec: `file-storage-architecture.md`.
+> Historical context: R2 → Filebase → UploadThing+GDrive → Appwrite Storage (see `tasks/appwrite-migration.md` §0 Phase 4 and `file-storage-architecture.md` §14). Full current-state spec: `file-storage-architecture.md`.
 
 **Flow:**
-1. Client instantiates `usePresignedUpload(endpoint)` (`src/lib/hooks/use-presigned-upload.ts:1`) — a thin wrapper over `useUploadThing` exposing `{ upload, isUploading, progress, error, reset }` (the `progress` number 0–100 is wired from UploadThing v7's `onUploadProgress` and rendered as a live progress bar in the admin upload tiles).
-2. `upload(file, type)` calls `startUpload([file])`. UploadThing middleware (`core.ts:75`) runs `requirePrincipal({ roles: [...] })`, generates `assetId` via `crypto.randomUUID()`, slugifies the filename, sets `customId: assetId` + `name: sluggedName` via `UTFiles`, and returns `{ userId, assetType, assetId, originalName }`.
-3. Browser uploads directly to UploadThing's S3 (bypassing Vercel's serverless body limit — important for 100MB+ GLB files).
-4. `onUploadComplete` fires → `createAssetAndBackup(metadata, file)` (`core.ts:10`):
-   - Builds GDrive backup name: `<assetId>.<ext>` via `buildBackupName()`.
-   - Creates `Asset` with `id: assetId` (UUID = UT customId), `status: READY`, `key: file.key` (real UT key), `url: file.ufsUrl`.
-   - Fire-and-forget `gdriveAdapter.backupFile(file.key, asset.url, asset.mimeType, backupName)` → on success sets `backupSynced: true` + `gdriveFileId`.
-5. Returns `{ asset: { id, url, key: file.key, type, status, mimeType, size } }` as `serverData` — the hook surfaces this to the client.
+1. Client instantiates `useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions })` (`src/lib/use-appwrite-upload.ts:40`) — uses the pre-built `storage` service from `useAppwrite()` (session-authenticated client, `@appwrite.io/react` provider) and exposes `{ upload, isUploading, progress, error, reset }`.
+2. `upload(file, type)` validates size/extensions, then `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress })` — the browser uploads **directly to Appwrite** (bypassing Vercel's serverless body limit — important for 100MB+ GLB files). `onProgress` receives `{ progress: 0-100 }` (client SDK `UploadProgress` is percent, not bytes) and drives the live progress bar in the upload tiles.
+3. On success → `recordAssetUpload({ fileId, type })` server action (`src/app/actions/record-asset.ts:23`): `requirePrincipal` by type (REFERENCE_IMAGE → BRAND, MODELS → ADMIN — mirrors the bucket `create` perms), admin-client `storage.getFile` for metadata, then `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size, checksum } })`.
+4. The hook returns the `RecordedAsset` `{ id, url, type, status, mimeType, size, originalName }` (no `key`) — stored in `uploadedAssets` (brand) or `glbAsset`/`usdzAsset` (admin).
+5. Failure mapping: 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; best-effort `deleteFile` orphan cleanup.
 
-**Asset lifecycle:** `UPLOADING` (transient, not used in UT flow) → `READY` (on upload complete) → `PUBLISHED` (conceptually when project publishes; not currently auto-transitioned) → `ARCHIVED` (set by `adminSubmitProject` on model replacement — see "Model archival" below).
+**Asset lifecycle:** `READY` (on upload complete) → `ARCHIVED` (set by `adminSubmitProject` on model replacement — see below). Rows never enter `UPLOADING`/`PUBLISHED`/`DELETED`. Publish/unpublish mutates **storage file permissions**, not row status.
 
 **Model archival on replacement (admin resubmit on REVISIONS):**
-When an admin uploads a new GLB/USDZ for a project that already has a `READY` model and calls `adminSubmitProject`, the previously-linked MODEL_GLB/USDZ rows are atomically flipped to `AssetStatus.ARCHIVED` in the same `prisma.$transaction` as the new link + status flip. The archived rows stay linked to the project (`projectId` unchanged) so the admin's "Previous models" collapsible can list them. After the transaction commits, `UTApi.deleteFiles(archivedKeys)` (`src/lib/uploadthing-server.ts:1`) is fired fire-and-forget — UploadThing copies of the archived models are removed within ~seconds, but GDrive backups are intentionally retained (the asset's `gdriveFileId` is preserved) so the file can still be retrieved via `GET /api/admin/assets/{assetId}/gdrive-download` (302 → `drive.google.com/file/d/{id}/view`). No quota impact: re-uploading does not consume `usageLimits`. The new `AssetStatus` value `ARCHIVED` was already declared in the enum but was unused before this flow — see `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` for the storage view.
+When an admin uploads a new GLB/USDZ for a project that already has a `READY` model and calls `adminSubmitProject`, the previously-linked MODEL_GLB/USDZ rows are flipped to `AssetStatus.ARCHIVED` inside the same TablesDB `runTransaction` as the new link + status flip (see §8 `adminSubmitProject`). The archived rows stay linked to the project (`projectId` unchanged) so the admin's "Previous models" collapsible can list them. **Archived files are always KEPT** in Appwrite Storage (user decision — archived models stay viewable via the proxy and keep `read:any` while the project is published; the legacy UploadThing delete branch was removed with the package in Phase 5). No quota impact: re-uploading does not consume `usageLimits`. See `pages/admin.md` §3 for the UI side and `file-storage-architecture.md` §10 for the storage view.
 
 **File validation:**
-| Asset type | Allowed MIME | Max size | Uploader endpoint |
+| Asset type | Allowed extensions | Max size | Bucket |
 |---|---|---|---|
-| `REFERENCE_IMAGE` | image/* (UT `image` type) | 16 MB | `referenceImageUploader` (BRAND) |
-| `MODEL_GLB` | any blob (UT `blob`) | 128 MB | `modelGlbUploader` (ADMIN) |
-| `MODEL_USDZ` | any blob | 128 MB | `modelUsdzUploader` (ADMIN) |
+| `REFERENCE_IMAGE` | `jpg jpeg png webp gif avif` (console bucket gate + client check) | 16 MB | `reference-images` (BRAND-create) |
+| `MODEL_GLB` | `glb` (client check) | 128 MB (hook) / 150 MB (bucket max) | `models` (ADMIN-create) |
+| `MODEL_USDZ` | `usdz` (client check) | same | `models` (ADMIN-create) |
 
-> GLB/USDZ MIME validation is best-effort post-upload (file picker filters by extension). Acceptable for MVP.
+> GLB/USDZ MIME validation is best-effort (file picker filters by extension; `recordAssetUpload` defaults mime to `model/gltf-binary`/`model/vnd.usdz+zip`). Acceptable for MVP.
 
-**GDrive backup** (`src/lib/storage/gdrive-adapter.ts:1`): `backupFile(key, sourceUrl, mimeType, backupName)` downloads from `asset.url` (the `*.ufs.sh` URL) and uploads to the shared Drive folder, returning the new file id. `backupName` is `<asset.id>.<ext>` (= the same UUID that is the UploadThing `customId`) — passed by `core.ts:31-41`. No-ops with a warning if `GDRIVE_*` env vars are unset. Never in the serving path.
-
-**GDrive OAuth client** (`src/lib/storage/gdrive-client.ts:1`): single exported `getGDriveClient()` — caches an OAuth2-authenticated `google.drive({ version: "v3", auth })` instance on first call so requests don't re-handshake tokens. Used by both `gdrive-adapter.ts` (backup writes) and the new asset-delivery helper below. Exports `isGDriveConfigured()` for components that want to gate on env presence.
-
-**Asset delivery with GDrive fallback** (`src/lib/storage/asset-delivery.ts:1` + `src/app/api/v1/assets/[assetId]/file/route.ts:1`): the **read** path complements the **write** path above. When a viewer (the public embed `<model-viewer>`, brand-side `ThreeDConfigurator`, admin "View GLB/USDZ" links, or the admin's "Previous models" rows) fetches any model/asset URL, all of them funnel through `GET /api/v1/assets/{assetId}/file`. The route calls `deliverAsset()` which (a) tries `fetch(asset.url)` from UploadThing with an 8-second `AbortController` timeout — any non-2xx, network error, or timeout silently routes the request to GDrive using `drive.files.get({ fileId, alt: "media" }, { responseType: "stream" })`. The returned Node `Readable` is piped straight back to the browser via `Readable.toWeb()`. Successful responses carry `x-source: uploadthing|gdrive` so production logs can quantify fallback rate. Both UT and GDrive missed → `404 { error: "asset unavailable" }` (or `502` if GDrive config is unset). Trade-off: every happy-path request now proxies through Vercel — see `GET /api/v1/assets/[assetId]/file` row in §5 for the rationale and revisit triggers.
+**Public access (publish grant / unpublish revoke):**
+- `brandPublishProject` grants `read:any` on the project's READY GLB/USDZ storage files **before** flipping the status to `PUBLISHED` (failure → best-effort revoke + throw). Invariant: `PUBLISHED ⇒ files publicly readable`.
+- `brandSendForRevisions` (when `wasPublished`) revokes `read:any` (`permissions: []`) **after** the transaction commits (failures logged only).
+- Reference images never receive `read:any`. In-app reads always go through the auth-gated proxy (`GET /api/v1/assets/[assetId]/file`, §5) — bucket `read` is label-scoped, so the server API key does the fetching.
 
 ---
 
@@ -456,13 +436,13 @@ The SDK is the public-facing contract for third-party storefronts. **The embed i
 Public, cached (`s-maxage=60, stale-while-revalidate=86400, Vary: Accept-Encoding`). The 60s edge cache means a brand re-uploading a GLB sees the new model within ~60s of any iframe refresh. Returns:
 ```json
 {
-  "assetUrls": { "glb": "https://…ufs.sh/…/model.glb", "usdz": "https://…ufs.sh/…/model.usdz" },
+  "assetUrls": { "glb": "https://fra.cloud.appwrite.io/v1/storage/buckets/models/files/<fileId>/view", "usdz": "https://fra.cloud.appwrite.io/v1/storage/buckets/models/files/<fileId>/view" },
   "sdkConfig": { /* schema: see Project.sdkConfig in §9. Currently not consumed by the STUDIO.V embed — see note below. */ }
 }
 ```
-404 for missing/non-PUBLISHED/no-GLB. File: `src/app/api/sdk/v1/config/[projectId]/route.ts:5`.
+`assetUrls` are derived on-the-fly via `resolveAssetUrl(asset)` (`route.ts:6`) — `buildFileUrl(bucketForAssetType(type), fileId)` for `provider === "appwrite"` rows (always includes the required `?project=<id>` param, so rows uploaded before the Phase 6 bug 3 fix still resolve), falling back to the stored `url` for legacy/external rows. The absolute Appwrite `/view` CDN URLs are publicly readable because read:any was granted at publish; the embed viewer prepends an empty `APP_URL` so absolute URLs pass through. 404 for missing/non-PUBLISHED. File: `src/app/api/sdk/v1/config/[projectId]/route.ts:1`.
 
-**Note on `sdkConfig`:** the STUDIO.V embed (`/embed/[projectId]`) uses **hardcoded viewer config** (camera-orbit, exposure, tone-mapping, environment, shadow, auto-rotate, controls, AR) lifted directly from `src/components/ThreeDConfigurator.tsx:42-47, 86-132` so the embed and the landing page render identically. The embed reads **`assetUrls.glb`** (and **`assetUrls.usdz` if present**, used for `ios-src` on iOS Quick Look) from the SDK config response. The `sdkConfig` field is kept in the response (and in the `Project` Prisma model) for forward-compat and any third-party JS SDK consumers. See `pages/embed.md` §"Hardcoded config" for the full attribute table and §"AR button" for the device matrix.
+**Note on `sdkConfig`:** the STUDIO.V embed (`/embed/[projectId]`) uses **hardcoded viewer config** (camera-orbit, exposure, tone-mapping, environment, shadow, auto-rotate, controls, AR) lifted directly from `src/components/ThreeDConfigurator.tsx:42-47, 86-132` so the embed and the landing page render identically. The embed reads **`assetUrls.glb`** (and **`assetUrls.usdz` if present**, used for `ios-src` on iOS Quick Look) from the SDK config response. The `sdkConfig` field is kept in the response (and in the `projects` TablesDB row) for forward-compat and any third-party JS SDK consumers. See `pages/embed.md` §"Hardcoded config" for the full attribute table and §"AR button" for the device matrix.
 
 ### `POST /api/sdk/v1/events` — analytics ingest
 Public, CORS `*`. Body `{ eventType, sessionId, projectId }`. Creates `AnalyticsEvent` with the project's `brandId`. The latest `VIEW.createdAt` per project is the **embed liveness signal** surfaced on `/analytics` (see below). File: `src/app/api/sdk/v1/events/route.ts:5`.
@@ -482,7 +462,7 @@ Public, CORS `*`. Body `{ eventType, sessionId, projectId }`. Creates `Analytics
 - **Embed code generator:** `generateEmbedCode(projectId)` in `src/lib/utils.ts:18` — produces an `<iframe src="{APP_URL}/embed/{id}" …>` snippet shown on `/integrations`. The URL is unchanged from prior versions; only the underlying implementation switched from a React page to a route handler.
 
 ### Embed liveness (`/analytics` leaderboard)
-- The brand's analytics page (`src/app/analytics/page.tsx:131`) calls `getProjectLiveness(projectIds)` (`src/app/actions/analytics.ts:1`) which runs a single `prisma.analyticsEvent.groupBy({ _max: { createdAt } })`.
+- The brand's analytics page (`src/app/analytics/page.tsx:131`) calls `getProjectLiveness(projectIds)` (`src/app/actions/analytics.ts:1`) which runs, per project, `listRows(analytics_events, equal("projectId"), orderDesc("$createdAt"), limit(1))` → `Date`. (The `/analytics` page's own metrics were migrated from Prisma to TablesDB in Phase 5.)
 - Threshold helper: `src/lib/embed-liveness.ts:1` — `EMBED_LIVENESS_THRESHOLDS = { AMBER_DAYS: 7, RED_DAYS: 30 }`. `getLivenessBadge()` returns `"ok" | "amber" | "red" | "never"`.
 - The leaderboard's "Last Seen" column shows the relative time + an amber badge ("May not be live") if 7–30 days, or a red badge ("Embed may be broken") if >30 days or never.
 
@@ -503,7 +483,7 @@ Public, CORS `*`. Body `{ eventType, sessionId, projectId }`. Creates `Analytics
 - **Global `:focus-visible`**: 2px solid `--text-primary`, offset 2px (`globals.css:87`). Never use `outline-none` without a replacement ring.
 - **Theme:** `next-themes` `attribute="class"`, `defaultTheme="light"`, `enableSystem`. `ThemeToggle` is hydration-safe — uses `useSyncExternalStore` to detect mount (`ThemeToggle.tsx:11-13`) so the placeholder `<div>` is shown during SSR and the real button takes over post-hydration without a `react-hooks/set-state-in-effect` lint error. `<body>` carries `suppressHydrationWarning` to absorb the no-flash transition.
 
-**Status badge metadata** (`src/lib/status.ts:1`): `PROJECT_STATUS_META` for the default visual treatment (tone + icon) and two label tables: `ADMIN_LABEL` (PENDING→"Queued", REVISIONS→"Revisions Required", COMPLETED→"Completed", PUBLISHED→"Published") and `BRAND_LABEL` (PENDING→"Processing", REVISIONS→"Revisions", COMPLETED→"Review", PUBLISHED→"Published"). `getStatusLabel(status, role)` returns the right label per viewer. Used by Tasks, Dashboard, Notifications, NotificationBell, and admin pages. The `status.ts` file is a client-safe module (no Prisma runtime imports).
+**Status badge metadata** (`src/lib/status.ts:1`): `PROJECT_STATUS_META` for the default visual treatment (tone + icon) and two label tables: `ADMIN_LABEL` (PENDING→"Queued", REVISIONS→"Revisions Required", COMPLETED→"Completed", PUBLISHED→"Published") and `BRAND_LABEL` (PENDING→"Processing", REVISIONS→"Revisions", COMPLETED→"Review", PUBLISHED→"Published"). `getStatusLabel(status, role)` returns the right label per viewer. Used by Tasks, Dashboard, Notifications, NotificationBell, and admin pages. The `status.ts` file is a client-safe module — it imports enums from `src/lib/enums.ts:1` (edge-safe, no runtime SDK imports).
 
 ---
 
@@ -513,23 +493,15 @@ File: `.env.example:1`. All required for full functionality.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | Supabase transaction-mode pooler (port 6543, `?pgbouncer=true`) — app runtime |
-| `DIRECT_URL` | Supabase session-mode pooler (port 5432) — Prisma CLI migrations |
-| `AUTH_SECRET` | JWT encryption (generate: `openssl rand -base64 32`) |
-| `NEXT_PUBLIC_APP_URL` | App URL for Stripe redirects + auth callbacks + embed code |
-| `UPLOADTHING_TOKEN` | UploadThing API key (appId `7r8xhgyw3k`) |
-| `GOOGLE_OAUTH_CLIENT_ID` | Google OAuth 2.0 Client ID (Desktop app) — from Google Cloud Console |
-| `GOOGLE_OAUTH_CLIENT_SECRET` | Paired with above |
-| `GOOGLE_OAUTH_REFRESH_TOKEN` | From `npx tsx scripts/get-gdrive-refresh-token.ts` (one-time consent flow) |
-| `GDRIVE_BACKUP_FOLDER_ID` | Your Drive folder ID (owned by you — no sharing needed) |
-| `GMAIL_USER` | Full Gmail address used as the SMTP auth user + `from` sender (e.g. `kaizen3242@gmail.com`) |
-| `GMAIL_APP_PASSWORD` | 16-character Google App Password (requires 2-Step Verification enabled on the GMAIL_USER account). Generate at https://myaccount.google.com/apppasswords — pick "Mail" + "Other" (name "STUDIO.V"). Paste with spaces removed. |
-| `STRIPE_SECRET_KEY` | `sk_test_…` / `sk_live_…` (billing, optional for initial deploy) |
-| `STRIPE_WEBHOOK_SECRET` | `whsec_…` for `/api/webhooks/stripe` |
-| `STRIPE_PRICE_STARTER` / `_GROWTH` / `_ENTERPRISE` | Price IDs for tiers |
-| `ADMIN_EMAIL` | Permanent admin email (required for `npm run sync-admin` and seed) |
-| `ADMIN_PASSWORD` | Permanent admin password (bcrypt-hashed on sync, ≥ 6 chars) |
+| `APPWRITE_API_KEY` | Appwrite server API key `studiov-server` — scopes: users/sessions/tables/columns/indexes/rows read+write, buckets/files read+write, messaging read+write, usage.read (per Phase 0 console log) |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | e.g. `https://fra.cloud.appwrite.io/v1` — project "Peka.ar" (`6a8562a20037b62075e1`) |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` |
+| `NEXT_PUBLIC_APP_URL` | App URL for auth callbacks + generated embed code |
+| `ADMIN_EMAIL` | Permanent admin email (required for `npm run sync-admin` and `npm run seed:appwrite`) |
+| `ADMIN_PASSWORD` | Permanent admin password (≥ 6 chars, set via Appwrite `updatePassword` on sync) |
 | `ADMIN_NAME` | Admin display name (optional, defaults to "Studio Admin") |
+
+**Removed in Phase 5** (no longer in `.env.example`): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN`, `GDRIVE_BACKUP_FOLDER_ID`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. Stripe vars were never wired (no handler exists) and were dropped from `.env.example`.
 
 **Production deploy:** see `deployment.md`.
 
@@ -539,10 +511,10 @@ File: `.env.example:1`. All required for full functionality.
 
 - **`pages/tasks.md`** — `/tasks` Kanban + list views, New Task modal, Job Details (admin claim/upload), Review modal (approve & publish), Published viewer, role-specific actions.
 - **`pages/dashboard.md`** — `/dashboard` metric computation (views, AR launches, interaction rate, conv. lift), 12-month chart, recent tasks, quick links, Suspense/error boundaries.
-- **`pages/auth.md`** — `/auth` 3-view flow (signin/signup/forgot), `/auth/verify` magic-link, `/auth/reset-password`, OTP input, preflight, JWT callbacks.
+- **`pages/auth.md`** — `/auth` 3-view flow (signin/signup/forgot), `/auth/verify` link-based email verification, `/auth/reset-password`, Appwrite session plumbing (`createPublicClient` public routes), security properties.
 - **`pages/admin.md`** — 4 admin pages (`/admin/dashboard`, `/admin/users`, `/admin/tasks`, `/admin/analytics`): `AdminLayout`, server actions, management modals, data flows.
 - **`pages/embed.md`** — `/embed/[projectId]` static-HTML route handler + hardcoded viewer config (matches landing) + 3D grid floor + top-right controls (rotate/reset) + SDK config/events endpoints + analytics liveness signal + resilience headers.
-- **`file-storage-architecture.md`** — full current UploadThing architecture + Filebase migration history.
+- **`file-storage-architecture.md`** — full current Appwrite Storage architecture (browser-direct uploads, auth-gated proxy, publish grants/revokes) + migration history (R2 → Filebase → UploadThing+GDrive → Appwrite).
 
 **Related (implemented, extended since written):**
 - `auth-stabilization.md` — task plan for the `requirePrincipal` + email-fallback hardening (implemented). Extended with `StaleSessionError` + `requirePrincipalOrRedirect()` for stale-session self-healing (added Jul 2026).
@@ -553,7 +525,7 @@ File: `.env.example:1`. All required for full functionality.
 ## 15. Conventions to follow when editing
 
 - **Server vs client:** pages are server components; interactivity goes in `*Client.tsx` with `"use client"`. UI primitives in `src/components/ui/` are server-compatible (except `Modal` which uses `createPortal`).
-- **Auth:** never read `session.user.id`/`role` directly for authorization — always go through `requirePrincipal()` (DB-backed). For pages, use `requirePrincipalOrRedirect()` which auto-redirects on stale/absent sessions. For API routes, catch `UnauthenticatedError`/`ForbiddenError` and return appropriate status. For server actions, let errors propagate to the client.
+- **Auth:** never read `user.id`/`role` directly for authorization — always go through `requirePrincipal()` (Appwrite session + `users` TableDB row, per-request). For pages, use `requirePrincipalOrRedirect()` which auto-redirects (stale/absent/suspended → `/auth`, not-onboarded → `/onboarding`). For API routes, catch `UnauthenticatedError`/`ForbiddenError` and return appropriate status. For server actions, let errors propagate to the client. Client components read the session via `useAuth()` from `@appwrite.io/react` (no cookie access).
 - **Public endpoints:** return generic 404 for both missing and non-public projects (prevent enumeration). SDK config/events already do this.
 - **Atomic writes:** admin claim/submit use `updateMany` with preconditions in the `where` clause (no TOCTOU). Keep this pattern.
 - **Revalidation:** after project mutations call `revalidatePath("/tasks")` and `revalidatePath("/dashboard")`. After onboarding, revalidate 5 paths.

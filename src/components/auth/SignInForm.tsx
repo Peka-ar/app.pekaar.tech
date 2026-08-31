@@ -1,9 +1,9 @@
 "use client";
 import React, { useState } from 'react';
 import { Lock, Mail } from 'lucide-react';
-import { signIn } from "next-auth/react";
+import { useAuth, useAppwrite } from "@appwrite.io/react";
 import { useRouter } from "next/navigation";
-import { preflightLogin } from "@/app/actions/auth";
+import { getSessionPrincipal } from "@/app/actions/auth";
 import { Button } from "@/components/ui/Button";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
@@ -20,30 +20,26 @@ function postLoginPath(onboarded: boolean, role: UserRole): string {
   return role === "ADMIN" ? "/admin/dashboard" : "/dashboard";
 }
 
+function signInErrorMessage(err: unknown): string {
+  if (err && typeof err === "object") {
+    const code = (err as { code?: number }).code;
+    const type = (err as { type?: string }).type;
+    if (code === 401 || type === "user_invalid_credentials" || type === "user_not_found") {
+      return "Invalid email or password.";
+    }
+    if (code === 429 || (type && type.includes("rate_limit"))) {
+      return "Too many attempts. Please try again later.";
+    }
+  }
+  return err instanceof Error ? err.message : "Sign-in failed";
+}
+
 export default function SignInForm({ onNavigate }: SignInFormProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-
-  const finishSignIn = async (
-    email: string,
-    password: string,
-    onboarded: boolean,
-    role: UserRole,
-  ) => {
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      throw new Error("Sign-in failed. Please try again.");
-    }
-
-    router.push(postLoginPath(onboarded, role));
-    router.refresh();
-  };
+  const { signIn } = useAuth();
+  const { client } = useAppwrite();
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -55,17 +51,20 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
     const password = formData.get("password") as string;
 
     try {
-      const preflight = await preflightLogin(email, password);
+      await new Promise<void>((resolve, reject) => {
+        signIn.emailPassword({
+          email,
+          password,
+          onSuccess: () => resolve(),
+          onError: (err) => reject(err),
+        });
+      });
 
-      if (preflight.status !== "valid") {
-        setError("Invalid email or password.");
-        return;
-      }
-
-      await finishSignIn(email, password, preflight.onboarded, preflight.role);
+      const principal = await getSessionPrincipal();
+      if (principal?.sessionSecret) client.setSession(principal.sessionSecret);
+      router.push(principal ? postLoginPath(principal.onboarded, principal.role) : "/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
-    } finally {
+      setError(signInErrorMessage(err));
       setLoading(false);
     }
   };

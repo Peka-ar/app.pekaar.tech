@@ -1,30 +1,52 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
-import { Role } from "@/generated/prisma/client";
-import { requirePrincipal } from "@/lib/auth-guards";
-import { startOfMonth, addMonths } from "date-fns";
+import { Query } from "node-appwrite";
+import { requirePrincipal, Role } from "@/lib/auth-guards";
+import {
+  DB,
+  countRows,
+  listAllRows,
+  ProjectStatus,
+  UserStatus,
+  UsersRow,
+  ProjectsRow,
+} from "@/lib/db";
+import { startOfMonth } from "date-fns";
 
 export async function getPlatformKPIs() {
   await requirePrincipal({ roles: [Role.ADMIN] });
+
+  const monthStart = startOfMonth(new Date()).toISOString();
 
   const [
     totalUsers,
     suspendedUsers,
     totalProjects,
     totalEvents,
-    projectsByStatus,
     signupsThisMonth,
     eventsThisMonth,
   ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { status: "SUSPENDED" as const } }),
-    prisma.project.count(),
-    prisma.analyticsEvent.count(),
-    prisma.project.groupBy({ by: ["status"], _count: true }),
-    prisma.user.count({ where: { createdAt: { gte: startOfMonth(new Date()) } } }),
-    prisma.analyticsEvent.count({ where: { createdAt: { gte: startOfMonth(new Date()) } } }),
+    countRows(DB.users),
+    countRows(DB.users, [Query.equal("status", UserStatus.SUSPENDED)]),
+    countRows(DB.projects),
+    countRows(DB.analyticsEvents),
+    countRows(DB.users, [Query.greaterThanEqual("$createdAt", monthStart)]),
+    countRows(DB.analyticsEvents, [Query.greaterThanEqual("$createdAt", monthStart)]),
   ]);
+
+  const statuses = [
+    ProjectStatus.PENDING,
+    ProjectStatus.REVISIONS,
+    ProjectStatus.COMPLETED,
+    ProjectStatus.PUBLISHED,
+  ];
+  const statusCounts = await Promise.all(
+    statuses.map((status) => countRows(DB.projects, [Query.equal("status", status)])),
+  );
+  const projectsByStatus = statuses.map((status, i) => ({
+    status,
+    _count: statusCounts[i],
+  }));
 
   return {
     totalUsers,
@@ -40,23 +62,24 @@ export async function getPlatformKPIs() {
 export async function getSignupsSeries(months: number = 12) {
   await requirePrincipal({ roles: [Role.ADMIN] });
 
-  const labels: string[] = [];
-  const counts: number[] = [];
-
   const now = new Date();
-
+  const labels: string[] = [];
   for (let i = months - 1; i >= 0; i--) {
-    const monthStart = startOfMonth(addMonths(now, -i));
-    const nextMonthStart = startOfMonth(addMonths(now, -(i - 1)));
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    labels.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
 
-    const count = await prisma.user.count({
-      where: {
-        createdAt: { gte: monthStart, lt: nextMonthStart },
-      },
-    });
+  const since = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const users = await listAllRows<UsersRow>(DB.users, [
+    Query.greaterThanEqual("$createdAt", since.toISOString()),
+  ]);
 
-    labels.push(monthStart.toISOString().slice(0, 7));
-    counts.push(count);
+  const counts = labels.map(() => 0);
+  for (const u of users) {
+    const d = new Date(u.$createdAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const idx = labels.indexOf(key);
+    if (idx >= 0) counts[idx]++;
   }
 
   return { labels, counts };
@@ -74,14 +97,14 @@ export async function getProjectsByMonth(months: number = 12) {
 
   const since = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
 
-  const projects = await prisma.project.findMany({
-    where: { createdAt: { gte: since } },
-    select: { createdAt: true },
-  });
+  const projects = await listAllRows<ProjectsRow>(DB.projects, [
+    Query.greaterThanEqual("$createdAt", since.toISOString()),
+  ]);
 
   const counts = labels.map(() => 0);
   for (const p of projects) {
-    const key = `${p.createdAt.getFullYear()}-${String(p.createdAt.getMonth() + 1).padStart(2, "0")}`;
+    const d = new Date(p.$createdAt);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     const idx = labels.indexOf(key);
     if (idx >= 0) counts[idx]++;
   }
@@ -92,18 +115,25 @@ export async function getProjectsByMonth(months: number = 12) {
 export async function getTopBrands(take: number = 10) {
   await requirePrincipal({ roles: [Role.ADMIN] });
 
-  const brands = await prisma.user.findMany({
-    where: { role: Role.BRAND },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      status: true,
-      createdAt: true,
-      _count: { select: { projects: true } },
-    },
-  });
+  const [brands, projects] = await Promise.all([
+    listAllRows<UsersRow>(DB.users, [Query.equal("role", Role.BRAND)]),
+    listAllRows<ProjectsRow>(DB.projects),
+  ]);
 
-  brands.sort((a, b) => b._count.projects - a._count.projects);
-  return brands.slice(0, take);
+  const projectCounts = new Map<string, number>();
+  for (const p of projects) {
+    projectCounts.set(p.brandId, (projectCounts.get(p.brandId) ?? 0) + 1);
+  }
+
+  return brands
+    .map((b) => ({
+      id: b.$id,
+      name: b.name,
+      email: b.email,
+      status: b.status,
+      createdAt: b.$createdAt,
+      _count: { projects: projectCounts.get(b.$id) ?? 0 },
+    }))
+    .sort((a, b) => b._count.projects - a._count.projects)
+    .slice(0, take);
 }

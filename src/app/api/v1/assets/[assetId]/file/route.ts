@@ -1,36 +1,20 @@
-import { Readable } from "node:stream"
-import type { NextRequest } from "next/server"
-import { prisma } from "@/lib/prisma"
-import { AssetStatus, ProjectStatus, Role } from "@/generated/prisma/client"
-import { requirePrincipal, UnauthenticatedError, ForbiddenError, StaleSessionError } from "@/lib/auth-guards"
-import { deliverAsset } from "@/lib/storage/asset-delivery"
+import { NextRequest } from "next/server";
+import { APPWRITE_API_KEY } from "@/lib/appwrite";
+import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, bucketForAssetType, defaultMimeTypeForAssetType } from "@/lib/appwrite-config";
+import { requirePrincipal, UnauthenticatedError, ForbiddenError, StaleSessionError, Role } from "@/lib/auth-guards";
+import { AssetStatus, AssetsRow, DB, ProjectsRow, getRowSafe } from "@/lib/db";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ assetId: string }> },
 ) {
-  const { assetId } = await params
+  const { assetId } = await params;
 
-  const asset = await prisma.asset.findUnique({
-    where: { id: assetId },
-    select: {
-      id: true,
-      url: true,
-      key: true,
-      gdriveFileId: true,
-      originalName: true,
-      mimeType: true,
-      size: true,
-      status: true,
-      projectId: true,
-      project: { select: { status: true, brandId: true } },
-    },
-  })
-
-  if (!asset || !asset.projectId) {
-    return jsonError(404, "asset unavailable")
+  const asset = await getRowSafe<AssetsRow>(DB.assets, assetId);
+  if (!asset) {
+    return jsonError(404, "asset unavailable");
   }
 
   if (
@@ -38,69 +22,95 @@ export async function GET(
     asset.status !== AssetStatus.PUBLISHED &&
     asset.status !== AssetStatus.ARCHIVED
   ) {
-    return jsonError(404, "asset unavailable")
+    return jsonError(404, "asset unavailable");
   }
 
-  const isPublic = asset.project?.status === ProjectStatus.PUBLISHED
-  if (!isPublic) {
-    try {
-      const principal = await requirePrincipal({ roles: [Role.ADMIN, Role.BRAND] })
-      if (principal.role === Role.BRAND && asset.project?.brandId !== principal.userId) {
-        return jsonError(403, "forbidden")
+  try {
+    const principal = await requirePrincipal({ roles: [Role.ADMIN, Role.BRAND] });
+    if (principal.role === Role.BRAND) {
+      const isOwner = asset.ownerId === principal.userId;
+      const isProjectBrand =
+        asset.projectId !== null &&
+        (await getRowSafe<ProjectsRow>(DB.projects, asset.projectId))?.brandId === principal.userId;
+      if (!isOwner && !isProjectBrand) {
+        return jsonError(403, "forbidden");
       }
-    } catch (err) {
-      if (err instanceof UnauthenticatedError || err instanceof StaleSessionError) {
-        return jsonError(401, "unauthorized")
-      }
-      if (err instanceof ForbiddenError) {
-        return jsonError(403, "forbidden")
-      }
-      throw err
     }
+  } catch (err) {
+    if (err instanceof UnauthenticatedError || err instanceof StaleSessionError) {
+      return jsonError(401, "unauthorized");
+    }
+    if (err instanceof ForbiddenError) {
+      return jsonError(403, "forbidden");
+    }
+    throw err;
   }
 
-  const outcome = await deliverAsset(
-    {
-      url: asset.url,
-      gdriveFileId: asset.gdriveFileId,
-      mimeType: asset.mimeType,
-      originalName: asset.originalName,
-      preferGDrive: asset.status === AssetStatus.ARCHIVED,
-    },
-    request.signal,
-  )
-
-  if (!outcome.ok) {
-    return jsonError(outcome.status, outcome.error)
+  const upstream = await fetchAssetStream(asset);
+  if (!upstream.ok) {
+    return jsonError(404, "asset unavailable");
   }
 
-  const webStream =
-    outcome.body instanceof Readable
-      ? Readable.toWeb(outcome.body)
-      : (outcome.body as ReadableStream<Uint8Array>)
+  const mimeType = asset.mimeType || defaultMimeTypeForAssetType(asset.type) || "application/octet-stream";
 
   const headers: Record<string, string> = {
-    "Content-Type": outcome.contentType,
+    "Content-Type": mimeType,
     "Content-Disposition": `inline; filename="${encodeURIComponent(asset.originalName)}"`,
-    "Cache-Control": isPublic
-      ? "public, max-age=300, stale-while-revalidate=86400"
-      : "private, max-age=60",
-    "x-source": outcome.source,
+    "Cache-Control": "private, max-age=60",
   }
-  if (outcome.contentLength !== undefined) {
-    headers["Content-Length"] = String(outcome.contentLength)
+  if (upstream.contentLength !== undefined) {
+    headers["Content-Length"] = String(upstream.contentLength);
   }
 
   console.log(
-    `[asset-delivery] asset=${asset.id} name=${asset.originalName} source=${outcome.source} public=${isPublic}`,
-  )
+    `[asset-proxy] asset=${asset.$id} name=${asset.originalName} provider=${asset.provider}`,
+  );
 
-  return new Response(webStream as unknown as BodyInit, { status: 200, headers })
+  return new Response(upstream.body, { status: 200, headers });
+}
+
+async function fetchAssetStream(asset: AssetsRow): Promise<{
+  ok: boolean;
+  body: ReadableStream<Uint8Array>;
+  contentLength?: number;
+}> {
+  if (asset.provider === "appwrite" && asset.fileId) {
+    const res = await fetch(
+      `${APPWRITE_ENDPOINT}/storage/buckets/${bucketForAssetType(asset.type)}/files/${asset.fileId}/download`,
+      {
+        headers: {
+          "X-Appwrite-Project": APPWRITE_PROJECT_ID,
+          "X-Appwrite-Key": APPWRITE_API_KEY,
+        },
+      },
+    );
+    if (!res.ok || !res.body) {
+      return { ok: false, body: new ReadableStream() };
+    }
+    const contentLength = res.headers.get("Content-Length");
+    return {
+      ok: true,
+      body: res.body,
+      contentLength: contentLength ? Number(contentLength) : undefined,
+    };
+  }
+
+  // Seed (external) and legacy UploadThing rows: the stored URL is a plain public URL.
+  const res = await fetch(asset.url);
+  if (!res.ok || !res.body) {
+    return { ok: false, body: new ReadableStream() };
+  }
+  const contentLength = res.headers.get("Content-Length");
+  return {
+    ok: true,
+    body: res.body,
+    contentLength: contentLength ? Number(contentLength) : undefined,
+  };
 }
 
 function jsonError(status: number, error: string) {
   return new Response(JSON.stringify({ error }), {
     status,
     headers: { "Content-Type": "application/json" },
-  })
+  });
 }

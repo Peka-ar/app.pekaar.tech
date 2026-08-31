@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+perf-server.log
+.agents/
 
 # debug
 npm-debug.log*
@@ -42,8 +44,3 @@ gdrive-service-account.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-/src/generated/prisma
-
-# prisma generated client (v7)
-/prisma/generated/client

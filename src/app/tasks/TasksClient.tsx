@@ -7,13 +7,14 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
-import type { ProjectStatus } from "@/generated/prisma/client";
+import type { ProjectStatus } from "@/lib/enums";
 import type { Product } from "@/lib/types";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 const ThreeDConfigurator = dynamic(() => import('@/components/ThreeDConfigurator'), { ssr: false });
 import { createProject, brandPublishProject, brandSendForRevisions } from "@/app/actions/project";
-import { usePresignedUpload, type Asset as UploadedAsset } from "@/lib/hooks/use-presigned-upload";
+import { useAppwriteUpload, type UploadedAsset } from "@/lib/use-appwrite-upload";
+import { APPWRITE_REFERENCE_IMAGES_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -41,8 +42,6 @@ type TaskAsset = {
   mimeType: string;
   size: number;
   status: string;
-  key: string;
-  gdriveFileId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -167,7 +166,11 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     [publishedJob]
   );
 
-  const { upload: uploadFile, isUploading, error: uploadError, reset: resetUpload } = usePresignedUpload("referenceImageUploader");
+  const { upload: uploadFile, isUploading, error: uploadError, reset: resetUpload } = useAppwriteUpload({
+    bucketId: APPWRITE_REFERENCE_IMAGES_BUCKET_ID,
+    maxSizeMB: 16,
+    allowedExtensions: ["jpg", "jpeg", "png", "webp", "gif", "avif"],
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -288,7 +291,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       return;
     }
 
-    const asset = await uploadFile(file);
+    const asset = await uploadFile(file, "REFERENCE_IMAGE");
     if (asset) {
       setUploadedAssets((prev) => [...prev, asset]);
       setUploadSuccess(true);

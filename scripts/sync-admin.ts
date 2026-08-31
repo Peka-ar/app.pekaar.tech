@@ -1,38 +1,20 @@
-/**
- * sync-admin.ts — Permanent, idempotent admin bootstrapper.
- *
- * Reads ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME from .env and upserts the user:
- * - If the email already exists as a BRAND user, promotes them to ADMIN (no data loss).
- * - If the user does not exist, creates them with role=ADMIN, status=ACTIVE, onboarded=true.
- * - If the user exists as ADMIN, refreshes their password hash, name, status, and verified flag.
- *
- * Also deletes the legacy `admin@studiov.com` account (if present and not the env-driven one).
- * Does NOT touch any other data, projects, assets, or events.
- *
- * Usage:
- *   npm run sync-admin
- */
-
 import "dotenv/config";
-import { PrismaClient } from "../prisma/generated/client/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import bcrypt from "bcryptjs";
+import { ID, Models, Query, TablesDB, Users } from "node-appwrite";
+import { createAdminClient } from "../src/lib/appwrite";
+import {
+  APPWRITE_DATABASE_ID,
+  APPWRITE_USERS_TABLE_ID,
+} from "../src/lib/appwrite-config";
 
-const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL!,
-});
-const prisma = new PrismaClient({ adapter });
+type AdminRow = Models.Row & { email: string; role: string };
 
-function readEnv() {
-  const email = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const password = process.env.ADMIN_PASSWORD;
-  const name = process.env.ADMIN_NAME?.trim() || "Studio Admin";
+function readEnv(): { email: string; password: string; name: string } {
+  const email = (process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+  const password = process.env.ADMIN_PASSWORD || "";
+  const name = process.env.ADMIN_NAME || "Studio Admin";
 
-  if (!email) {
-    throw new Error("ADMIN_EMAIL is not set in .env");
-  }
-  if (!password) {
-    throw new Error("ADMIN_PASSWORD is not set in .env");
+  if (!email || !password) {
+    throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD are required in .env");
   }
   if (password.length < 6) {
     throw new Error("ADMIN_PASSWORD must be at least 6 characters");
@@ -40,77 +22,103 @@ function readEnv() {
   return { email, password, name };
 }
 
-async function main() {
-  const { email, password, name } = readEnv();
-  const hashedPassword = await bcrypt.hash(password, 12);
-
-  console.log(`Syncing admin user: ${email}`);
-
-  // Step 1: upsert the env-driven admin (preserves all data on existing users)
-  const existing = await prisma.user.findUnique({ where: { email } });
-
-  const admin = await prisma.user.upsert({
-    where: { email },
-    update: {
-      hashedPassword,
-      name,
-      role: "ADMIN",
-      status: "ACTIVE",
-      onboarded: true,
-      emailVerified: new Date(),
-      usageLimits: 9999,
-      suspendedAt: null,
-      statusReason: null,
-    },
-    create: {
-      email,
-      hashedPassword,
-      name,
-      role: "ADMIN",
-      status: "ACTIVE",
-      onboarded: true,
-      emailVerified: new Date(),
-      usageLimits: 9999,
-    },
-  });
-
-  if (existing) {
-    console.log(`  -> updated existing user (id: ${admin.id})`);
-  } else {
-    console.log(`  -> created new user (id: ${admin.id})`);
+async function listAllAdminRows(tablesDB: TablesDB): Promise<AdminRow[]> {
+  const rows: AdminRow[] = [];
+  let offset = 0;
+  while (true) {
+    const page = await tablesDB.listRows<AdminRow>({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_USERS_TABLE_ID,
+      queries: [Query.equal("role", "ADMIN"), Query.limit(100), Query.offset(offset)],
+    });
+    rows.push(...page.rows);
+    if (page.rows.length < 100) break;
+    offset += 100;
   }
-
-  // Step 2: delete any admin user that is NOT the env-driven admin email.
-  // This removes legacy placeholders (admin@studiov.com) AND any other stray ADMIN accounts
-  // so the platform always has exactly one permanent admin.
-  const envEmail = email;
-  const strayAdmins = await prisma.user.findMany({
-    where: {
-      role: "ADMIN",
-      email: { not: envEmail },
-    },
-    select: { id: true, email: true },
-  });
-
-  for (const stray of strayAdmins) {
-    await prisma.user.delete({ where: { id: stray.id } });
-    console.log(`  -> deleted stray admin: ${stray.email}`);
-  }
-
-  if (strayAdmins.length === 0) {
-    console.log("  -> no stray admins to remove");
-  }
-
-  console.log("\nSync complete. You can now sign in at /auth with:");
-  console.log(`  email:    ${email}`);
-  console.log(`  password: (the value of ADMIN_PASSWORD in .env)`);
+  return rows;
 }
 
-main()
-  .catch((e) => {
-    console.error("Sync failed:", e.message);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+async function main(): Promise<void> {
+  const { email, password, name } = readEnv();
+
+  const client = createAdminClient();
+  const users = new Users(client);
+  const tablesDB = new TablesDB(client);
+
+  const existing = await users.list({ queries: [Query.equal("email", email)] });
+  let adminId: string;
+  if (existing.users.length > 0) {
+    const u = existing.users[0];
+    adminId = u.$id;
+    console.log(`[sync-admin] Updating admin ${email} (${adminId})`);
+    await users.updateName({ userId: adminId, name });
+    await users.updatePassword({ userId: adminId, password });
+    await users.updateLabels({ userId: adminId, labels: ["ADMIN"] });
+    await users.updateEmailVerification({ userId: adminId, emailVerification: true });
+  } else {
+    const u = await users.create({ userId: ID.unique(), email, password, name });
+    adminId = u.$id;
+    console.log(`[sync-admin] Created admin ${email} (${adminId})`);
+    await users.updateLabels({ userId: adminId, labels: ["ADMIN"] });
+    await users.updateEmailVerification({ userId: adminId, emailVerification: true });
+  }
+
+  const existingRow = await tablesDB
+    .getRow({ databaseId: APPWRITE_DATABASE_ID, tableId: APPWRITE_USERS_TABLE_ID, rowId: adminId })
+    .catch(() => null);
+
+  const rowData = {
+    userId: adminId,
+    email,
+    role: "ADMIN",
+    usageLimits: 9999,
+    onboarded: true,
+    name,
+    status: "ACTIVE",
+    suspendedAt: null,
+    statusReason: null,
+  };
+  if (existingRow) {
+    await tablesDB.updateRow({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_USERS_TABLE_ID,
+      rowId: adminId,
+      data: rowData,
+    });
+  } else {
+    await tablesDB.createRow({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: APPWRITE_USERS_TABLE_ID,
+      rowId: adminId,
+      data: rowData,
+    });
+  }
+
+  const adminRows = await listAllAdminRows(tablesDB);
+  for (const row of adminRows) {
+    if (row.email.toLowerCase() !== email) {
+      console.log(`[sync-admin] Deleting stray admin ${row.email} (${row.$id})`);
+      try {
+        await users.delete({ userId: row.$id });
+      } catch (err) {
+        console.error(`[sync-admin] Failed to delete Appwrite user ${row.$id}:`, err);
+      }
+      try {
+        await tablesDB.deleteRow({
+          databaseId: APPWRITE_DATABASE_ID,
+          tableId: APPWRITE_USERS_TABLE_ID,
+          rowId: row.$id,
+        });
+      } catch (err) {
+        console.error(`[sync-admin] Failed to delete row ${row.$id}:`, err);
+      }
+    }
+  }
+
+  console.log(`[sync-admin] Done. Sign in at /auth with ${email}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

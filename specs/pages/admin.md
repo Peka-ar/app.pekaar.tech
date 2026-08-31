@@ -38,10 +38,13 @@ export default async function AdminDashboardPage() {
 }
 ```
 
-`AdminDashboardContent` (`:43`) calls three server actions in parallel:
-- `getPlatformKPIs()` → `{ totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }`
-- `getSignupsSeries(12)` → `{ labels: string[], counts: number[] }`
+`AdminDashboardContent` (`:44`) calls four server actions in parallel via `Promise.all`:
+- `getPlatformKPIs()` → `{ totalUsers, totalProjects, totalEvents, suspendedUsers, projectsByStatus, signupsThisMonth, eventsThisMonth }` (projectsByStatus counts run in parallel, Phase 6)
+- `getSignupsSeries(12)` → `{ labels: string[], counts: number[] }` (single `listAllRows` + JS month bucketing since Phase 6)
+- `getProjectsByMonth(12)` → `{ labels: string[], counts: number[] }`
 - `getTopBrands(10)` → `{ id, name, email, status, createdAt, _count: { projects } }[]`
+
+Segment `loading.tsx` (`src/app/admin/loading.tsx`) renders `AdminLayout` + `AdminDashboardSkeleton` during RSC navigation to all `/admin/*` routes (Phase 6).
 
 ### Dashboard sections
 
@@ -58,9 +61,9 @@ export default async function AdminDashboardPage() {
 
 ```
 AdminDashboardContent
-  ├── getPlatformKPIs()       ──→ prisma.user.count() + project.groupBy + analyticsEvent.count
-  ├── getSignupsSeries(12)    ──→ prisma.user.count() × 12 (one query per month)
-  └── getTopBrands(10)        ──→ prisma.user.findMany + slice(10) after JS sort
+  ├── getPlatformKPIs()       ──→ TablesDB countRows (listRows totals): users, projects, events ×status
+  ├── getSignupsSeries(12)    ──→ countRows per month via between("$createdAt", start, end)
+  └── getTopBrands(10)        ──→ listAllRows(users) + listAllRows(projects) → JS count by brandId → sort/slice
 ```
 
 All three actions require `Role.ADMIN` and throw `ForbiddenError` for non-admin callers.
@@ -108,11 +111,11 @@ No initial data is fetched server-side — `AdminUsersClient` loads on mount via
 
 ```
 [on mount] useCallback → adminGetUsers(search?, roleFilter?, statusFilter?, page?)
-                                     └── prisma.user.findMany + count
-[i] openUserDetail(id) → adminGetUser(id) ──→ prisma.user.findUnique + project.findMany
+                                     └── listRows(users) with role/status equal + orderDesc($createdAt) + 50/page; JS search filter; total from filtered length
+[i] openUserDetail(id) → adminGetUser(id) ──→ getRow(users) + countRows(projects/assets/events) + last-5 projects
 [i] handle*Update → adminUpdateUser(id, { role|usageLimits|subscriptionTier })
 [i] handleSetUserStatus → adminSetUserStatus(id, status, reason?)
-[i] handleDeleteUser → adminDeleteUser(id)
+[i] handleDeleteUser → adminDeleteUser(id)   // cascade runTransaction + Appwrite Users.delete
 ```
 
 All server actions require `Role.ADMIN` and are defined in `src/app/actions/admin-users.ts` (`../WEBSITE.md` §8).
@@ -174,8 +177,8 @@ Each column is `w-72`, scrollable, with header (icon + label + count badge) and 
 1. **Project Info** (`:288`) — Name, SKU, Brand, Status (Badge with `ADMIN_LABEL`), Additional Instructions (always rendered; shows text or italic "No additional instructions specified" fallback), Dimensions, Reference Images (grid with `<Image src="/api/v1/assets/{id}/file" unoptimized>` and `onError` fallback to a placeholder icon — `failedRefImages` Set, resets in `openModal`; the proxy means UT outages don't blank the grid; `unoptimized` because the proxy is cookie-gated, see `file-storage-architecture.md` §4b), Created date, GLB/USDZ asset links (`<a href="/api/v1/assets/{id}/file">` for consistency with the proxy fallback chain — `View` opens the file with `Content-Disposition: inline`).
 2. **Brand Revision Notes** (`:387`, only for REVISIONS) — amber-tinted section showing all `revisionRequests` newest-first with requester name, timestamp, and note text.
 3. **Published banner** (`:448`, only for PUBLISHED) — green "Live on the brand's storefront" notice.
-4. **3D Model Upload** (`:419`, shown when `status ∈ {PENDING, REVISIONS}`) — GLB file upload (required), USDZ file upload (optional). Each upload tile shows a **live progress bar** (`h-1.5` track, `var(--color-text-primary)` fill, `Math.max(2, progress)%` width) + a `0%`–`100%` label below the spinner while `isUploading` is true. Progress is wired from UploadThing v7's `onUploadProgress(p: number)` in `usePresignedUpload` (`src/lib/hooks/use-presigned-upload.ts`). When a `READY` model exists on the project, the tile first shows a **Current** caption card (filename · size · **View** link → `href="/api/v1/assets/{liveGlb.id}/file"` — proxy URL for fallback consistency) above the dashed dropzone; the dropzone label/icon flips to **"Replace GLB/USDZ file"** with a `RefreshCw` icon. While a freshly-uploaded file is staged, an inline **New** card replaces the dropzone and exposes an `X` to cancel and revert to the existing asset. **"Submit for Review"** button calls `adminSubmitProject(id, glbAssetId, usdzAssetId?)` — which atomically archives any prior `READY` GLB/USDZ on the project, links the new ones, flips status to `COMPLETED`, and fires `UTApi.deleteFiles()` on the archived UploadThing keys (see `file-storage-architecture.md` §"Model archival on replacement"). Disabled until GLB is uploaded.
-5. **Previous Models** (`:525`, only when `archivedAssetUrls` has entries) — `<details>` collapsible rendered after the upload tiles. Header reads **"Previous models (N)"** with a `History` icon and Show/Hide toggle. Each row: filename, mono caption `GLB/USDZ · <size> MB · <archive date>`, and a **View** link → `/api/v1/assets/{assetId}/file` (proxy with transparent UT→GDrive fallback; the same route the public embed uses, so any archived model still loads even though its UT copy was deleted post-archive). Sets `Content-Disposition: inline; filename="<encoded originalName>"` so the asset renders in-tab. Caption: "Earlier uploads remain available — UploadThing copies were removed on replacement, but the proxy route transparently falls back to Google Drive when the UT URL is gone."
+4. **3D Model Upload** (`:419`, shown when `status ∈ {PENDING, REVISIONS}`) — GLB file upload (required), USDZ file upload (optional). Each upload tile shows a **live progress bar** (`h-1.5` track, `var(--color-text-primary)` fill, `Math.max(2, progress)%` width) + a `0%`–`100%` label below the spinner while `isUploading` is true. Progress is wired from the client SDK's `createFile` `onProgress` (`{ progress: 0-100 }`) in `useAppwriteUpload` (`src/lib/use-appwrite-upload.ts`) — two instances: `{ bucketId: "models", maxSizeMB: 128, allowedExtensions: ["glb"] }` and `["usdz"]`, calling `upload(file, "MODEL_GLB")` / `upload(file, "MODEL_USDZ")`. When a `READY` model exists on the project, the tile first shows a **Current** caption card (filename · size · **View** link → `href="/api/v1/assets/{liveGlb.id}/file"` — auth-gated proxy URL) above the dashed dropzone; the dropzone label/icon flips to **"Replace GLB/USDZ file"** with a `RefreshCw` icon. While a freshly-uploaded file is staged, an inline **New** card replaces the dropzone and exposes an `X` to cancel and revert to the existing asset. **"Submit for Review"** button calls `adminSubmitProject(id, glbAssetId, usdzAssetId?)` — which in one TablesDB transaction archives any prior `READY` GLB/USDZ on the project, links the new ones, and flips status to `COMPLETED`. **No post-commit cleanup** — archived files are always kept in Appwrite Storage (legacy `utapi.deleteFiles` removed in Phase 5; see `file-storage-architecture.md` §10). Disabled until GLB is uploaded.
+5. **Previous Models** (`:525`, only when `archivedAssetUrls` has entries) — `<details>` collapsible rendered after the upload tiles. Header reads **"Previous models (N)"** with a `History` icon and Show/Hide toggle. Each row: filename, mono caption `GLB/USDZ · <size> MB · <archive date>`. The old GDrive **View** link was removed in Phase 4 (no `gdriveFileId` on TablesDB rows); archived Appwrite files remain in storage and stay viewable through the auth-gated proxy `/api/v1/assets/{assetId}/file` (Content-Disposition inline). Caption: "Earlier uploads remain available in Appwrite storage. New uploads replace the previous ones."
 5. **Submitted banner** (`:515`, only for COMPLETED) — green "The brand has been notified" notice with a link to view the GLB.
 
 The "Claim Task" section, "Mark as Completed" button, SDK Configuration form, and list view toggle are all gone. `assignedTo` is no longer a concept.
@@ -183,15 +186,17 @@ The "Claim Task" section, "Mark as Completed" button, SDK Configuration form, an
 ### Data flow
 
 ```
-[server] getAllTasks() ──→ prisma.project.findMany (with revisionRequests + requester)
+[server] getAllTasks() ──→ TablesDB: all projects (orderDesc $createdAt) + assets/revisions IN-queries + brands → buildTaskJob()
 
 [client] handleSubmit → adminSubmitProject(id, glbId, usdzId?)
-                       └─ prisma.$transaction:
-                          (a) updateMany Project(where status∈{PENDING,REVISIONS}) → COMPLETED
-                          (b) updateMany Asset(READY MODEL_GLB/USDZ on project, id≠new) → ARCHIVED  (keep projectId)
-                          (c) updateMany Asset(id∈newIds, projectId=null) → projectId
-                       └─ (post-commit) utapi.deleteFiles(archivedKeys)  // fire-and-forget
+                       └─ runTransaction (TablesDB):
+                          (a) getRowSafe(projects, id, txId) — status ∈ {PENDING, REVISIONS}?  → updateRow(id, COMPLETED)   // precondition failure → conflict
+                          (b) updateRows Asset(READY MODEL_GLB/USDZ on project, $id≠new) → ARCHIVED  (keep projectId)
+                           (c) updateRows Asset($id∈newIds, projectId=null) → projectId
 ```
+No post-commit cleanup — archived files are always kept (legacy UT-key deletion removed in Phase 5).
+
+**Guard note (Phase 6 bug 2):** a staged (in-transaction) bulk `updateRows` always returns `{ total: 0, rows: [] }` regardless of matches — the response only reflects executed operations, and staged ops execute at commit. So the status precondition in (a) is enforced by an in-tx `getRowSafe` read + single-row `updateRow`, never by checking a staged bulk-update response.
 
 `adminSubmitProject` calls `revalidatePath("/tasks")` and `revalidatePath("/admin/tasks")`, then `router.refresh()`. The same action handles both initial submit (PENDING → COMPLETED) and re-submit after revisions (REVISIONS → COMPLETED).
 
@@ -272,7 +277,7 @@ Active state is determined by `pathname.startsWith(item.path)`. Active: dark bac
 
 All admin server actions are documented in `../WEBSITE.md` §8. Summary of files:
 
-- **`src/app/actions/admin.ts`** — `getAllTasks`, `adminSubmitProject` (archives prior models in-transaction + fires `UTApi.deleteFiles` post-commit; replaces `claimProject` + `markAsCompleted` + `adminUpdateProjectStatus` + `adminReassignProject`)
+- **`src/app/actions/admin.ts`** — `getAllTasks`, `adminSubmitProject` (archives prior models in-transaction, links new ones, no post-commit cleanup; replaces `claimProject` + `markAsCompleted` + `adminUpdateProjectStatus` + `adminReassignProject`)
 - **`src/app/actions/admin-users.ts`** — `adminGetUsers`, `adminGetUser`, `adminUpdateUser`, `adminSetUserStatus`, `adminDeleteUser`
 - **`src/app/actions/admin-analytics.ts`** — `getPlatformKPIs`, `getSignupsSeries`, `getTopBrands`
 
@@ -316,8 +321,8 @@ All admin server actions are documented in `../WEBSITE.md` §8. Summary of files
 | `AdminMobileNavDrawer` | `src/components/admin/AdminMobileNavDrawer.tsx:17` |
 | `MobileNavDrawer` (shared, closed = invisible) | `src/components/dashboard/MobileNavDrawer.tsx:1` |
 | **Server actions** | |
-| `getAllTasks` | `src/app/actions/admin.ts:9` |
-| `adminSubmitProject` (PENDING\|REVISIONS → COMPLETED, archives prior + UT post-commit delete) | `src/app/actions/admin.ts:72` |
+| `getAllTasks` | `src/app/actions/admin.ts:26` |
+| `adminSubmitProject` (PENDING\|REVISIONS → COMPLETED, archives prior + links new; staged bulk-update responses unusable as guards — Phase 6 bug 2) | `src/app/actions/admin.ts:73` |
 | `adminGetUsers` | `src/app/actions/admin-users.ts:8` |
 | `adminGetUser` | `src/app/actions/admin-users.ts:55` |
 | `adminUpdateUser` | `src/app/actions/admin-users.ts:103` |

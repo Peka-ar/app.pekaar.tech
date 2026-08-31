@@ -1,15 +1,22 @@
 "use server";
-import { prisma } from "@/lib/prisma";
-import { hashPassword, verifyPassword } from "@/lib/password";
-import { sendPasswordResetEmail, sendVerificationOtpEmail } from "@/lib/emails";
-import { unstable_update } from "@/auth";
+import { Account, ID, Query, TablesDB, Users } from "node-appwrite";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requirePrincipal } from "@/lib/auth-guards";
-import { Role } from "@/generated/prisma/client";
-
-const EMAIL_VERIFICATION_TYPE = "email_verification";
-const EMAIL_VERIFICATION_OTP_TYPE = "email_verification_otp";
-const PASSWORD_RESET_TYPE = "password_reset";
+import { requirePrincipal, Role } from "@/lib/auth-guards";
+import {
+  createAdminClient,
+  createPublicClient,
+  createSessionClient,
+  SESSION_COOKIE,
+} from "@/lib/appwrite";
+import { createNextServerHelpers } from "@appwrite.io/react/server/next";
+import {
+  APPWRITE_DATABASE_ID,
+  APPWRITE_ENDPOINT,
+  APPWRITE_PROJECT_ID,
+  APPWRITE_USERS_TABLE_ID,
+} from "@/lib/appwrite-config";
 
 type CompleteOnboardingInput = {
   companyName: string;
@@ -22,76 +29,33 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
 }
 
-function generateOtp() {
-  return crypto.getRandomValues(new Uint32Array(1))[0].toString().padStart(10, "0").slice(0, 6);
-}
-
-async function issueVerificationOtp(email: string) {
-  await prisma.token.deleteMany({
-    where: { identifier: email, type: { in: [EMAIL_VERIFICATION_TYPE, EMAIL_VERIFICATION_OTP_TYPE] } },
-  });
-
-  const otp = generateOtp();
-  await prisma.token.create({
-    data: {
-      identifier: email,
-      token: await hashPassword(otp),
-      type: EMAIL_VERIFICATION_OTP_TYPE,
-      expires: new Date(Date.now() + 10 * 60 * 1000),
-    },
-  });
-
-  try {
-    await sendVerificationOtpEmail(email, otp);
-  } catch (emailError) {
-    console.error(
-      `[auth] Failed to send verification OTP email to ${email}:`,
-      emailError instanceof Error ? emailError.message : emailError
-    );
-    throw new Error(
-      "Account created, but we couldn't send the verification email. Please use the resend code option to try again."
-    );
-  }
-}
-
 function optionalText(value?: string) {
   const trimmed = value?.trim();
   return trimmed ? trimmed : null;
 }
 
-type PreflightResult =
-  | { status: "invalid_credentials" }
-  | { status: "valid"; onboarded: boolean; role: Role };
-
-export async function preflightLogin(email: string, password: string): Promise<PreflightResult> {
-  const normalizedEmail = normalizeEmail(email);
-
-  if (!normalizedEmail || !password) {
-    return { status: "invalid_credentials" };
-  }
-
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
-
-  if (!user || !user.emailVerified || !user.hashedPassword || !(await verifyPassword(password, user.hashedPassword))) {
-    return { status: "invalid_credentials" };
-  }
-
-  return { status: "valid", onboarded: user.onboarded, role: user.role };
+function appUrl() {
+  return process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
-export async function resendVerificationOtp(email: string) {
-  const normalizedEmail = normalizeEmail(email);
-  const user = await prisma.user.findUnique({
-    where: { email: normalizedEmail },
-    select: { email: true, emailVerified: true },
-  });
+async function lookupUserByEmail(email: string) {
+  const users = new Users(createAdminClient());
+  return users.list({ queries: [Query.equal("email", email)] });
+}
 
-  if (!user || user.emailVerified) {
-    return { success: false, status: "invalid" as const };
+async function sendVerificationEmail(userId: string) {
+  const users = new Users(createAdminClient());
+  const session = await users.createSession({ userId });
+  try {
+    const account = new Account(createSessionClient(session.secret));
+    await account.createVerification({ url: `${appUrl()}/auth/verify` });
+  } finally {
+    try {
+      await users.deleteSession({ userId, sessionId: session.$id });
+    } catch (cleanupError) {
+      console.error(`[auth] Failed to clean up minted session for ${userId}:`, cleanupError);
+    }
   }
-
-  await issueVerificationOtp(normalizedEmail);
-  return { success: true, status: "sent" as const };
 }
 
 export async function registerUser(formData: FormData) {
@@ -106,135 +70,100 @@ export async function registerUser(formData: FormData) {
     throw new Error("Password must be at least 6 characters");
   }
 
-  const existing = await prisma.user.findUnique({ where: { email } });
-  if (existing) {
-    if (existing.emailVerified) {
+  const users = new Users(createAdminClient());
+  const existing = await lookupUserByEmail(email);
+
+  if (existing.users.length > 0) {
+    const user = existing.users[0];
+    if (user.emailVerification) {
       throw new Error("Email already registered");
     }
-
-    await prisma.user.update({
-      where: { email },
-      data: { hashedPassword: await hashPassword(password) },
-    });
-    await issueVerificationOtp(email);
-
+    await users.updatePassword({ userId: user.$id, password });
+    await sendVerificationEmail(user.$id);
     return { email, verificationRequired: true };
   }
 
-  const hashedPassword = await hashPassword(password);
+  const appwriteUser = await users.create({ userId: ID.unique(), email, password });
+  const userId = appwriteUser.$id;
 
-  await prisma.user.create({
+  const tablesDB = new TablesDB(createAdminClient());
+  await tablesDB.createRow({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_USERS_TABLE_ID,
+    rowId: userId,
     data: {
+      userId,
       email,
-      hashedPassword,
       role: "BRAND",
       usageLimits: 10,
+      onboarded: false,
+      status: "ACTIVE",
     },
   });
 
-  await issueVerificationOtp(email);
+  await users.updateLabels({ userId, labels: ["BRAND"] });
+
+  try {
+    await sendVerificationEmail(userId);
+  } catch (emailError) {
+    console.error(
+      `[auth] Failed to send verification email to ${email}:`,
+      emailError instanceof Error ? emailError.message : emailError
+    );
+    throw new Error(
+      "Account created, but we couldn't send the verification email. Please try submitting again — it will resend the verification link."
+    );
+  }
 
   return { email, verificationRequired: true };
 }
 
-export async function verifyEmail(token: string) {
-  const verificationToken = await prisma.token.findFirst({
-    where: { token, type: EMAIL_VERIFICATION_TYPE, expires: { gt: new Date() } },
-  });
+export async function resendVerificationEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  const existing = await lookupUserByEmail(normalizedEmail);
+  const user = existing.users[0];
 
-  if (!verificationToken) {
-    throw new Error("Verification link is invalid or expired");
+  if (!user || user.emailVerification) {
+    return { success: false, status: "invalid" as const };
   }
 
-  await prisma.user.update({
-    where: { email: verificationToken.identifier },
-    data: { emailVerified: new Date() },
-  });
-
-  await prisma.token.delete({ where: { token } });
-
-  return { success: true };
+  await sendVerificationEmail(user.$id);
+  return { success: true, status: "sent" as const };
 }
 
 export async function requestPasswordReset(email: string) {
   const normalizedEmail = normalizeEmail(email);
-  const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
 
-  if (!user) {
-    return { success: true };
+  try {
+    const account = new Account(createPublicClient());
+    await account.createRecovery({ email: normalizedEmail, url: `${appUrl()}/auth/reset-password` });
+  } catch (error) {
+    console.error(
+      `[auth] Failed to send password reset email to ${email}:`,
+      error instanceof Error ? error.message : error
+    );
   }
-
-  const token = crypto.randomUUID();
-  await prisma.token.create({
-    data: {
-      identifier: normalizedEmail,
-      token,
-      type: PASSWORD_RESET_TYPE,
-      expires: new Date(Date.now() + 60 * 60 * 1000),
-    },
-  });
-
-  await sendPasswordResetEmail(normalizedEmail, token);
 
   return { success: true };
 }
 
-export async function resetPassword(token: string, password: string) {
+export async function resetPassword(userId: string, secret: string, password: string) {
+  if (!userId || !secret) {
+    throw new Error("Reset link is invalid or expired");
+  }
+
   if (!password || password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
 
-  const resetToken = await prisma.token.findFirst({
-    where: { token, type: PASSWORD_RESET_TYPE, expires: { gt: new Date() } },
-  });
-
-  if (!resetToken) {
+  try {
+    const account = new Account(createPublicClient());
+    await account.updateRecovery({ userId, secret, password });
+  } catch {
     throw new Error("Reset link is invalid or expired");
   }
 
-  await prisma.user.update({
-    where: { email: resetToken.identifier },
-    data: { hashedPassword: await hashPassword(password) },
-  });
-
-  await prisma.token.delete({ where: { token } });
-
   return { success: true };
-}
-
-export async function verifyEmailOtp(email: string, otp: string) {
-  const normalizedEmail = normalizeEmail(email);
-  const normalizedOtp = otp.trim();
-
-  if (!normalizedEmail || !/^\d{6}$/.test(normalizedOtp)) {
-    throw new Error("Enter the 6-digit verification code");
-  }
-
-  const verificationTokens = await prisma.token.findMany({
-    where: {
-      identifier: normalizedEmail,
-      type: EMAIL_VERIFICATION_OTP_TYPE,
-      expires: { gt: new Date() },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  for (const verificationToken of verificationTokens) {
-    if (await verifyPassword(normalizedOtp, verificationToken.token)) {
-      await prisma.user.update({
-        where: { email: normalizedEmail },
-        data: { emailVerified: new Date() },
-      });
-
-      await prisma.token.deleteMany({
-        where: { identifier: normalizedEmail, type: EMAIL_VERIFICATION_OTP_TYPE },
-      });
-
-      return { success: true };
-    }
-  }
-
-  throw new Error("Verification code is invalid or expired");
 }
 
 export async function completeOnboarding(input: CompleteOnboardingInput) {
@@ -246,8 +175,11 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
     throw new Error("Company name is required");
   }
 
-  await prisma.user.update({
-    where: { id: principal.userId },
+  const tablesDB = new TablesDB(createAdminClient());
+  await tablesDB.updateRow({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: APPWRITE_USERS_TABLE_ID,
+    rowId: principal.userId,
     data: {
       name: companyName,
       productCategory: optionalText(input.productCategory),
@@ -257,7 +189,7 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
     },
   });
 
-  await unstable_update({ user: { onboarded: true } });
+  await new Users(createAdminClient()).updateLabels({ userId: principal.userId, labels: [principal.role] });
 
   revalidatePath("/auth");
   revalidatePath("/onboarding");
@@ -268,7 +200,33 @@ export async function completeOnboarding(input: CompleteOnboardingInput) {
   return { success: true };
 }
 
+export async function getSessionPrincipal(): Promise<{
+  onboarded: boolean;
+  role: Role;
+  sessionSecret: string;
+} | null> {
+  try {
+    const principal = await requirePrincipal();
+    const helpers = createNextServerHelpers({ endpoint: APPWRITE_ENDPOINT, projectId: APPWRITE_PROJECT_ID });
+    const sessionSecret = await helpers.readSessionCookie();
+    if (!sessionSecret) return null;
+    return { onboarded: principal.onboarded, role: principal.role, sessionSecret };
+  } catch {
+    return null;
+  }
+}
+
 export async function logout() {
-  const { signOut } = await import("@/auth");
-  await signOut({ redirectTo: "/" });
+  const helpers = createNextServerHelpers({ endpoint: APPWRITE_ENDPOINT, projectId: APPWRITE_PROJECT_ID });
+  const secret = await helpers.readSessionCookie();
+  if (secret) {
+    try {
+      const account = new Account(createSessionClient(secret));
+      await account.deleteSession({ sessionId: "current" });
+    } catch (error) {
+      console.error("[auth] Failed to delete Appwrite session on logout:", error);
+    }
+    (await cookies()).delete(SESSION_COOKIE);
+  }
+  redirect("/");
 }

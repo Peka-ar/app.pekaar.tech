@@ -7,9 +7,10 @@ import {
   History, RefreshCw
 } from 'lucide-react';
 import Image from 'next/image';
-import type { ProjectStatus } from "@/generated/prisma/client";
+import type { ProjectStatus } from "@/lib/enums";
 import { adminSubmitProject } from "@/app/actions/admin";
-import { usePresignedUpload } from "@/lib/hooks/use-presigned-upload";
+import { useAppwriteUpload, type UploadedAsset } from "@/lib/use-appwrite-upload";
+import { APPWRITE_MODELS_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
@@ -31,8 +32,6 @@ type TaskAsset = {
   mimeType: string;
   size: number;
   status: string;
-  key: string;
-  gdriveFileId: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
 };
@@ -58,16 +57,6 @@ type TaskJob = {
   assetUrls: { glb: string; usdz?: string } | null;
   archivedAssetUrls?: { glb: TaskAsset[]; usdz: TaskAsset[] };
   revisionRequests?: RevisionRequestLite[];
-};
-
-type UploadedAsset = {
-  id: string;
-  url: string;
-  key: string;
-  type: string;
-  status: string;
-  mimeType: string;
-  size: number;
 };
 
 const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] = [
@@ -111,8 +100,16 @@ export default function AdminTasksClient({
   const glbInputRef = useRef<HTMLInputElement>(null);
   const usdzInputRef = useRef<HTMLInputElement>(null);
 
-  const { upload: uploadGlb, isUploading: isUploadingGlb, progress: glbProgress, error: glbError, reset: resetGlb } = usePresignedUpload("modelGlbUploader");
-  const { upload: uploadUsdz, isUploading: isUploadingUsdz, progress: usdzProgress, error: usdzError, reset: resetUsdz } = usePresignedUpload("modelUsdzUploader");
+  const { upload: uploadGlb, isUploading: isUploadingGlb, progress: glbProgress, error: glbError, reset: resetGlb } = useAppwriteUpload({
+    bucketId: APPWRITE_MODELS_BUCKET_ID,
+    maxSizeMB: 128,
+    allowedExtensions: ["glb"],
+  });
+  const { upload: uploadUsdz, isUploading: isUploadingUsdz, progress: usdzProgress, error: usdzError, reset: resetUsdz } = useAppwriteUpload({
+    bucketId: APPWRITE_MODELS_BUCKET_ID,
+    maxSizeMB: 128,
+    allowedExtensions: ["usdz"],
+  });
 
   const filteredJobs = initialTasks.filter(job => {
     const matchesSearch = job.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -142,7 +139,7 @@ export default function AdminTasksClient({
     const file = e.target.files?.[0];
     if (!file) return;
     setGlbFileName(file.name);
-    const asset = await uploadGlb(file);
+    const asset = await uploadGlb(file, "MODEL_GLB");
     if (asset) setGlbAsset(asset);
     if (e.target) e.target.value = "";
   };
@@ -151,7 +148,7 @@ export default function AdminTasksClient({
     const file = e.target.files?.[0];
     if (!file) return;
     setUsdzFileName(file.name);
-    const asset = await uploadUsdz(file);
+    const asset = await uploadUsdz(file, "MODEL_USDZ");
     if (asset) setUsdzAsset(asset);
     if (e.target) e.target.value = "";
   };
@@ -563,7 +560,7 @@ export default function AdminTasksClient({
                     </summary>
                     <div className="mt-3 space-y-2">
                       <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
-                        Earlier uploads remain available on Google Drive. UploadThing copies are removed on replacement.
+                        Earlier uploads remain available in Appwrite storage. New uploads replace the previous ones.
                       </p>
                       {[...archivedGlbs, ...archivedUsdzs].map((m) => {
                         const isGlb = m.type === 'MODEL_GLB';
@@ -578,16 +575,6 @@ export default function AdminTasksClient({
                                 </p>
                               </div>
                             </div>
-                            {m.gdriveFileId && (
-                              <a
-                                href={`/api/admin/assets/${m.id}/gdrive-download`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0"
-                              >
-                                GDrive <ExternalLink className="w-3 h-3" />
-                              </a>
-                            )}
                           </div>
                         );
                       })}

@@ -9,8 +9,10 @@ import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
 import { Alert } from "@/components/ui/Alert";
 
-export default function ResetPasswordForm({ token }: { token: string }) {
-  const [error, setError] = useState<string | null>(token ? null : "Reset token is missing.");
+export default function ResetPasswordForm({ userId, secret }: { userId: string; secret: string }) {
+  const [error, setError] = useState<string | null>(
+    userId && secret ? null : "Reset link is invalid or expired."
+  );
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -23,7 +25,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
     const password = formData.get("password") as string;
 
     try {
-      await resetPassword(token, password);
+      await resetPassword(userId, secret, password);
       setSuccess(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Password reset failed");
@@ -60,7 +62,7 @@ export default function ResetPasswordForm({ token }: { token: string }) {
               type="submit"
               variant="primary"
               size="lg"
-              disabled={loading || !token}
+              disabled={loading || !userId || !secret}
               isLoading={loading}
             >
               {loading ? "Updating..." : "Update Password"}

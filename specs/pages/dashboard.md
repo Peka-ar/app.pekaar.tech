@@ -2,7 +2,7 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) · Source: `src/app/dashboard/page.tsx:1` + `DashboardSkeleton.tsx` + `DashboardError.tsx`
 
-The dashboard is the authenticated landing page. It surfaces four metric cards, a 12-month interaction-trends bar chart, a recent-tasks list, and quick-link cards. All metrics are computed server-side from `prisma.analyticsEvent` scoped to the signed-in user's projects.
+The dashboard is the authenticated landing page. It surfaces four metric cards, a 12-month interaction-trends bar chart, a recent-tasks list, and quick-link cards. All metrics are computed server-side from the TablesDB `analytics_events` table (`listAllRows<AnalyticsEventRow>`) scoped to the signed-in user's projects (Prisma-backed until migration Phase 5).
 
 ---
 
@@ -14,8 +14,8 @@ The dashboard is the authenticated landing page. It surfaces four metric cards, 
 | **Server entry** | `src/app/dashboard/page.tsx:1` (async server component) |
 | **Layout shell** | `DashboardLayout` with `title="Overview"` (`src/components/dashboard/DashboardLayout.tsx:1`) — includes left sidebar (≥768px), sticky header with hamburger button (<768px opens `MobileNavDrawer`), and `NotificationBell`. Header `h1` is `text-lg sm:text-2xl` and uses `px-4 sm:px-6` so long titles fit on 360px viewports; the action slot is hidden below `sm`. `<main>` carries `p-4 sm:p-6`. `MobileNavDrawer` is mounted once per page under a `react-dom` portal so the slide-out animation can play; when closed, the wrapper is `pointer-events-none opacity-0` and `inert` so the black 50%-opacity scrim never intercepts taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`). |
 | **Proxy gating** | `["BRAND","ADMIN"]` + onboarded (`src/proxy.ts:8`) |
-| **Loading** | `<DashboardSkeleton />` via `<Suspense>` (`page.tsx:19`) |
-| **Error** | `<DashboardError />` (`page.tsx:43`) — DB failures only; auth failures handled by `requirePrincipalOrRedirect()` |
+| **Loading** | `<DashboardSkeleton />` via `<Suspense>` (`page.tsx:21`); segment `loading.tsx` (`src/app/dashboard/loading.tsx`) renders `DashboardLayout` + skeleton during RSC navigation (Phase 6) |
+| **Error** | `<DashboardError />` (`page.tsx:52`) — DB failures only; auth failures handled by `requirePrincipalOrRedirect()` |
 
 ### Server entry (`page.tsx:16`)
 ```tsx
@@ -31,7 +31,7 @@ export default function DashboardPage() {
 ```
 `DashboardContent` is an **async** server component wrapped in `<Suspense>` so the metric computation can stream without blocking the shell. The Suspense boundary is what makes `DashboardSkeleton` show during server work.
 
-> **Note (known perf issue):** `DashboardContent` calls `requirePrincipalOrRedirect()` at the top, then `getUserProjects()` internally calls `requirePrincipal()` again — the DB lookup is duplicated. The `auth-stabilization.md` task plan tracks eliminating this redundant call (Task 10). Until then, dashboard data path does two DB lookups for the same user.
+> **Note (resolved Phase 6):** `DashboardContent` calls `requirePrincipalOrRedirect()` at the top while `getUserProjects()` internally calls `requirePrincipal()` again. The duplicate DB lookup is now collapsed by the React `cache()` wrapper in `src/lib/auth-guards.ts` (`getSessionPrincipalData`) — all `requirePrincipal` calls in a request share one session lookup + users-row fetch. Data path: single `listAllRows(analytics_events, brandId)` (parallel with `getUserProjects`) + JS filters (Phase 6).
 
 ---
 
@@ -56,14 +56,15 @@ async function fetchDashboardData(): Promise<DashboardData> {
 ### Metric queries (`page.tsx:52`–`148`)
 After `projects` resolve, the component derives:
 - `projectIds = projects.map(p => p.id)`
-- `userId = projects[0]?.brand.id` — the brand's id (used as `brandId` filter; assumes all of a user's projects share one `brandId`)
-- **Guards:** if `projectIds.length === 0` or `userId` is falsy, both query blocks are skipped and zeros are shown.
+- **Guards:** if `projectIds.length === 0`, both query blocks are skipped and zeros are shown.
+- Events are filtered by **`Query.equal("brandId", principal.userId)`** (the caller's own id — not the first project's brand, as in the old Prisma version) **AND** `Query.equal("projectId", projectIds)`.
 
-**Query 1 — totals** (`page.tsx:57`):
+**Query 1 — totals** (`page.tsx:58`):
 ```ts
-const events = await prisma.analyticsEvent.findMany({
-  where: { brandId: userId, projectId: { in: projectIds } },
-});
+const events = await listAllRows<AnalyticsEventRow>(DB.analyticsEvents, [
+  Query.equal("brandId", principal.userId),
+  Query.equal("projectId", projectIds),
+]);
 totalViews      = events.filter(e => e.eventType === 'VIEW').length;
 arLaunches      = events.filter(e => e.eventType === 'AR_LAUNCH').length;
 totalInteractions = events.length;
@@ -72,18 +73,20 @@ In-memory filtering — no DB-level aggregation. Acceptable at MVP scale (a bran
 
 > **Note:** `AR_LAUNCH` events are emitted by the public storefront embed (`/embed/[projectId]`) on the first `ar-status: session-started` (or `object-placed`) per page view — see `pages/embed.md` §"AR button". The `arLaunches` card therefore reflects AR usage by end-customers on third-party storefronts, not by brand/admin users viewing models inside `/tasks` (those do not emit analytics). When AR is unsupported on the viewer's device, no event is emitted.
 
-**Query 2 — 12-month series** (`page.tsx:118`):
+**Query 2 — 12-month series** (`page.tsx:115`):
 ```ts
 const twelveMonthsAgo = new Date();
 twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
 twelveMonthsAgo.setDate(1); twelveMonthsAgo.setHours(0,0,0,0);
 
-const recentEvents = await prisma.analyticsEvent.findMany({
-  where: { brandId: userId, projectId: { in: projectIds }, eventType: 'VIEW', createdAt: { gte: twelveMonthsAgo } },
-  select: { createdAt: true },
-});
+const recentEvents = await listAllRows<AnalyticsEventRow>(DB.analyticsEvents, [
+  Query.equal("brandId", principal.userId),
+  Query.equal("projectId", projectIds),
+  Query.equal("eventType", "VIEW"),
+  Query.greaterThanEqual("$createdAt", twelveMonthsAgo.toISOString()),
+]);
 ```
-Then buckets events into a `Map<"${year}-${month}", count>` and writes into `monthlyViewCounts[i]`. `monthLabels[i]` holds the `toLocaleDateString('en-US', { month: 'short' })` label. `maxCount = Math.max(...monthlyViewCounts, 1)` drives the bar heights.
+Note the `$createdAt` range comparison uses an **ISO string** (`toISOString()`), per the TablesDB convention. Then buckets events into a `Map<"${year}-${month}", count>` and writes into `monthlyViewCounts[i]`. `monthLabels[i]` holds the `toLocaleDateString('en-US', { month: 'short' })` label. `maxCount = Math.max(...monthlyViewCounts, 1)` drives the bar heights.
 
 ---
 
@@ -138,8 +141,9 @@ Rendered when `fetchDashboardData()` returns `{ error: true }` (`page.tsx:42`). 
 | Import | Source | Used for |
 |---|---|---|
 | `DashboardLayout` | `@/components/dashboard/DashboardLayout` | shell (sidebar, header, NotificationBell, logout) |
-| `getUserProjects` | `@/app/actions/project` | project list (calls `requirePrincipal` + Prisma) |
-| `prisma` | `@/lib/prisma` | direct `analyticsEvent.findMany` for metrics + chart |
+| `getUserProjects` | `@/app/actions/project` | project list (calls `requirePrincipal` + batched TablesDB queries; `buildTaskJob` derives the shape) |
+| `listAllRows` + `DB` + `AnalyticsEventRow` | `@/lib/db` | TablesDB event queries for metrics + chart (explicit generics required) |
+| `Query` | `node-appwrite` | `equal`/`greaterThanEqual` query filters |
 | `formatCount` | `@/lib/utils` | compact number formatting |
 | `formatDistanceToNow` | `date-fns` | relative time on recent tasks |
 | `Card`/`CardHeader`/`CardBody` | `@/components/ui/Card` | metric + section cards |
@@ -155,8 +159,8 @@ Rendered when `fetchDashboardData()` returns `{ error: true }` (`page.tsx:42`). 
 
 - **No period-over-period on this page** — the 4 metric cards show `change: "--"`. Real deltas live on `/analytics` (`?range=7D|30D|ALL`, current-vs-previous). If you add deltas here, reuse `formatChange` from `src/lib/utils.ts` and the analytics page's period math.
 - **Admin sees only their own projects here** — `getUserProjects` filters by `brandId = principal.userId`. ADMIN users do **not** see global data on `/dashboard` (only on `/analytics` + `/tasks`). This is by design; an "admin overview" is a future consideration.
-- **`projects[0]?.brand.id` assumption** — the code uses the first project's `brand.id` as the `brandId` filter for analytics. Safe because every project's `brandId` is the caller's own id (enforced by `createProject`). If multi-brand accounts ever exist, this breaks.
-- **In-memory event filtering** — `totalViews`/`arLaunches`/`totalInteractions` are computed with JS `.filter()` over all the user's events, not via DB `groupBy`. Fine at MVP scale; refactor to `prisma.analyticsEvent.groupBy({ by: ['eventType'] })` if event volume grows.
+- **`brandId` filter uses `principal.userId`** — the caller's own id (the old Prisma version used `projects[0]?.brand.id`). Safe because every project's `brandId` is the caller's own id (enforced by `createProject`). If multi-brand accounts ever exist, this breaks.
+- **In-memory event filtering** — `totalViews`/`arLaunches`/`totalInteractions` are computed with JS `.filter()` over all the user's events, not via DB `groupBy`. Fine at MVP scale; refactor to `groupBy` (TablesDB `groupBy` in `db.ts`) if event volume grows.
 - **Redundant `auth()` call** — see `auth-stabilization.md` Task 10. Passing the resolved principal from the parent into `getUserProjects` would eliminate the duplicate.
 
 ---
@@ -170,10 +174,10 @@ Rendered when `fetchDashboardData()` returns `{ error: true }` (`page.tsx:42`). 
 | `requirePrincipalOrRedirect` call | `page.tsx:41` |
 | `fetchDashboardData` | `page.tsx:31` |
 | `DashboardContent` | `page.tsx:40` |
-| Metric totals query | `page.tsx:57` |
-| Metric formulas | `page.tsx:66`–`67` |
-| `METRICS` array | `page.tsx:69` |
-| 12-month series query | `page.tsx:118` |
+| Metric totals query | `page.tsx:59` |
+| Metric formulas | `page.tsx:64`–`66` |
+| `METRICS` array | `page.tsx:72` |
+| 12-month series query | `page.tsx:121` |
 | Metric cards grid | `page.tsx:160` |
 | Interaction Trends chart | `page.tsx:186` |
 | Recent Tasks card | `page.tsx:215` |

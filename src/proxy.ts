@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import NextAuth from "next-auth";
-import { authConfig } from "./auth.config";
+import type { NextRequest } from "next/server";
+import { SESSION_COOKIE } from "./lib/appwrite-config";
 
-export const { auth } = NextAuth(authConfig);
-
-// Define protected routes and their required roles
+// Protected routes and their required roles.
+// Role gating is enforced server-side per request by requirePrincipal() in the
+// pages themselves (admin pages pass `roles: [Role.ADMIN]`); the edge middleware
+// only gates on session-cookie presence because it cannot call the Appwrite API.
 const protectedRoutes = {
   "/dashboard": ["BRAND", "ADMIN"],
   "/tasks": ["BRAND", "ADMIN"],
@@ -14,31 +15,17 @@ const protectedRoutes = {
   "/admin": ["ADMIN"],
 };
 
-function homeForRole(role: string | undefined): string {
-  return role === "ADMIN" ? "/admin/dashboard" : "/dashboard";
-}
-
-export default auth((req) => {
-  const { nextUrl } = req;
-  const isLoggedIn = !!req.auth;
-  const userRole = (req.auth?.user as { role?: string } | undefined)?.role;
-  const onboarded = (req.auth?.user as { onboarded?: boolean } | undefined)?.onboarded;
+export function proxy(request: NextRequest) {
+  const { nextUrl } = request;
+  const hasSession = request.cookies.has(SESSION_COOKIE);
   const isOnboardingRoute = nextUrl.pathname.startsWith("/onboarding");
 
-  if (isLoggedIn && nextUrl.pathname === "/auth" && onboarded) {
-    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
-  }
-
-  if (isOnboardingRoute && !isLoggedIn) {
+  if (isOnboardingRoute && !hasSession) {
     return NextResponse.redirect(new URL("/auth", nextUrl));
   }
 
-  if (isOnboardingRoute && onboarded) {
-    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
-  }
-
   // Public routes — skip auth checks
-  if (nextUrl.pathname === '/' || nextUrl.pathname.startsWith('/auth') || nextUrl.pathname.startsWith('/embed')) {
+  if (nextUrl.pathname === "/" || nextUrl.pathname.startsWith("/auth") || nextUrl.pathname.startsWith("/embed")) {
     return NextResponse.next();
   }
 
@@ -47,21 +34,13 @@ export default auth((req) => {
     nextUrl.pathname.startsWith(route)
   )?.[1];
 
-  // 1. If trying to access a protected route without being logged in
-  if (requiredRoles && !isLoggedIn) {
+  // Protected route without a session cookie
+  if (requiredRoles && !hasSession) {
     return NextResponse.redirect(new URL("/auth", nextUrl));
   }
 
-  // 2. If logged in but accessing a route without the required role
-  if (requiredRoles && isLoggedIn && (!userRole || !requiredRoles.includes(userRole))) {
-    return NextResponse.redirect(new URL(homeForRole(userRole), nextUrl));
-  }
-
-  if (requiredRoles && isLoggedIn && onboarded === false) {
-    return NextResponse.redirect(new URL("/onboarding", nextUrl));
-  }
   return NextResponse.next();
-});
+}
 
 // Optionally, don't invoke Middleware on some paths
 export const config = {

@@ -1,6 +1,6 @@
 import AdminTasksClient from "./AdminTasksClient";
 import { getAllTasks } from "@/app/actions/admin";
-import { Role } from "@/generated/prisma/client";
+import { Role } from "@/lib/auth-guards";
 import { requirePrincipalOrRedirect } from "@/lib/auth-guards";
 import AdminLayout from "@/components/admin/AdminLayout";
 

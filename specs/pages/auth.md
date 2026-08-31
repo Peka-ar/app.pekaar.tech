@@ -2,7 +2,7 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) · Source: `src/app/auth/page.tsx:1`, `src/app/auth/verify/page.tsx:1`, `src/app/auth/reset-password/page.tsx:1` + components in `src/components/auth/`
 
-STUDIO.V uses **NextAuth v5 beta** (`next-auth@5.0.0-beta.31`) with the **Credentials** provider and a **JWT** session strategy. Email verification is a 6-digit OTP (hashed, 10-min expiry); password reset is a UUID magic link (1-hr expiry). This deep dive covers the three `/auth*` routes, the OTP/magic-link flows, the JWT callback contract, and the preflight + no-enumeration patterns.
+STUDIO.V uses **Appwrite Cloud** (region `fra`, project `6a8562a20037b62075e1`) end-to-end for auth: sessions, email verification (link-based), and password recovery. The `@appwrite.io/react` package owns the client-side session (cookies, sign-in/sign-out) via the SSR handler at `/api/appwrite/[...appwrite]`; `src/lib/auth-guards.ts` resolves the canonical principal (session + `users` TableDB row) server-side. There is **no OTP flow and no magic-link/`Token` model** — Appwrite's native link-based verification (`updateVerification`) and recovery (`updateRecovery`) replace both (Phase 2 of `tasks/appwrite-migration.md`, DONE 2026-08-19).
 
 ---
 
@@ -10,11 +10,11 @@ STUDIO.V uses **NextAuth v5 beta** (`next-auth@5.0.0-beta.31`) with the **Creden
 
 | Route | File | Auth | Purpose |
 |---|---|---|---|
-| `/auth` | `src/app/auth/page.tsx:1` → `AuthClient.tsx` | Public (redirects logged-in-not-onboarded → `/onboarding`) | 3-view form: signin / signup / forgot-password |
-| `/auth/verify` | `src/app/auth/verify/page.tsx:1` | Public | Magic-link email verify (`?token=…` → `verifyEmail`) |
-| `/auth/reset-password` | `src/app/auth/reset-password/page.tsx:1` | Public | New-password form (`?token=…` → `resetPassword`) |
+| `/auth` | `src/app/auth/page.tsx:1` → `AuthClient.tsx` | Public (onboarded session → role-aware redirect) | 3-view form: signin / signup / forgot-password |
+| `/auth/verify` | `src/app/auth/verify/page.tsx:1` | Public | Appwrite email verification link (`?userId=…&secret=…` → `updateVerification`) |
+| `/auth/reset-password` | `src/app/auth/reset-password/page.tsx:1` | Public | New-password form (`?userId=…&secret=…` → `updateRecovery`) |
 
-The proxy (`src/proxy.ts:16`) whitelists `/auth/*` as public **and** redirects logged-in+onboarded users away from `/auth` to `/dashboard` (`proxy.ts:23`).
+The proxy (`src/proxy.ts:18`) whitelists `/auth/*` as public. The logged-in re-visit redirect lives in the page itself (server component checks the session; the edge runtime cannot call Appwrite).
 
 ---
 
@@ -22,25 +22,26 @@ The proxy (`src/proxy.ts:16`) whitelists `/auth/*` as public **and** redirects l
 
 ### Server entry (`src/app/auth/page.tsx:1`)
 ```tsx
-export default async function AuthPage() {
-  const session = await auth();
-  const user = session?.user as { onboarded?: boolean } | undefined;
-  if (user && !user.onboarded) redirect("/onboarding");
+let principal;
+try {
+  principal = await requirePrincipal();
+} catch {
   return <AuthClient />;
 }
+if (!principal.onboarded) redirect("/onboarding");
+if (principal.role === "ADMIN") redirect("/admin/dashboard");
+redirect("/dashboard");
 ```
-Two redirect layers protect this route:
-- Server (`page.tsx:9`): logged-in + **not onboarded** → `/onboarding` (catches the signup→OTP→verified-but-not-onboarded case).
-- Proxy (`proxy.ts:23`): logged-in + **onboarded** → `/dashboard` (catches re-visits to login).
+Role-aware redirect for existing sessions: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`; no session (or stale/suspended — `requirePrincipal` throws) → `AuthClient`.
 
 ### `AuthClient.tsx` (`src/app/auth/AuthClient.tsx:1`) — client
 A two-column layout. Left half (lg+): dark `#1A1A1A` panel with the first demo product image (`PRODUCTS[0].thumbnail`) at 50% opacity, a gradient scrim, the STUDIO.V logo, and the "Elevate your catalog with stereoscopic realism." editorial copy. Right half: white panel with "Back to Home" `LinkButton`s (mobile + desktop variants) and a centered `max-w-md` container that swaps between the three forms based on local `view` state.
 
-**State:** `type AuthView = 'signin' | 'signup' | 'forgot-password'` — `useState<AuthView>('signin')`. Navigation between views is via `onNavigate={(v) => setView(v as AuthView)}` passed to each form. `SignUpForm`'s `onSuccess` swaps back to `'signin'`.
+**State:** `type AuthView = 'signin' | 'signup' | 'forgot-password'` — `useState<AuthView>('signin')`. Navigation via `onNavigate={(v) => setView(v as AuthView)}` passed to each form. No `onSuccess` wiring — `SignUpForm` owns its post-submit state internally (inbox screen).
 
 ```tsx
 {view === 'signin' && <SignInForm onNavigate={(v) => setView(v as AuthView)} />}
-{view === 'signup' && <SignUpForm onNavigate={(v) => setView(v as AuthView)} onSuccess={handleSignUpSuccess} />}
+{view === 'signup' && <SignUpForm onNavigate={(v) => setView(v as AuthView)} />}
 {view === 'forgot-password' && <ForgotPasswordForm onNavigate={(v) => setView(v as AuthView)} />}
 ```
 
@@ -48,213 +49,156 @@ A two-column layout. Left half (lg+): dark `#1A1A1A` panel with the first demo p
 
 ## 2. Sign In — `SignInForm` (`src/components/auth/SignInForm.tsx:1`)
 
-**Props:** `{ onNavigate: (view: string) => void }`.
+**Props:** `{ onNavigate: (view: string) => void }`. Uses `useAuth()` from `@appwrite.io/react` (line 4).
 
-**Flow (`handleSubmit`, line 36):**
+**Flow (`handleSubmit`):**
 1. Reads `email` + `password` from the form.
-2. Calls `preflightLogin(email, password)` server action.
-3. If `preflight.status !== "valid"` → shows "Invalid email or password." and returns (no session created).
-4. On valid → `finishSignIn(email, password, preflight.onboarded, preflight.role)`:
-   - `signIn("credentials", { email, password, redirect: false })` (NextAuth client).
-   - If `result?.error` → throws "Sign-in failed. Please try again."
-   - `router.push(postLoginPath(onboarded, role))` + `router.refresh()`.
+2. Calls `signIn.emailPassword({ email, password, onSuccess, onError })` — the `@appwrite.io/react` hook POSTs to the SSR handler (`/api/appwrite/...`), which calls Appwrite and sets the session cookie. **The SSR handler does NOT hydrate the client SDK session** (it returns only `{ user }`), so step 3 re-syncs it manually.
+3. On success → `getSessionPrincipal()` server action (`auth.ts:203`), which now returns `{ onboarded, role, sessionSecret }` (the secret read via `createNextServerHelpers.readSessionCookie()`, same source the root layout uses). `SignInForm` then calls `client.setSession(sessionSecret)` (provider client via `useAppwrite()`) so browser-direct SDK calls (`storage.createFile` uploads, etc.) carry `X-Appwrite-Session` — without this, a soft-navigation `router.push` keeps `Providers` on its pre-login `session = null` prop and uploads go out as guest (`Missing "create" permission…`). Finally `router.push(postLoginPath(principal.onboarded, principal.role))` — **no `router.refresh()`** (removed in the Phase 6 perf fix; it caused a double navigation).
+4. On error → `signInErrorMessage(err)` maps an `AppwriteException` (has `.code` status + `.type` code):
+   - `401` / `user_invalid_credentials` / `user_not_found` → "Invalid email or password."
+   - `429` / `*rate_limit*` → "Too many attempts. Please try again later."
+   - otherwise → `err.message`.
 
-**Post-login routing (`postLoginPath`, line 22):**
-- If not onboarded → `/onboarding` (both roles).
-- If onboarded and `role === "ADMIN"` → `/admin/dashboard`.
-- If onboarded and `role === "BRAND"` → `/dashboard`.
+**Post-login routing (`postLoginPath`, local):**
+- Not onboarded → `/onboarding` (both roles).
+- Onboarded + `role === "ADMIN"` → `/admin/dashboard`.
+- Onboarded + `role === "BRAND"` → `/dashboard`.
 
-The redirect target is decided **after** NextAuth issues the JWT and only using the role the server already validated in `preflightLogin` (read from the DB row, never from client input). Tampering with the request cannot influence the redirect.
+The redirect target is decided **after** Appwrite issues the session, using only the role the server read from the `users` row (`getSessionPrincipal` → `requirePrincipal`). Tampering with the request cannot influence the redirect.
 
-**Why preflight?** `preflightLogin` (`auth.ts:51`) validates credentials **without** creating a session, returning `{ status, onboarded, role }`. This lets the client decide the redirect destination *before* the NextAuth callback runs (which would otherwise always send to a default page). It also gives a uniform "invalid credentials" error regardless of whether the user is missing, unverified, or has a wrong password (no enumeration). The `role` field is sourced from the user row (closed Prisma enum `BRAND | ADMIN`); no client input flows into the response.
-
-**UI:** Email + password `Input`s with `Mail`/`Lock` left icons, a "Forgot?" button (`onNavigate('forgot-password')`), an error `Alert`, a full-width primary "Sign In" `Button` (loading spinner), and a "Request Access" link to swap to signup.
+**UI:** Email + password `Input`s with `Mail`/`Lock` left icons, a "Forgot?" button (`onNavigate('forgot-password')`), an error `Alert`, a full-width primary "Sign In" `Button` (loading spinner), and a "Sign Up" link to swap to signup.
 
 ---
 
 ## 3. Sign Up — `SignUpForm` (`src/components/auth/SignUpForm.tsx:1`)
 
-**Props:** `{ onNavigate, onSuccess }`. Two-stage component gated by `submittedEmail` state.
+**Props:** `{ onNavigate }`. Two-stage component gated by `submittedEmail` state.
 
-### Stage 1 — registration form (`:117`)
+### Stage 1 — registration form
 - Email + password `Input`s. Password is controlled (`useState`) to drive the live strength meter.
-- **Password strength meter** (`:26`): 0 = empty, 1 = `<6` (Weak, amber), 2 = `<10` (Good, amber), 3 = `≥10` (Strong, emerald). 3-bar visual + mono label.
-- Calls `registerUser(new FormData(form))` (`auth.ts:97`) on submit.
+- **Password strength meter**: 0 = empty, 1 = `<6` (Weak, amber), 2 = `<10` (Good, amber), 3 = `≥10` (Strong, emerald). 3-bar visual + mono label.
+- Calls `registerUser(new FormData(form))` (`auth.ts:61`) on submit.
 - On success → `setSubmittedEmail(email)` → swaps to Stage 2.
-- Errors surface in an `Alert` ("Email and password are required", "Password must be at least 6 characters", "Email already registered").
+- Errors surface in an `Alert` ("Email and password are required", "Password must be at least 6 characters", "Email already registered", or the recoverable email-send failure message).
 - Links to `/terms` + `/privacy` (open in new tab). "Sign In" link swaps to signin.
 
-### Stage 2 — OTP verification (`:81`)
-- Centered card with a checkmark, "Enter your code" heading, "We sent a 6-digit verification code to {email}."
-- `<OtpInput value={otp} onChange={setOtp} id="signup-otp" />` (6 boxes, auto-advance, paste-to-fill).
-- **Spam-folder hint** (`:96`) — `<Alert tone="info">` below the OTP input: "Didn't get the email? Check your **spam** or **promotions** folder, then try again." Gmail SMTP delivers land in spam frequently (no SPF/DKIM on the sending account), so this is shown unconditionally on the OTP screen.
-- Calls `verifyEmailOtp(submittedEmail, otp)` (`auth.ts:205`) → on success immediately `signIn("credentials", { email: submittedEmail, password, redirect: false })`.
-- If `signIn` errors → "Email verified, but automatic sign-in failed. Please sign in manually." (verification still succeeded).
-- On full success → `onSuccess()` (swaps AuthClient to signin view) + `router.push("/onboarding")` + `router.refresh()`.
+### Stage 2 — "Check your inbox"
+- Centered card: checkmark icon, "Check your inbox" heading, "We sent a verification link to {email}. Click it to activate your account, then sign in."
+- **Spam-folder hint** (`<Alert tone="info">`, unconditional — Gmail SMTP delivers land in spam frequently, no SPF/DKIM on the sending account): "Didn't get the email? Check your **spam** or **promotions** folder, then try again."
+- **Resend button** — "Resend verification email" (`Button variant="secondary"`) calls `resendVerificationEmail(submittedEmail)` (`auth.ts:121`); success shows an `Alert tone="success">`. The send stage is `'idle' | 'sending' | 'sent'`.
+- **No auto sign-in after signup** (deviation D2): verification is link-based; after clicking the email link the user signs in manually. The password is held in local component state only during Stage 1 — it is never reused after `registerUser` succeeds.
 - "Back to Sign In" link (`onNavigate('signin')`).
 
 ---
 
 ## 4. Forgot Password — `ForgotPasswordForm` (`src/components/auth/ForgotPasswordForm.tsx:1`)
 
-**Props:** `{ onNavigate }`. Single email field; calls `requestPasswordReset(email)` (`auth.ts:159`) on submit. Always returns `{ success: true }` (the action returns success even if no user exists — no enumeration), so the form swaps to a "Check your inbox" confirmation state regardless. Includes a "Back" link to signin.
+**Props:** `{ onNavigate }`. Single email field; calls `requestPasswordReset(email)` (`auth.ts:134`) on submit. The action **always returns `{ success: true }`** (even if no user exists — no enumeration; failures are logged server-side), so the form swaps to a "Check your inbox" confirmation state regardless. Includes a "Back" link to signin.
 
 ---
 
 ## 5. Reset Password — `/auth/reset-password` + `ResetPasswordForm`
 
 ### Server entry (`src/app/auth/reset-password/page.tsx:1`)
-Reads `token` from `searchParams` and passes it to the client: `<ResetPasswordForm token={token} />`. (If `token` is missing, the form shows an error up-front.)
+Reads `userId` + `secret` from `searchParams` and passes them to the client: `<ResetPasswordForm userId={userId || ""} secret={secret || ""} />`. (If either is missing, the form shows an error up-front.)
 
 ### `ResetPasswordForm` (`src/components/auth/ResetPasswordForm.tsx:1`) — client
-**Props:** `{ token: string }`. New-password form inside a `Card` → `CardBody`. Calls `resetPassword(token, password)` (`auth.ts:182`) on submit. Enforces password ≥ 6 chars (server side too). On success → success state with a "Sign In" link to `/auth`. Errors: "Password must be at least 6 characters", "Reset link is invalid or expired".
+**Props:** `{ userId: string; secret: string }`. New-password form inside a `Card` → `CardBody`. Calls `resetPassword(userId, secret, password)` (`auth.ts:150`) on submit. Enforces password ≥ 6 chars (server side too). On success → success state with a "Sign In" link to `/auth`. Errors: "Password must be at least 6 characters", "Reset link is invalid or expired" (Appwrite enforces a 1-hr expiry server-side).
 
 ---
 
-## 6. Magic-link verify — `/auth/verify`
+## 6. Email verify — `/auth/verify`
 
 ### Server entry (`src/app/auth/verify/page.tsx:1`) — fully server-side, no client component
 ```tsx
-export default async function VerifyEmailPage({ searchParams }) {
-  const { token } = await searchParams;
-  let error = null;
-  if (!token) error = "Verification token is missing.";
-  else try { await verifyEmail(token); } catch (err) { error = err.message ?? "Verification failed."; }
-  return (/* centered card: "Email verified" or "Unable to verify" + Sign In link */);
-}
+const { userId, secret } = await searchParams;
+let error = null;
+if (!userId || !secret) error = "Verification link is invalid or missing.";
+else try { await new Account(createPublicClient()).updateVerification({ userId, secret }); }
+     catch { error = "Verification link is invalid or expired."; }
+// centered card: "Email verified" or "Unable to verify" + Sign In link to /auth
 ```
-Calls `verifyEmail(token)` (`auth.ts:140`) directly during render. If the `email_verification` token is missing/expired, the action throws "Verification link is invalid or expired", which becomes the error message. On success the user is verified and the token is deleted; the page shows a success card linking to `/auth`.
-
-> **Two verification paths exist:** the OTP path (primary, used by `SignUpForm` Stage 2) and the magic-link path (`/auth/verify`). Both mark `emailVerified` and delete their tokens. The OTP path is wired into the signup flow; the magic-link path is a fallback — currently no UI sends `email_verification` UUID tokens (only `email_verification_otp`), so `/auth/verify` is reached only if you manually construct the link. Keep it for email-client deep-link fallback.
+The link comes from Appwrite's verification email: **Appwrite appends `userId` + `secret`** to the click URL (the `url` passed to `createVerification`). On success the user is verified; the page shows a success card linking to `/auth` — **no session is created** (verified: `updateVerification` returns no session token, deviation D2), so the user signs in manually and lands on onboarded-aware routing.
 
 ---
 
-## 7. `OtpInput` (`src/components/auth/OtpInput.tsx:1`)
-
-**Props:** `{ value: string; onChange: (value: string) => void; id?: string }` (default `id="otp"`). Six single-character `<input>` boxes:
-- Auto-advance on entry; backspace navigates back; paste fills left-to-right (sanitized to digits, capped at 6).
-- Each box has `aria-label` of the form "Digit N of 6".
-- Controlled via `value`/`onChange` — the parent owns the concatenated string.
-
----
-
-## 8. Server action reference (auth)
+## 7. Server action reference (auth)
 
 All in `src/app/actions/auth.ts:1` (`"use server"`). Public unless noted.
 
 | Export | Signature | Auth | Behavior |
 |---|---|---|---|
-| `preflightLogin` | `(email, password) → { status: "invalid_credentials" } \| { status: "valid"; onboarded: boolean; role: Role }` | None | Normalizes email; returns `invalid_credentials` if user missing / unverified / wrong password. No session created. `role` is sourced from the DB row and used by `SignInForm` to pick the post-login redirect (`/admin/dashboard` for ADMIN, `/dashboard` for BRAND). |
-| `resendVerificationOtp` | `(email) → { success; status: "invalid"\|"sent" }` | None | Returns `{ success: false, status: "invalid" }` if user missing or already verified (no enumeration). Otherwise deletes old tokens, issues new 6-digit OTP (10-min, hashed), emails it. |
-| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | Normalizes email, requires password ≥ 6. If unverified user exists → re-hash password + re-issue OTP. Else create BRAND user (`usageLimits: 10`). Always issues OTP via `issueVerificationOtp`. Throws on validation. |
-| `verifyEmail` | `(token) → { success: true }` | None | Looks up `email_verification` UUID token (unexpired); throws "Verification link is invalid or expired". Marks `emailVerified`, deletes token. |
-| `requestPasswordReset` | `(email) → { success: true }` | None | **Always returns success** (no enumeration). If user exists, creates `password_reset` UUID (1-hr expiry), emails link. |
-| `resetPassword` | `(token, password) → { success: true }` | None | Requires password ≥ 6. Validates `password_reset` token (throws "Reset link is invalid or expired"). Updates `hashedPassword`, deletes token. |
-| `verifyEmailOtp` | `(email, otp) → { success: true }` | None | Requires 6-digit OTP. Loads all unexpired `email_verification_otp` tokens for the email (oldest-first via `orderBy: createdAt desc`), compares each with `verifyPassword`. On match: marks `emailVerified`, deletes all OTP tokens. Throws "Verification code is invalid or expired" if none match. |
-| `completeOnboarding` | `(input) → { success: true }` | `requirePrincipal()` | Sets `name`/`productCategory`/`storefrontPlatform`/`catalogSize` + `onboarded: true`. Calls `unstable_update({ user: { onboarded: true } })` to refresh the JWT. Revalidates `/auth`, `/onboarding`, `/dashboard`, `/tasks`, `/integrations`. |
-| `logout` | `() => Promise<void>` | (signOut) | `signOut({ redirectTo: "/" })` |
+| `registerUser` | `(formData) → { email; verificationRequired: true }` | None | `normalizeEmail` + password ≥ 6. **Admin client (deviation D1):** `Users.list` (`Query.equal("email")`) → existing verified user ⇒ throw `Email already registered`; existing unverified ⇒ `Users.updatePassword` + re-send verification; new ⇒ `Users.create(ID.unique(), email, password)` + `TablesDB.createRow(users, { rowId: user.$id, data: { userId, email, role: "BRAND", usageLimits: 10, onboarded: false, status: "ACTIVE" } })` + `Users.updateLabels(["BRAND"])` + `sendVerificationEmail`. Email-send failure ⇒ recoverable throw "Account created, but we couldn't send the verification email. Please try submitting again — it will resend the verification link." |
+| `resendVerificationEmail` | `(email) → { success; status: "invalid"\|"sent" }` | None | `Users.list` by email; missing or already verified ⇒ `{ success: false, status: "invalid" }` (no enumeration). Otherwise re-sends the verification email. |
+| `requestPasswordReset` | `(email) → { success: true }` | None | `Account(createPublicClient()).createRecovery({ email, url: APP_URL + "/auth/reset-password" })`. **Always returns `{ success: true }`** (no enumeration; failures logged server-side). Requires the public client — the API-key client fails with `(role: applications) missing scope (public)`. |
+| `resetPassword` | `(userId, secret, password) → { success: true }` | None | Requires `userId` + `secret` and password ≥ 6. `Account(createPublicClient()).updateRecovery({ userId, secret, password })` — Appwrite enforces 1-hr expiry. Any failure ⇒ throw `Reset link is invalid or expired`. |
+| `completeOnboarding` | `(input) → { success: true }` | `requirePrincipal()` | Sets `name`/`productCategory`/`storefrontPlatform`/`catalogSize` + `onboarded: true` via `TablesDB.updateRow`; `Users.updateLabels([principal.role])`. Appwrite sessions re-read the `users` row per request, so **no `unstable_update`/JWT refresh is needed** (removed in Phase 1). Revalidates `/auth`, `/onboarding`, `/dashboard`, `/tasks`, `/integrations`. |
+| `getSessionPrincipal` | `() → { onboarded: boolean; role: Role; sessionSecret: string } \| null` | Session | `requirePrincipal()` inside try/catch → `null` on any failure; also returns the httpOnly-cookie session secret (via `createNextServerHelpers.readSessionCookie()`) so the client can hydrate the Appwrite SDK after SSR sign-in (see §2 step 3). Used by `SignInForm` for post-login routing (replaces the deleted `preflightLogin`, deviation D5). |
+| `logout` | `() => Promise<void>` | Session | Reads the `appwrite-session-<projectId>` cookie, calls `Account.deleteSession({ sessionId: "current" })` on the session client (errors logged, not thrown), deletes the cookie, `redirect("/")`. All logout buttons (`AdminLayout.tsx:129`, `DashboardLayout.tsx:137`, `MobileNavDrawer.tsx:236`) are `<form action={logout}>` — kept as a server action (deviation D4) rather than the `useSignOut` hook. |
 
 ### Helpers (private, same file)
-- `normalizeEmail(email)` — trim + lowercase.
-- `generateOtp()` — `crypto.getRandomValues(Uint32Array(1))[0]` padded to 10 digits, sliced to 6.
-- `issueVerificationOtp(email)` — deletes any existing `email_verification`/`email_verification_otp` tokens, hashes the OTP with `hashPassword` (bcrypt 12 rounds), stores with 10-min expiry, then calls `sendVerificationOtpEmail`. **The Nodemailer send is wrapped in try/catch** — on email failure, the user record (already in the DB at this point) is left untouched and a clear error is thrown ("Account created, but we couldn't send the verification email. Please use the resend code option to try again.") which the form's `<Alert>` surfaces to the user. The throw is recoverable: re-submitting signup hits the "existing unverified user" branch and re-issues the OTP, or the user clicks the existing resend-code button.
-- `optionalText(value)` — trim or `null`.
+- `normalizeEmail(email)` — trim + lowercase (`auth.ts:28`).
+- `optionalText(value)` — trim or `null` (`auth.ts:32`).
+- `appUrl()` — `process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"` (`auth.ts:37`).
+- `lookupUserByEmail(email)` — `Users.list({ queries: [Query.equal("email", email)] })` on the admin client (`auth.ts:41`).
+- `sendVerificationEmail(userId)` — mints a session (`Users.createSession`), calls `Account(createSessionClient(secret)).createVerification({ url: appUrl() + "/auth/verify" })`, and deletes the minted session in `finally` (cleanup errors logged, never thrown). Called from `registerUser` and `resendVerificationEmail` (`auth.ts:46`). **Requires a session** — `createVerification` has no admin/API-key path, hence the mint-delete dance.
 
 ---
 
-## 9. Token model
+## 8. Appwrite session plumbing
 
-`prisma/schema.prisma:61`:
-```prisma
-model Token {
-  id         String   @id @default(cuid())
-  identifier String           // email address
-  token      String   @unique // hashed OTP, or UUID for magic links
-  type       String           // "email_verification" | "email_verification_otp" | "password_reset"
-  expires    DateTime
-  createdAt  DateTime @default(now())
-}
-```
-**Three token types:**
-- `email_verification` — UUID magic link (1-hr expiry). Consumed by `verifyEmail` (`/auth/verify`). Currently no UI issues this type (the OTP path is primary).
-- `email_verification_otp` — 6-digit OTP, **hashed with bcrypt** (never stored plaintext), 10-min expiry. Consumed by `verifyEmailOtp` (signup Stage 2). Multiple can exist briefly; `verifyEmailOtp` deletes all on success.
-- `password_reset` — UUID (1-hr expiry). Consumed by `resetPassword` (`/auth/reset-password`).
+### Session cookie
+- Name: **`appwrite-session-<projectId>`** = `appwrite-session-6a8562a20037b62075e1` (`src/lib/appwrite-config.ts:3`). This is the `@appwrite.io/react` package default (`DEFAULT_COOKIE_NAME_PREFIX = "appwrite-session"`), NOT the raw-SDK `a_session_` convention. Cookie attributes: `httpOnly`, `secure`, `sameSite=lax`, `path=/` (package defaults — no override in this repo).
 
----
-
-## 10. NextAuth configuration
-
-### `src/auth.ts:1` — full instance
+### SSR handler — `src/app/api/appwrite/[...appwrite]/route.ts:1`
 ```ts
-export const { handlers, signIn, signOut, auth, unstable_update } = NextAuth({
-  ...authConfig,
-  session: { strategy: "jwt" },
-  providers: [CredentialsProvider({
-    name: "Credentials",
-    credentials: { email: {...}, password: {...} },
-    async authorize(credentials) {
-      if (!credentials?.email || !credentials?.password) return null;
-      const user = await prisma.user.findUnique({ where: { email: credentials.email as string } });
-      if (!user || !user.hashedPassword || !user.emailVerified) return null;
-      const isValid = await verifyPassword(credentials.password as string, user.hashedPassword);
-      if (!isValid) return null;
-      return { id: user.id, email: user.email, name: user.name ?? user.email, role: user.role, onboarded: user.onboarded };
-    }
-  })]
+export const { GET, POST } = createAppwriteHandlers({
+  endpoint: APPWRITE_ENDPOINT,
+  projectId: APPWRITE_PROJECT_ID,
+  redirects: { success: "/dashboard", failure: "/auth" },
 });
 ```
-- **JWT strategy** — no database sessions; the JWT carries `sub`, `role`, `onboarded`.
-- **`authorize`** requires: user exists, has `hashedPassword`, is `emailVerified`, and the password verifies. Returns the user object that the JWT callback reads.
-- **`unstable_update`** is exported — used by `completeOnboarding` to refresh the JWT's `onboarded` claim without a re-login. (This is the v5-beta API; if it's removed, fall back to a `SessionProvider` — see `auth-stabilization.md` risk table.)
+Exposes sign-in / sign-up / sign-out / OAuth-callback / token-refresh routes under `/api/appwrite/*`. Requires the server API key. Writes the session cookie on success and issues the configured redirect (the app overrides the redirect client-side via `getSessionPrincipal`).
 
-### `src/auth.config.ts:1` — Edge-compatible callbacks
-```ts
-export const authConfig = {
-  pages: { signIn: "/auth" },
-  callbacks: {
-    async jwt({ token, user, trigger, session }) {
-      if (user) { token.sub = user.id; token.role = user.role; token.id = user.id; token.onboarded = user.onboarded; }
-      if (trigger === "update" && typeof session?.user?.onboarded === "boolean") token.onboarded = session.user.onboarded;
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user && token.sub) { session.user.id = token.sub; session.user.role = token.role; session.user.onboarded = token.onboarded; }
-      return session;
-    }
-  },
-  providers: [], // Edge-compatible — full provider in auth.ts
-} satisfies NextAuthConfig;
+### Provider — `src/app/providers.tsx:7`
+```tsx
+<AppwriteProvider
+  endpoint={APPWRITE_ENDPOINT}
+  projectId={APPWRITE_PROJECT_ID}
+  ssr={{ session, basePath: "/api/appwrite" }}
+>
+  <ThemeProvider ...>{children}</ThemeProvider>
+</AppwriteProvider>
 ```
-- **`jwt` callback:** on first sign-in (`user` is present) it stamps `sub`/`role`/`id`/`onboarded` onto the token. On the `"update"` trigger (from `unstable_update`) it reads `session.user.onboarded` and refreshes the token.
-- **`session` callback:** surfaces `token.sub`/`role`/`onboarded` onto `session.user.{id,role,onboarded}` for server reads via `auth()`.
-- This split config (Edge-safe `authConfig` + full `auth.ts`) lets the middleware (`proxy.ts`) import only the Edge-safe part.
+Wrapped around the existing `ThemeProvider`. `session` comes from the async root layout (`src/app/layout.tsx`) via `createNextServerHelpers({ endpoint, projectId }).readSessionCookie()` so the client doesn't flash logged-out during hydration.
+
+### Server helpers — `src/lib/appwrite.ts`
+- `createAdminClient()` (`:10`) — server-only, cached singleton (Admin SDK + API key). Used by `requirePrincipal`, `registerUser`, `resendVerificationEmail`, `completeOnboarding`.
+- `createSessionClient(secret, userAgent?)` (`:20`) — `Client` authenticated with a session secret. Used by `logout` and `sendVerificationEmail`.
+- `createPublicClient()` (`:31`) — bare `Client` with endpoint + project only. Used by `requestPasswordReset`, `resetPassword`, and the `/auth/verify` page for the public routes (`createRecovery`, `updateRecovery`, `updateVerification`). **Never attach the API key to this client** — the `applications` role lacks the `public` scope and those calls fail with `(role: applications) missing scope (public)`.
+
+> **Edge constraint:** `proxy.ts` may only import from `src/lib/appwrite-config.ts` (constants, zero SDK imports) — importing `node-appwrite` would pull a server-only module into the edge runtime.
 
 ---
 
-## 11. Email — `src/lib/emails.ts:1`
+## 9. Email delivery
 
-Built on Nodemailer via `getTransporter()` (`src/lib/mail.ts:1`). `sendEmail` **no-ops with a console warning** if `GMAIL_USER` or `GMAIL_APP_PASSWORD` is unset — so dev environments without SMTP creds still work (verification tokens still get created and stored; the OTP just isn't emailed). `sendEmail` accepts both `html` and `text` arguments and passes them to `transporter.sendMail({ html, text })` — multipart/alternative MIME is **mandatory** because Gmail SMTP delivers to spam with HTML-only emails (no plain-text fallback breaks spam heuristics). Each public function builds both forms in parallel.
-
-| Function | Subject | Body | Expiry |
-|---|---|---|---|
-| `sendVerificationOtpEmail(email, otp)` | "Your STUDIO.V verification code" | Large 24px bold letter-spaced OTP + plain-text fallback + "expires in 10 minutes" | 10 min (token-side) |
-| `sendPasswordResetEmail(email, token)` | "Reset your STUDIO.V password" | `<a href="{APP_URL}/auth/reset-password?token={token}">Reset password</a>` + plain-text fallback + "expires in 1 hour" | 1 hr (token-side) |
-
-`from = process.env.GMAIL_USER` (Gmail SMTP requires the authenticated sender). `appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"`.
+Email is sent by **Appwrite Cloud** (Gmail SMTP provider configured in the console: sender "Peka.ar", `studiov3242@gmail.com`) using the built-in **verification** and **recovery** templates — no app code sends email anymore. The click URL is passed per-call: `createVerification({ url })` / `createRecovery({ url })`; Appwrite appends `userId` + `secret` to it. `src/lib/emails.ts`, `src/lib/mail.ts`, and `src/lib/password.ts` now have zero consumers (deleted in Phase 5).
 
 ---
 
-## 12. Security properties
+## 10. Security properties
 
-- **No user enumeration** — `preflightLogin`, `resendVerificationOtp`, `requestPasswordReset` all return uniform responses for missing/verified/unverified users. (The `auth-stabilization.md` Task 11 tracks normalizing `preflightLogin`/`resendVerificationOtp` fully.)
-- **OTP hashing** — OTPs are bcrypt-hashed (`hashPassword`, 12 rounds) before storage; `verifyEmailOtp` uses `verifyPassword` to compare. Plaintext OTPs exist only in the email.
-- **Password hashing** — all passwords via `hashPassword`/`verifyPassword` (`src/lib/password.ts:1`, bcrypt 12 rounds).
-- **Token expiry** — OTP 10 min, password reset 1 hr, magic-link verify 1 hr. Expired tokens fail the `expires: { gt: new Date() }` filter.
-- **Email-verified gate** — `authorize` returns `null` if `!user.emailVerified`, so unverified users cannot obtain a JWT.
-- **Canonical principal** — every protected action resolves the user from the DB via `requirePrincipal` (`src/lib/auth-guards.ts:40`), which falls back to email lookup if the JWT id doesn't match a row (handles the v5-beta JWT id-mismatch bug). Never trust `session.user.id`/`role` directly for authorization.
-- **DB-backed role enforcement on admin pages** — the proxy (`src/proxy.ts:14`) gates `/admin/*` on the JWT-claim role (Edge runtime cannot talk to Prisma). As defense in depth, every page under `/admin/*` also calls `requirePrincipalOrRedirect({ roles: [Role.ADMIN] })`, which re-fetches the user from the DB and rejects any non-admin (including stolen or tampered JWTs whose DB role doesn't match). A demoted admin's valid JWT is rejected at the page boundary. See `WEBSITE.md` §6.4 (admin page list).
-- **Role-aware redirects** — the proxy's `/auth → home` re-visit redirect, the proxy's role-mismatch fallback, and `requirePrincipalOrRedirect`'s `ForbiddenError` fallback all branch on the user's role: ADMIN → `/admin/dashboard`, BRAND → `/dashboard`. An admin never lands on `/dashboard` by accident, and a BRAND never lands on `/admin/dashboard`.
-- **Stale session self-healing** — if a user has a valid JWT but the DB record is gone (e.g., DB reset, user deleted), `requirePrincipal` throws `StaleSessionError` (extends `UnauthenticatedError`). Pages use `requirePrincipalOrRedirect()` (`auth-guards.ts:79`) which redirects to `/api/auth/clear-session` — a route handler that calls `signOut({ redirect: false })` (route handlers can modify cookies, unlike server components), then redirects to `/auth`. API routes catch `StaleSessionError` via their existing `UnauthenticatedError` handler and return 401.
+- **No user enumeration** — `resendVerificationEmail` and `requestPasswordReset` return uniform responses for missing/verified/unverified users; `registerUser` intentionally reveals "Email already registered" only when the existing user is already verified.
+- **Verification/recovery secrets** — handled entirely by Appwrite (hashed, expiring: 1 hr for recovery); the app never stores them.
+- **Password hashing** — Appwrite-side; the app never sees or stores passwords (the old bcrypt `src/lib/password.ts` was deleted in Phase 5).
+- **Canonical principal** — every protected action resolves the user from the DB via `requirePrincipal` (`src/lib/auth-guards.ts:64`): Appwrite session → `users` TableDB row (`TablesDB.getRow`), which returns `Principal { userId, email, role, onboarded, companyName }`. Never trust `user.id`/`role` directly for authorization.
+- **DB-backed role enforcement on admin pages** — the proxy can no longer gate `/admin/*` on role claims (edge runtime cannot call Appwrite), so the ONLY gate is `requirePrincipalOrRedirect({ roles: [Role.ADMIN] })` on every admin page, which re-reads the `users` row and rejects non-admins (including demoted users with valid sessions). See `WEBSITE.md` §6.4 (admin page list).
+- **Role-aware redirects** — post-login routing (`postLoginPath` in `SignInForm`) branches ADMIN → `/admin/dashboard`, BRAND → `/dashboard`, driven by the role `getSessionPrincipal` read from the DB row. `requirePrincipalOrRedirect`'s `ForbiddenError` fallback also branches on the principal's role.
+- **Stale session self-healing** — if a user has a valid Appwrite session but no `users` row (e.g., DB reset, user deleted), `requirePrincipal` throws `StaleSessionError` (extends `UnauthenticatedError`). Pages use `requirePrincipalOrRedirect()` (`auth-guards.ts:108`) which redirects to `/auth` — Appwrite expires the cookie itself. API routes catch `StaleSessionError` via their existing `UnauthenticatedError` handler and return 401.
+- **Suspended accounts** — Appwrite allows a suspended user to log in (no server-side block), so the check runs per-request: `requirePrincipal` throws `ForbiddenError("Account suspended")` when `users.status === "SUSPENDED"`, blocking every protected page/action/API route.
+- **No session auto-creation on verify/reset** — `updateVerification`/`updateRecovery` return no session token; users always sign in explicitly afterward.
 
 ---
 
@@ -262,7 +206,7 @@ Built on Nodemailer via `getTransporter()` (`src/lib/mail.ts:1`). `sendEmail` **
 
 | Element | Location |
 |---|---|
-| `/auth` server entry | `src/app/auth/page.tsx:1` |
+| `/auth` server entry (onboarded-aware redirect) | `src/app/auth/page.tsx:1` |
 | `AuthClient` (3-view switch) | `src/app/auth/AuthClient.tsx:1` |
 | `/auth/verify` server entry | `src/app/auth/verify/page.tsx:1` |
 | `/auth/reset-password` server entry | `src/app/auth/reset-password/page.tsx:1` |
@@ -270,25 +214,24 @@ Built on Nodemailer via `getTransporter()` (`src/lib/mail.ts:1`). `sendEmail` **
 | `SignUpForm` | `src/components/auth/SignUpForm.tsx:1` |
 | `ForgotPasswordForm` | `src/components/auth/ForgotPasswordForm.tsx:1` |
 | `ResetPasswordForm` | `src/components/auth/ResetPasswordForm.tsx:1` |
-| `OtpInput` | `src/components/auth/OtpInput.tsx:1` |
 | Auth server actions | `src/app/actions/auth.ts:1` |
-| `preflightLogin` | `auth.ts:66` |
-| `resendVerificationOtp` | `auth.ts:82` |
-| `registerUser` | `auth.ts:97` |
-| `verifyEmail` (magic link) | `auth.ts:140` |
-| `requestPasswordReset` | `auth.ts:159` |
-| `resetPassword` | `auth.ts:182` |
-| `verifyEmailOtp` | `auth.ts:205` |
-| `completeOnboarding` | `auth.ts:240` |
-| `logout` | `auth.ts:271` |
-| NextAuth instance | `src/auth.ts:1` |
-| Edge callbacks | `src/auth.config.ts:1` |
-| Middleware (proxy) | `src/proxy.ts:1` |
-| `requirePrincipal` | `src/lib/auth-guards.ts:40` |
-| `requirePrincipalOrRedirect` | `src/lib/auth-guards.ts:79` |
-| `StaleSessionError` | `src/lib/auth-guards.ts:21` |
-| `hashPassword`/`verifyPassword` | `src/lib/password.ts:1` |
-| `sendVerificationOtpEmail`/`sendPasswordResetEmail` | `src/lib/emails.ts:1` |
-| `getTransporter` | `src/lib/mail.ts:1` |
-| `Token` model | `prisma/schema.prisma:61` |
-| `User` model | `prisma/schema.prisma:10` |
+| `normalizeEmail` / `optionalText` / `appUrl` | `auth.ts:28` / `:32` / `:37` |
+| `lookupUserByEmail` / `sendVerificationEmail` | `auth.ts:41` / `:46` |
+| `registerUser` | `auth.ts:61` |
+| `resendVerificationEmail` | `auth.ts:121` |
+| `requestPasswordReset` | `auth.ts:134` |
+| `resetPassword` | `auth.ts:150` |
+| `completeOnboarding` | `auth.ts:169` |
+| `getSessionPrincipal` | `auth.ts:203` |
+| `logout` | `auth.ts:212` |
+| SSR auth handlers | `src/app/api/appwrite/[...appwrite]/route.ts:1` |
+| `AppwriteProvider` + `ThemeProvider` | `src/app/providers.tsx:7` |
+| Root layout (reads session cookie) | `src/app/layout.tsx:1` |
+| Appwrite config constants | `src/lib/appwrite-config.ts:1` |
+| `createAdminClient` / `createSessionClient` / `createPublicClient` | `src/lib/appwrite.ts:10` / `:20` / `:31` |
+| Proxy (middleware) | `src/proxy.ts:18` |
+| `requirePrincipal` | `src/lib/auth-guards.ts:64` |
+| `requirePrincipalOrRedirect` | `src/lib/auth-guards.ts:108` |
+| `Role` const/type | `src/lib/auth-guards.ts:12` |
+| `UnauthenticatedError` / `StaleSessionError` / `ForbiddenError` | `src/lib/auth-guards.ts:26` / `:33` / `:40` |
+| Dead files (deleted in Phase 5) | `src/lib/password.ts`, `src/lib/emails.ts`, `src/lib/mail.ts` |

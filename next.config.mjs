@@ -11,7 +11,7 @@ const nextConfig = {
       },
       {
         protocol: 'https',
-        hostname: '*.ufs.sh',
+        hostname: 'fra.cloud.appwrite.io',
       },
     ],
   },

@@ -1,79 +1,72 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { ProjectStatus, Role, AssetStatus, AssetType } from "@/generated/prisma/client";
-import { requirePrincipal } from "@/lib/auth-guards";
-import { utapi } from "@/lib/uploadthing-server";
+import { Query } from "node-appwrite";
+import { requirePrincipal, Role } from "@/lib/auth-guards";
+import {
+  DB,
+  getRowSafe,
+  listAllRows,
+  runTransaction,
+  ProjectStatus,
+  AssetStatus,
+  AssetType,
+  AssetsRow,
+  ProjectsRow,
+  RevisionRequestRow,
+  UsersRow,
+} from "@/lib/db";
+import {
+  buildTaskJob,
+  TaskJob,
+  usersToTaskBrand,
+  requesterLiteFromUsers,
+} from "@/lib/project-augment";
 
-export async function getAllTasks() {
+export async function getAllTasks(): Promise<TaskJob[]> {
   await requirePrincipal({ roles: [Role.ADMIN] });
 
-  const tasks = await prisma.project.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      name: true,
-      sku: true,
-      instructions: true,
-      dimensions: true,
-      status: true,
-      brandId: true,
-      createdAt: true,
-      updatedAt: true,
-      sdkConfig: true,
-      brand: { select: { id: true, name: true, email: true, role: true, productCategory: true, storefrontPlatform: true, catalogSize: true } },
-      assets: {
-        select: {
-          id: true,
-          type: true,
-          url: true,
-          originalName: true,
-          mimeType: true,
-          size: true,
-          status: true,
-          key: true,
-          gdriveFileId: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      },
-      revisionRequests: {
-        orderBy: { createdAt: "desc" },
-        select: {
-          id: true,
-          note: true,
-          createdAt: true,
-          requester: { select: { id: true, name: true, email: true } },
-        },
-      },
-    },
-  });
+  const projects = await listAllRows<ProjectsRow>(DB.projects, [Query.orderDesc("$createdAt")]);
+  const projectIds = projects.map((p) => p.$id);
+  const brandIds = [...new Set(projects.map((p) => p.brandId))];
 
-  return tasks.map((task) => {
-    const liveGlb = task.assets?.find((a) => a.type === 'MODEL_GLB' && a.status === 'READY');
-    const liveUsdz = task.assets?.find((a) => a.type === 'MODEL_USDZ' && a.status === 'READY');
-    const archivedGlbs = (task.assets || [])
-      .filter((a) => a.type === 'MODEL_GLB' && a.status === 'ARCHIVED')
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    const archivedUsdzs = (task.assets || [])
-      .filter((a) => a.type === 'MODEL_USDZ' && a.status === 'ARCHIVED')
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+  const [assets, revisions, brands] = await Promise.all([
+    projectIds.length > 0
+      ? listAllRows<AssetsRow>(DB.assets, [Query.equal("projectId", projectIds)])
+      : Promise.resolve([] as AssetsRow[]),
+    projectIds.length > 0
+      ? listAllRows<RevisionRequestRow>(DB.revisionRequests, [Query.equal("projectId", projectIds)])
+      : Promise.resolve([] as RevisionRequestRow[]),
+    brandIds.length > 0
+      ? listAllRows<UsersRow>(DB.users, [Query.equal("$id", brandIds)])
+      : Promise.resolve([] as UsersRow[]),
+  ]);
 
-    return {
-      ...task,
-      referenceUrls: task.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').map((a) => `/api/v1/assets/${a.id}/file`) || [],
-      assetUrls: liveGlb
-        ? {
-            glb: `/api/v1/assets/${liveGlb.id}/file`,
-            usdz: liveUsdz ? `/api/v1/assets/${liveUsdz.id}/file` : undefined,
-          }
-        : null,
-      archivedAssetUrls: {
-        glb: archivedGlbs.map((a) => ({ ...a, url: `/api/v1/assets/${a.id}/file` })),
-        usdz: archivedUsdzs.map((a) => ({ ...a, url: `/api/v1/assets/${a.id}/file` })),
-      },
-    };
+  const assetsByProject = new Map<string, AssetsRow[]>();
+  for (const a of assets) {
+    if (!a.projectId) continue;
+    const list = assetsByProject.get(a.projectId) ?? [];
+    list.push(a);
+    assetsByProject.set(a.projectId, list);
+  }
+  const revisionsByProject = new Map<string, RevisionRequestRow[]>();
+  for (const r of revisions) {
+    const list = revisionsByProject.get(r.projectId) ?? [];
+    list.push(r);
+    revisionsByProject.set(r.projectId, list);
+  }
+  const brandById = new Map(brands.map((b) => [b.$id, b]));
+  const requesterMap = new Map(brands.map((b) => [b.$id, requesterLiteFromUsers(b)]));
+
+  return projects.map((p) => {
+    const brand = brandById.get(p.brandId);
+    return buildTaskJob({
+      project: p,
+      assets: assetsByProject.get(p.$id) ?? [],
+      brand: brand ? usersToTaskBrand(brand) : { id: p.brandId, name: null, email: "", role: Role.BRAND },
+      revisionRequests: revisionsByProject.get(p.$id) ?? [],
+      requesterMap,
+    });
   });
 }
 
@@ -84,23 +77,20 @@ export async function adminSubmitProject(
 ) {
   await requirePrincipal({ roles: [Role.ADMIN] });
 
-  const glbAsset = await prisma.asset.findUnique({ where: { id: glbAssetId } });
-  if (!glbAsset || glbAsset.type !== "MODEL_GLB" || glbAsset.status !== "READY") {
+  const glbAsset = await getRowSafe<AssetsRow>(DB.assets, glbAssetId);
+  if (!glbAsset || glbAsset.type !== AssetType.MODEL_GLB || glbAsset.status !== AssetStatus.READY) {
     throw new Error("GLB asset not found or not ready");
   }
 
+  let usdzAsset: AssetsRow | null = null;
   if (usdzAssetId) {
-    const usdzAsset = await prisma.asset.findUnique({ where: { id: usdzAssetId } });
-    if (!usdzAsset || usdzAsset.type !== "MODEL_USDZ" || usdzAsset.status !== "READY") {
+    usdzAsset = await getRowSafe<AssetsRow>(DB.assets, usdzAssetId);
+    if (!usdzAsset || usdzAsset.type !== AssetType.MODEL_USDZ || usdzAsset.status !== AssetStatus.READY) {
       throw new Error("USDZ asset not found or not ready");
     }
   }
 
-  const project = await prisma.project.findUnique({
-    where: { id: projectId },
-    select: { status: true, brandId: true },
-  });
-
+  const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
   if (!project) {
     throw new Error("Project not found");
   }
@@ -112,59 +102,64 @@ export async function adminSubmitProject(
     throw new Error("Project is not in a submittable state");
   }
 
-  const { archivedKeys } = await prisma.$transaction(async (tx) => {
-    const updated = await tx.project.updateMany({
-      where: {
-        id: projectId,
-        status: { in: [ProjectStatus.PENDING, ProjectStatus.REVISIONS] },
-      },
-      data: {
-        status: ProjectStatus.COMPLETED,
-      },
-    });
-
-    if (updated.count === 0) {
+  await runTransaction(async (db, txId) => {
+    const current = await getRowSafe<ProjectsRow>(DB.projects, projectId, txId);
+    if (
+      !current ||
+      (current.status !== ProjectStatus.PENDING && current.status !== ProjectStatus.REVISIONS)
+    ) {
       throw new Error("Project is no longer available to submit");
     }
 
-    const existing = await tx.asset.findMany({
-      where: {
-        projectId,
-        type: { in: [AssetType.MODEL_GLB, AssetType.MODEL_USDZ] },
-        status: AssetStatus.READY,
-        id: { notIn: [glbAssetId, ...(usdzAssetId ? [usdzAssetId] : [])] },
-      },
-      select: { id: true, key: true },
+    await db.updateRow<ProjectsRow>({
+      databaseId: DB.databaseId,
+      tableId: DB.projects,
+      rowId: projectId,
+      data: { status: ProjectStatus.COMPLETED },
+      transactionId: txId,
     });
 
-    const archivedKeys: string[] = [];
-    if (existing.length > 0) {
-      await tx.asset.updateMany({
-        where: { id: { in: existing.map((e) => e.id) } },
+    const linkableIds = [glbAssetId, usdzAssetId].filter(Boolean) as string[];
+    const existing = await db.listRows<AssetsRow>({
+      databaseId: DB.databaseId,
+      tableId: DB.assets,
+      queries: [
+        Query.equal("projectId", projectId),
+        Query.or([
+          Query.equal("type", AssetType.MODEL_GLB),
+          Query.equal("type", AssetType.MODEL_USDZ),
+        ]),
+        Query.equal("status", AssetStatus.READY),
+        Query.notEqual("$id", linkableIds),
+      ],
+      transactionId: txId,
+    });
+
+    const toArchive = existing.rows.filter((a) => a.fileId);
+    if (toArchive.length > 0) {
+      await db.updateRows<AssetsRow>({
+        databaseId: DB.databaseId,
+        tableId: DB.assets,
+        queries: [Query.equal("$id", toArchive.map((a) => a.$id))],
         data: { status: AssetStatus.ARCHIVED },
+        transactionId: txId,
       });
-      archivedKeys.push(...existing.map((e) => e.key));
+      // Files are KEPT in Appwrite storage so "Previous models" stays viewable;
+      // removal only via explicit cleanup.
     }
 
-    const assetIdsToLink = [glbAssetId, usdzAssetId].filter(Boolean) as string[];
-    if (assetIdsToLink.length > 0) {
-      await tx.asset.updateMany({
-        where: {
-          id: { in: assetIdsToLink },
-          projectId: null,
-        },
+    if (linkableIds.length > 0) {
+      await db.updateRows<AssetsRow>({
+        databaseId: DB.databaseId,
+        tableId: DB.assets,
+        queries: [Query.equal("$id", linkableIds), Query.isNull("projectId")],
         data: { projectId },
+        transactionId: txId,
       });
     }
 
-    return { archivedKeys };
+    return undefined;
   });
-
-  if (archivedKeys.length > 0) {
-    void utapi.deleteFiles(archivedKeys).catch((err) => {
-      console.error(`[uploadthing] failed to delete archived keys:`, archivedKeys, err);
-    });
-  }
 
   revalidatePath("/tasks");
   revalidatePath("/admin/tasks");

@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { ProjectStatus } from "@/generated/prisma/client";
+import { Query } from "node-appwrite";
+import { buildFileUrl, bucketForAssetType } from "@/lib/appwrite-config";
+import { AssetStatus, AssetType, DB, ProjectStatus, ProjectsRow, getRowSafe, listAllRows, AssetsRow } from "@/lib/db";
+
+function resolveAssetUrl(asset: AssetsRow): string | undefined {
+  if (asset.provider === "appwrite" && asset.fileId) {
+    return buildFileUrl(bucketForAssetType(asset.type), asset.fileId);
+  }
+  return asset.url ?? undefined;
+}
 
 export async function GET(
   request: Request,
@@ -9,23 +17,23 @@ export async function GET(
   try {
     const { projectId } = await params;
 
-    const project = await prisma.project.findFirst({
-      where: { id: projectId, status: ProjectStatus.PUBLISHED },
-      select: {
-        assets: { select: { id: true, type: true } },
-        sdkConfig: true,
-      },
-    });
-
-    if (!project) {
+    const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
+    if (!project || project.status !== ProjectStatus.PUBLISHED) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const glbAsset = project.assets.find((a) => a.type === "MODEL_GLB");
-    const usdzAsset = project.assets.find((a) => a.type === "MODEL_USDZ");
+    const assets = await listAllRows<AssetsRow>(DB.assets, [Query.equal("projectId", projectId)]);
+
+    const glbAsset =
+      assets.find((a) => a.type === AssetType.MODEL_GLB && a.status === AssetStatus.READY) ??
+      assets.find((a) => a.type === AssetType.MODEL_GLB);
+    const usdzAsset =
+      assets.find((a) => a.type === AssetType.MODEL_USDZ && a.status === AssetStatus.READY) ??
+      assets.find((a) => a.type === AssetType.MODEL_USDZ);
+
     const assetUrls = {
-      glb: glbAsset ? `/api/v1/assets/${glbAsset.id}/file` : undefined,
-      usdz: usdzAsset ? `/api/v1/assets/${usdzAsset.id}/file` : undefined,
+      glb: glbAsset ? resolveAssetUrl(glbAsset) : undefined,
+      usdz: usdzAsset ? resolveAssetUrl(usdzAsset) : undefined,
     };
 
     return NextResponse.json(

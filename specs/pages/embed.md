@@ -35,8 +35,8 @@ Brand storefront
 - **Auth:** none (public). Middleware bypasses `/embed/*` (see [`../../proxy.ts`](../../proxy.ts)).
 - **Behavior:**
   1. `params.projectId` (Next 16+ async params).
-  2. `prisma.project.findFirst({ where: { id, status: PUBLISHED } })` — 404 otherwise.
-  3. Verify the project has a `MODEL_GLB` asset — 404 otherwise.
+  2. `getRowSafe(projects, projectId)` (TablesDB) with `status === PUBLISHED` — 404 otherwise.
+  3. `listRows(assets, equal(projectId))` — verify a `MODEL_GLB` row exists — 404 otherwise. (TablesDB-backed since Phase 4; the old Prisma gate couldn't see TablesDB rows and broke publish→embed.)
   4. `readFile('public/embed-viewer.html')` from disk.
   5. Replace `{PROJECT_ID}` with the projectId.
   6. Return `text/html; charset=utf-8` with `Cache-Control: no-store`. The page is `no-store` so a brand sending PUBLISHED → REVISIONS sees the embed stop immediately on the next iframe load (a cached response could otherwise keep serving for up to 5 minutes).
@@ -58,7 +58,7 @@ Brand storefront
   - Inline `<script type="module">`:
     1. `projectId = "{PROJECT_ID}"` (replaced at request time).
     2. `sessionId = crypto.randomUUID()` (or fallback for old browsers).
-    3. `fetch('/api/sdk/v1/config/' + projectId)` → `{ assetUrls, sdkConfig }`. **Only `assetUrls.glb` and `assetUrls.usdz` are read** — `sdkConfig` is intentionally **not consumed** (viewer config is hardcoded, see §"Hardcoded config" below). The `sdkConfig` field is kept in the SDK response for forward-compat and any third-party JS SDK consumers.
+    3. `fetch('/api/sdk/v1/config/' + projectId)` → `{ assetUrls, sdkConfig }`. **Only `assetUrls.glb` and `assetUrls.usdz` are read** — `sdkConfig` is intentionally **not consumed** (viewer config is hardcoded, see §"Hardcoded config" below). The `sdkConfig` field is kept in the SDK response for forward-compat and any third-party JS SDK consumers. The config route derives asset URLs on-the-fly via `resolveAssetUrl` (`route.ts:6`) — `buildFileUrl(bucketForAssetType(type), fileId)` for `provider === "appwrite"` rows, so the emitted `/view` URLs always carry the required `?project=<id>` param (Phase 6 bug 3; anonymous fetches 404 without it even when the file is `read:any`).
     4. On 404 / no GLB → `showError("This 3D model is not currently available.")`.
     5. On success → build `<model-viewer>` with the hardcoded attribute set (see §"Hardcoded config"), **including AR attributes**. When `cfg.assetUrls.usdz` is present the embed also sets `ios-src` so iOS Quick Look uses the higher-fidelity uploaded USDZ; when it is absent Quick Look falls back to model-viewer's in-browser USDZ generation from the GLB.
     6. `customElements.whenDefined("model-viewer").then(applyInitial)` to set `cameraOrbit`, `cameraTarget`, `interpolationDecay`, `autoRotate = true`, then `jumpCameraToGoal()` to snap to the initial framing without a fly-in animation.
@@ -201,23 +201,24 @@ The visual backdrop is a pure-CSS perspective floor — no SVG, no extra DOM, no
 - **File:** `src/app/actions/analytics.ts:1`
 - **Export:** `getProjectLiveness(projectIds: string[]): Promise<Record<projectId, { lastEventAt: Date | null }>>`
 - **Auth:** `requirePrincipal()`. Role-scoped: admin sees all, brand sees their own (`{ brandId: principal.userId }`).
-- **Query:** one `prisma.analyticsEvent.groupBy({ by: ['projectId'], where: { projectId: { in } }, _max: { createdAt: true } })` — single round-trip.
+- **Query:** per project, one `listRows(analytics_events, equal("projectId"[, equal("brandId")]), orderDesc("$createdAt"), limit(1))` → `Date` (TablesDB since Phase 3; converts `$createdAt` to `Date` because `embed-liveness.ts` calls `.getTime()`).
 
 ---
 
-## SDK endpoints (unchanged from prior spec)
+## SDK endpoints
 
 ### `GET /api/sdk/v1/config/[projectId]`
 - **File:** `src/app/api/sdk/v1/config/[projectId]/route.ts:1`
 - **Auth:** public.
 - **Cache:** `public, s-maxage=60, stale-while-revalidate=86400, Vary: Accept-Encoding` — 60s edge cache (was 3600s). Re-uploads visible within ~60s without manual cache busting.
-- **Response:** `{ assetUrls: { glb, usdz }, sdkConfig }`. 404 for missing/non-PUBLISHED/no-GLB.
+- **Behavior (TablesDB since Phase 4):** `getRowSafe(projects, id)` → PUBLISHED guard; `listRows(assets, equal(projectId))`; `glb`/`usdz` = the stored **`assets.url` verbatim** (absolute Appwrite `/view` CDN URL — publicly readable because `read:any` was granted on the storage file at publish time); fallback to the first non-READY row per type when no READY exists.
+- **Response:** `{ assetUrls: { glb, usdz }, sdkConfig }`. 404 for missing/non-PUBLISHED.
 
 ### `POST /api/sdk/v1/events`
 - **File:** `src/app/api/sdk/v1/events/route.ts:1`
 - **Auth:** public, CORS `*` (set in `next.config.mjs:26`).
 - **Body:** `{ eventType: "VIEW"|"INTERACTION"|"AR_LAUNCH", sessionId, projectId }`.
-- **Behavior:** 1 round-trip INSERT. 404 if project not PUBLISHED.
+- **Behavior (TablesDB since Phase 4):** `createRow(analytics_events, { rowId: ID.unique(), data: { eventType, sessionId, projectId, brandId: project.brandId } })` → `201 { success, eventId }`. 404 if project not PUBLISHED.
 
 ---
 

@@ -1,419 +1,222 @@
 # File Storage Architecture Spec
 
-> **Current state:** UploadThing v7 is the primary (and only) storage provider. Google Drive is backup-only. This document is the single source of truth for the file handling system's current design. The previous Filebase architecture (built July 2026, reverted shortly after) is preserved in §13 Migration history.
+> **Current state:** Appwrite Storage is the sole file provider. UploadThing and Google Drive are fully removed (Phase 5) — no legacy cleanup code, gdrive-download route, or UT env vars remain. Only historical **rows** (`provider: "uploadthing"`/`"external"`) persist as read-only seed/legacy data. This document is the single source of truth for the file handling system's current design. Earlier architectures (Filebase, UploadThing + GDrive) are preserved in §14 Migration history.
 
 ## Overview
 
-STUDIO.V stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — using **UploadThing** as primary storage and **Google Drive** as a fire-and-forget backup. Files are uploaded browser-direct to UploadThing's S3 (bypassing Vercel's serverless body limit, essential for 100MB+ GLB files), recorded as rows in the `Asset` Prisma table with full metadata, and publicly served via UploadThing's `*.ufs.sh` CDN. The FileRouter enforces role-based auth per uploader; the GDrive adapter downloads from the UploadThing CDN URL and writes a copy to a shared Drive folder.
+STUDIO.V stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing Vercel's serverless body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
 
-## Current architecture decisions
+- **In-app reads** (thumbnails, review modals, "Previous models") — auth-gated proxy `GET /api/v1/assets/[assetId]/file` which streams bytes from Appwrite with the server API key.
+- **Published embeds** (third-party storefronts) — direct CDN URLs (`assets.url`, the Appwrite `/view` endpoint) made publicly readable by granting `read:any` on the storage file at publish time.
 
-### 1. UploadThing as the sole primary storage
+## Architecture decisions
 
-UploadThing v7 (`uploadthing@7.7.4` + `@uploadthing/react@7.3.3`) handles the entire upload pipeline:
-- **appId:** `7r8xhgyw3k`, **region:** `sea1`
-- **Free tier:** 2 GB storage, unlimited egress, no credit card. Public serving via `*.ufs.sh` URLs (anonymous reads work — this is the decisive property that Filebase's free tier lacked).
-- **Public CDN:** `https://<key>.ufs.sh` — set in `asset.url` at upload-complete time and read by every consumer (embeds, SDK config, dashboards, actions) as a plain URL string.
+### 1. Appwrite Storage as the sole provider
 
-UploadThing works perfectly with Vercel hosting — the browser uploads directly to UploadThing's S3; the Next.js app only runs the `middleware` (auth) + `onUploadComplete` (asset creation + backup) server-side.
+Two buckets (console config, Phase 0 of `tasks/appwrite-migration.md`):
 
-**Why not Filebase?** Filebase's free tier only supports **private** buckets, which breaks the anonymous public reads required by embeds. See §13 for the full migration record.
+| Bucket | ID | Max file | Extension gate | Create perm | Read perm | Encryption | Antivirus |
+|---|---|---|---|---|---|---|---|
+| Models | `models` | 150 MB | none | `label:ADMIN` | `label:ADMIN` | OFF (>20 MB skip) | OFF |
+| Reference images | `reference-images` | 16 MB | `jpg png webp gif avif` | `label:BRAND` | `label:BRAND` | ON | ON |
+
+- Browser uploads are authenticated by the **session cookie** (`appwrite-session-6a8562a20037b62075e1`) via the `@appwrite.io/react` client; the bucket `create` permission gates the role.
+- File-level `read:any` is only ever granted on **published projects' GLB/USDZ files** (see §4). Reference images never get `read:any`.
+- `assets.url` stores the absolute `/view` URL: `${APPWRITE_ENDPOINT}/storage/buckets/{bucketId}/files/{fileId}/view?project=${APPWRITE_PROJECT_ID}`, built server-side via `buildFileUrl` (`src/lib/appwrite-config.ts:13`) — the server SDK's `getFileView` returns bytes, not a URL. **The `?project=` param is required**: Appwrite rejects anonymous `/view` requests without project context (404 even for `read("any")` files — verified 2026-08-30, Phase 6 bug 3). The SDK config endpoint re-derives the URL on-the-fly for `provider === "appwrite"` rows (see §6), so the stored `url` is a convenience cache, not the authoritative URL for published assets.
 
 ### 2. Browser-direct uploads (bypass Vercel's body limit)
 
 ```
-Client (usePresignedUpload)          UploadThing S3              Next.js (onUploadComplete)
-   │                                    │                              │
-   │── startUpload([file]) ────────────→│  (browser → S3 direct)        │
-   │                                    │                              │
-   │   ← UploadThing middleware runs requirePrincipal({ roles }) ──────│──→ returns { userId, assetType }
-   │                                    │                              │
-   │←── upload progress / complete ─────│                              │
-   │                                    │── onUploadComplete(file) ────│
-   │                                    │                              │── prisma.asset.create(READY, url: file.ufsUrl)
-   │                                    │                              │── gdriveAdapter.backupFile(...)  (fire-and-forget)
-   │←── serverData { asset } ───────────│                              │
+Client (useAppwriteUpload)            Appwrite Storage              Next.js (recordAssetUpload)
+   │                                      │                                │
+   │── storage.createFile({bucketId,     │                                │
+   │     fileId: ID.unique(), file,      │  (browser → Appwrite direct,    │
+   │     onProgress }) ─────────────────→│   session-authenticated)        │
+   │   ← progress { 0-100 } ─────────────│                                │
+   │                                      │                                │
+   │── recordAssetUpload({fileId, type}) ────────────────────────────────→│── requirePrincipal(by type)
+   │                                      │                                │── storage.getFile (admin client)
+   │                                      │                                │── TablesDB createRow(assets, rowId: fileId)
+   │←── { asset } ────────────────────────│                                │
 ```
 
-This bypasses Vercel's 4.5 MB serverless body limit — essential for GLB files (10–100 MB+). The server never proxies the file bytes.
+- **`fileId` = assets row `$id`** — a single identifier across storage and the database. The client generates it with `ID.unique()`; `recordAssetUpload` reuses it as the row id (`src/app/actions/record-asset.ts:53`).
+- The server never proxies upload bytes. The `serverActions.bodySizeLimit: '16mb'` limit remains in `next.config.mjs` for the (small) action payloads — it is a general Next.js server-action cap, unrelated to file uploads (browser-direct to Appwrite).
+- The client SDK `createFile` `onProgress` receives `UploadProgress = { progress: 0-100 }` (percent), unlike the server SDK's `{ progress, bytesUploaded, bytesTotal }`.
+- **Client-side session requirement (Phase 6 bug 1):** uploads are browser-direct to `fra.cloud.appwrite.io`, so the client SDK must hold the session. The `@appwrite.io/react` SSR sign-in only sets the httpOnly cookie (and returns `{ user }`); the provider's client is built per page load with `setSession(ssr.session)` from the root-layout prop. A **soft-navigation** sign-in keeps that prop `null`, so `storage.createFile` would go out as a guest and fail the label-gated bucket `create`. `SignInForm` therefore calls `client.setSession(sessionSecret)` (secret returned by `getSessionPrincipal`, `auth.ts:203`) before navigating — see `pages/auth.md` §2.
 
-### 3. Asset Prisma model (the canonical file record)
+### 3. The `assets` TablesDB row (canonical file record)
 
-`prisma/schema.prisma:104`. Replaces bare URL strings — every file reference in the app goes through the `Asset` table, which carries metadata, ownership, lifecycle, and backup status.
-
-```prisma
-model Asset {
-  id            String      @id @default(cuid())
-  projectId     String?
-  project       Project?    @relation(fields: [projectId], references: [id])
-  ownerId       String
-  owner         User        @relation(fields: [ownerId], references: [id])
-  type          AssetType
-  status        AssetStatus @default(UPLOADING)
-  provider      String      @default("uploadthing")
-  key           String      // UploadThing object key
-  url           String      // *.ufs.sh public CDN URL
-  originalName  String
-  mimeType      String
-  size          Int
-  checksum      String?
-  backupSynced  Boolean     @default(false)
-  gdriveFileId  String?
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-
-  @@index([projectId])
-  @@index([ownerId])
-}
-
-enum AssetType   { REFERENCE_IMAGE | MODEL_GLB | MODEL_USDZ }
-enum AssetStatus { UPLOADING | READY | PUBLISHED | ARCHIVED | DELETED }
-```
-
-**Key fields:**
-- `url` — the `*.ufs.sh` URL every consumer reads. Set once at upload-complete; never rewritten.
-- `key` — the UploadThing object key (auto-generated by UploadThing; used for `utapi` operations by default `keyType`). For cross-storage lookup, use `asset.id` (= UploadThing `customId` = GDrive backup filename) — see §12.
-- `provider` — `"uploadthing"` for app uploads; `"external"` for seed data (Khronos/Unsplash URLs).
-- `backupSynced` + `gdriveFileId` — set asynchronously after the GDrive backup resolves.
-- `status` — `READY` on upload complete. (Note: `PUBLISHED`/`ARCHIVED`/`DELETED` are not currently auto-transitioned by the app — see §11 Open questions.)
-
-### 4. Google Drive as backup **and fallback read source**
-
-Google Drive is **not** a CDN and is unsuitable for serving files programmatically in isolation (download quotas, virus-scan warnings for >100 MB, rate limits, URL instability, ToS concerns). However, it doubles as a **free durable backup** leveraging the user's 2 TB Google AI Pro quota **and** as a fallback read source when the primary UploadThing URL fails (see §4b below).
-
-**OAuth 2.0 refresh-token auth (not a service account):** Service accounts have **zero storage quota** for personal Google accounts — they cannot own files that consume storage (per [Google's own docs](https://developers.google.com/workspace/drive/api/guides/about-shareddrives)). The adapter uses OAuth 2.0 with a refresh token instead: the owner does a one-time consent flow (`scripts/get-gdrive-refresh-token.ts`), which obtains a long-lived `refresh_token`. The app stores `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` + `GOOGLE_OAUTH_REFRESH_TOKEN` as env vars and uses `google.auth.OAuth2` with `setCredentials({ refresh_token })` to authenticate. Files are uploaded as the owner — owned by the owner, counting against the owner's 2 TB. The refresh token does not expire unless explicitly revoked in Google Account settings.
-
-The OAuth client lives in `src/lib/storage/gdrive-client.ts:1` — `getGDriveClient()` lazily constructs and caches a single `google.drive({ version: "v3", auth })` instance on first call. Both `gdrive-adapter.ts` (backup writes) and the asset-delivery helper (fallback reads — see §4b) reuse this client so GDrive requests don't re-handshake tokens on every fallback. `isGDriveConfigured()` is exposed for components that want to gate on env presence.
-
-The adapter (`src/lib/storage/gdrive-adapter.ts:1`) downloads from `asset.url` (the UploadThing CDN) via `fetch()` and streams the response body to the shared folder via `Readable.fromWeb` — so it automatically follows whatever primary storage is in use; no code change was needed when the primary switched from Filebase back to UploadThing.
-
-### 4b. Asset delivery route — `GET /api/v1/assets/[assetId]/file`
-
-Every consumer that previously embedded an UploadThing public URL now points to this server route:
+`AssetsRow` (`src/lib/db.ts:84`) — mirrors the old Prisma `Asset` model, minus storage-provider fields:
 
 ```
-src/app/api/v1/assets/[assetId]/file/route.ts:1
-src/lib/storage/asset-delivery.ts:1
+$id           = storage fileId          (single identifier, set by client ID.unique())
+projectId     string | null             (null until linked by createProject / adminSubmitProject)
+ownerId       string                    (principal.userId at upload time)
+type          "REFERENCE_IMAGE" | "MODEL_GLB" | "MODEL_USDZ"
+status        "READY" | "ARCHIVED"      (rows never enter UPLOADING/PUBLISHED/DELETED)
+provider      "appwrite"                (legacy: "uploadthing" | "external" for seed rows)
+fileId        string | null             (storage file id; null for seed rows — the old `key`/`gdriveFileId` columns are gone)
+url           string                    (absolute Appwrite /view URL; legacy rows keep their ufs.sh / external URL)
+originalName  string
+mimeType      string                    (falls back to type default: model/gltf-binary | model/vnd.usdz+zip)
+size          number                    (file.sizeOriginal)
+checksum      string | null             (file.signature — MD5)
 ```
 
-The route authenticates (`PUBLISHED` projects are public; otherwise admin or project-owner brand required), fetches the `Asset` row, and delegates to `deliverAsset({ url, gdriveFileId, mimeType, originalName }, request.signal)`:
+New rows are created by `recordAssetUpload` with `projectId: null`, `status: "READY"`, `provider: "appwrite"` (`src/app/actions/record-asset.ts:50-66`). `projectId` is set later by `createProject` (reference images) or `adminSubmitProject` (models).
 
-1. **Primary attempt — UploadThing (default path: non-`ARCHIVED` assets).** `fetch(target.url)` with an `AbortController` chained to both an 8-second `UT_PRIMARY_TIMEOUT_MS` (`asset-delivery.ts:UT_PRIMARY_TIMEOUT_MS`) and the Next request's external `signal`. Any non-2xx, network error, body-less response, or timeout logs a warning and silently falls back. (Browser `<model-viewer>` reads, `<Image unoptimized>` thumbnails, and `<a target="_blank">` links all funnel through here.)
-2. **Primary attempt — Google Drive (preferred for `ARCHIVED` assets).** When `AssetStatus.ARCHIVED`, `deliverAsset({... preferGDrive: true})` (`asset-delivery.ts:tryGDrivePrimary`) consults GDrive **first** under a tight `GDRIVE_PRIMARY_TIMEOUT_MS = 2_000` budget. If the stream errors or times out, control flows back to the UT 8s path; if both miss, `502`. Logs `[asset-delivery] ARCHIVED/legacy asset=… preferring GDrive over flaky UT URL` at entry. Rationale: archived models are exactly the class that historically 404s on the UT URL after their UT copy was deleted (`UTApi.deleteFiles`), while their `gdriveFileId` remains valid by intent.
-3. **Fallback — Google Drive (default-path fallthrough).** Requires a non-null `asset.gdriveFileId` and a configured `getGDriveClient()`. Uses `drive.files.get({ fileId, alt: "media" }, { responseType: "stream" })` and pipes the resulting Node `Readable` (via `Readable.toWeb`) directly back to the response. Successful response includes `Content-Type` (UT content-type or asset MIME), `Content-Length` if known, `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control` (public swr 1 day for PUBLISHED; private max-age=60 otherwise), and **`x-source: uploadthing|gdrive`** for observability.
-4. **Both fail.** UT miss + no `gdriveFileId` → `404 { error: "asset unavailable" }`. UT miss + GDrive configured but errors → `502 { error: "asset unavailable" }`. GDrive env unset → `502 { error: "backup provider not configured" }`. Identical for `preferGDrive` path with the timeout budget swapped.
+### 4. Public access model (publish grant / unpublish revoke)
 
-The route always proxies the bytes — there is no `302 → UT` fast path, because a redirect would prevent the server from detecting the UT miss in the first place. Trade-off: every happy-path request now hits Vercel egress. Acceptable at our scale (a stealth-mode internal product); revisit when bandwidth cost becomes material. See Open questions §6.
+Bucket-level `read` is label-scoped, so the **proxy route is the only in-app delivery path** (it fetches with the server API key, `APPWRITE_API_KEY` in `.env`). Public embed reads go through **file-level `read:any`**:
 
-**Consumers rewritten to use the proxy URL:**
-- **Server actions** rewrite `referenceUrls` (REFERENCE_IMAGE — every thumbnail in the task modals) and `assetUrls` (MODEL_GLB/USDZ) to the proxy URL, so any consumer reading the augmented shape is automatically covered:
-  - `getAllTasks` (`src/app/actions/admin.ts:65`) — `referenceUrls`, `assetUrls`, `archivedAssetUrls[].url`.
-  - `getUserProjects` (`src/app/actions/project.ts:191`) — same shape, mirrors the derivation.
-  - `GET /api/sdk/v1/config/[projectId]` (`src/app/api/sdk/v1/config/[projectId]/route.ts:24`) — emits `{ glb: '/api/v1/assets/{id}/file', usdz: ... }` instead of raw `asset.url`. The public embed `<model-viewer>` (`public/embed-viewer.html:164`) sets `mv.src = APP_URL + cfg.assetUrls.glb` and renders identically.
-- **Client-side reads** that previously read `asset.url` directly now compose the proxy URL inline:
-  - `src/app/tasks/TasksClient.tsx`: `getThumbnail` (`:81`), `getAssets` (`:93`) — composed from `asset.id` so `getViewerProduct` is fully proxied. Reference-image `<Image>` thumbnails + `setLightboxUrl` rewires at `:729, :821, :993, :1166` (4 sites). The lightbox `<Image>` at `:1253` inherits the proxy URL by construction. `getThumbnail` thumbs at `:390` (Kanban tile) and `:479` (Review list) also proxy.
-  - `src/app/admin/tasks/AdminTasksClient.tsx`: `getThumbnail` (`:81`) and `<Image src={getThumbnail(job)}>` at `:253`; reference `<Image>` at `:383`; "Current GLB/USDZ View" `<a>` at `:453` and `:510`.
-- **`<Image unoptimized>` consumers (now the canonical pattern):** every `<Image>` whose `src` references an asset by id (the 7 sites listed above) carries the `unoptimized` prop. **Rationale** — Next's image optimizer at `/_next/image` does a server-side `fetch(href)` *without forwarding request headers* (per official docs https://nextjs.org/docs/app/api-reference/components/image#src: "For security reasons, the Image Optimization API using the default loader will not forward headers when fetching the `src` image. If the `src` image requires authentication, consider using the `unoptimized` property to disable Image Optimization"). Without cookies, the proxy's `requirePrincipal` always rejects the optimizer's anonymous call, surfaces 401, and Next surfaces the misleading "received null" error. `unoptimized` makes the **browser** fetch the proxy URL directly (cookies attached), the proxy resolves the session, and bytes stream through. Reference thumbnails/lighboxes don't benefit meaningfully from Next image optimization at our scale (small fixed-size, already WebP-friendly).
-- **`next.config.mjs`:** dropped `images.localPatterns` (was whitelisting `/api/v1/assets/**` while the previous `/_next/image` indirection was in effect). `remotePatterns: ['*.ufs.sh', 'images.unsplash.com']` retained for direct CDN uploads and seed URLs. See §11.
+- **Publish** (`brandPublishProject`, `src/app/actions/project.ts:117`): grant FIRST, flip status after:
+  1. `listAppwriteModelAssets(projectId)` (`project.ts:230`) — READY, `provider === "appwrite"`, GLB/USDZ rows with `fileId` (query: `equal(projectId)` + `Query.or([equal(type, GLB), equal(type, USDZ)])` + `equal(status, READY)` + `equal(provider, "appwrite")`).
+  2. `setFilePublic(a, true)` (`project.ts:243`) — admin-client `storage.updateFile({ bucketId, fileId, permissions: [read(any)] })`, allSettled, failures logged only.
+  3. Guarded `updateRows` → `PUBLISHED`. If the flip fails: best-effort revoke + throw. Invariant: `PUBLISHED ⇒ files publicly readable`.
+- **Unpublish** (`brandSendForRevisions` when `wasPublished`, `project.ts:213-226`): flip status to `REVISIONS` in the transaction, then `setFilePublic(a, false)` → `permissions: []` (node-appwrite v26 `updateFile` only sends `permissions` when defined, so `[]` clears file-level perms). Failures logged only.
+- `revalidatePath('/embed/[id]')` on both, so the embed gate and cached config refresh.
+- **Reference images never receive `read:any`.** `Permission`/`Role` are imported from `node-appwrite` aliased as `AppwriteRole` (`project.ts:3`) to avoid clashing with the local `Role` enum from `@/lib/auth-guards`.
 
-### 5. Provider abstraction (`StorageAdapter` / `BackupAdapter`)
+### 5. Asset delivery route — `GET /api/v1/assets/[assetId]/file`
 
-`src/lib/storage/types.ts:1` defines two interfaces for pluggability:
+`src/app/api/v1/assets/[assetId]/file/route.ts:1` — TablesDB-backed, **always auth-gated** (no public bypass):
+
+1. `getRowSafe(assets, id)` → 404 `{ error: "asset unavailable" }` if missing or `status ∉ {READY, PUBLISHED, ARCHIVED}`.
+2. `requirePrincipal({ roles: [ADMIN, BRAND] })` → 401 `unauthorized` (Unauthenticated/Stale) / 403 `forbidden` (Forbidden). BRAND passes if `asset.ownerId === principal.userId` **OR** the linked project's `brandId` (`route.ts:29-41`) — unlinked uploads (rows created before `createProject` runs) are viewable by their owner, fixing the old Prisma route's 404-on-unlinked-assets bug.
+3. Delivery (`fetchAssetStream`, `route.ts:72`):
+   - `provider === "appwrite"` → `fetch("{endpoint}/storage/buckets/{bucket}/files/{fileId}/download")` with `X-Appwrite-Project` + `X-Appwrite-Key` headers; **streams `res.body`** (web stream, zero buffering — critical for 128 MB GLBs).
+   - `provider ∈ {external, uploadthing}` (seed / legacy rows) → plain `fetch(asset.url)`.
+4. Response headers: stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present. A log line records every hit (`route.ts:66`).
+
+No 302 fast path — the proxy always streams so auth and source detection stay server-side. One Vercel egress hop per read.
+
+**Consumers (all point at the proxy):** `TasksClient.tsx` thumbnails/lightbox (`:81, :93, :729, :821, :993, :1166, :1253`), `AdminTasksClient.tsx` thumbnails + "Current GLB/USDZ View" links (`:81, :253, :383, :453, :510`), "Previous models" entries (archived rows), `getUserProjects`/`getAllTasks` derived `referenceUrls`/`assetUrls`/`archivedAssetUrls` (`src/lib/project-augment.ts:61` `proxyUrl` helper). `<Image unoptimized>` remains the pattern for thumbnail reads (the optimizer's anonymous fetch would 401).
+
+### 6. SDK config / embed — direct CDN URLs
+
+- `GET /api/sdk/v1/config/[projectId]` (`src/app/api/sdk/v1/config/[projectId]/route.ts:1`): TablesDB-backed, PUBLISHED-only, returns `{ assetUrls: { glb, usdz }, sdkConfig }`. URLs are derived on-the-fly by `resolveAssetUrl(asset)` (`route.ts:6`) — `buildFileUrl(bucketForAssetType(type), fileId)` for `provider === "appwrite"` rows (so the `?project=` param is always present, independent of when the row was created), falling back to the stored `url` for external/legacy rows. Publicly readable because read:any was granted at publish. Fallback: first non-READY row per type if no READY exists. `Cache-Control: public, s-maxage=60, stale-while-revalidate=86400`.
+- `public/embed-viewer.html:143` sets `APP_URL = ""`, so absolute URLs pass through unchanged (`APP_URL + cfg.assetUrls.glb`).
+- `GET /embed/[projectId]` (`src/app/embed/[projectId]/route.ts:1`): TablesDB hasGlb check (required — the old Prisma gate couldn't see TablesDB rows, breaking publish→embed), serves the HTML template with `{PROJECT_ID}` replaced. No cache (no-store).
+
+### 7. SDK events route
+
+`POST /api/sdk/v1/events` (`src/app/api/sdk/v1/events/route.ts:1`): validates `eventType ∈ {VIEW, INTERACTION, AR_LAUNCH}` + `sessionId` + `projectId`, PUBLISHED guard, then `createRow(analytics_events, { rowId: ID.unique(), data: { eventType, sessionId, projectId, brandId: project.brandId } })` → 201 `{ success, eventId }`.
+
+### 8. The upload hook — `useAppwriteUpload`
+
+`src/lib/use-appwrite-upload.ts:40` (`"use client"`):
 
 ```ts
-interface StorageAdapter {
-  getPresignedUploadUrl(key, contentType, expiresIn?): Promise<string>
-  confirmUpload(key): Promise<ConfirmUploadResult>
-  getPublicUrl(key): string
-  deleteObject(key): Promise<void>
-  deleteObjects(keys: string[]): Promise<void>
-}
-interface BackupAdapter {
-  backupFile(key, sourceUrl, mimeType, backupName): Promise<string | null>
-  deleteBackup(gdriveFileId): Promise<void>
-}
+useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions? })
+  → { upload(file, type): Promise<UploadedAsset | null>, isUploading, progress: 0-100, error, reset }
 ```
 
-**Current implementations:**
-- **`GDriveAdapter`** (`src/lib/storage/gdrive-adapter.ts:1`) — implements `BackupAdapter`. Singleton `gdriveAdapter`. No-ops with a warning if `GDRIVE_*` env vars are unset.
-- **No `StorageAdapter` implementation** — UploadThing handles primary storage directly via its own FileRouter; there is no `S3StorageAdapter` in the codebase anymore (the Filebase-era adapter was deleted during the revert). The `StorageAdapter` interface is retained for future use (e.g., if direct S3 is reintroduced).
+- Uses the pre-built `storage` service from `useAppwrite()` (the `@appwrite.io/react` provider constructs `new Storage(client)` with the session cookie attached — `node_modules/@appwrite.io/react/dist/esm/index.js:25`).
+- Client-side validation: size ≤ `maxSizeMB`, extension ∈ `allowedExtensions` (if provided).
+- `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress: (p) => setProgress(p.progress) })`, then `recordAssetUpload({ fileId, type })`.
+- Errors: `AppwriteException` 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; otherwise the message. On failure, best-effort `storage.deleteFile` orphan cleanup.
+- Returns `RecordedAsset` (`record-asset.ts:15`): `{ id, url, type, status, mimeType, size, originalName }` — **no `key`**.
 
-**Barrel:** `src/lib/storage/index.ts:1` exports `gdriveAdapter` and re-exports the `BackupAdapter`/`PresignedUploadResult`/`ConfirmUploadResult` types.
+Consumers:
+- `src/app/tasks/TasksClient.tsx:169` — `bucketId: APPWRITE_REFERENCE_IMAGES_BUCKET_ID`, 16 MB, `["jpg","jpeg","png","webp","gif","avif"]`; `upload(file, "REFERENCE_IMAGE")`.
+- `src/app/admin/tasks/AdminTasksClient.tsx:113,119` — two instances, `bucketId: APPWRITE_MODELS_BUCKET_ID`, 128 MB, `["glb"]` / `["usdz"]`; `upload(file, "MODEL_GLB")` / `upload(file, "MODEL_USDZ")`.
 
-### 6. UploadThing FileRouter (three uploaders, role-gated)
+### 9. `recordAssetUpload` server action
 
-`src/app/api/uploadthing/core.ts:1`. Three uploaders share a `createAssetAndBackup(metadata, file)` helper:
+`src/app/actions/record-asset.ts:23` — `recordAssetUpload({ fileId, type }) → { asset: RecordedAsset }`:
+- Role per type: `REFERENCE_IMAGE` → `[Role.BRAND]`; `MODEL_GLB`/`MODEL_USDZ` → `[Role.ADMIN]` (mirrors the bucket `create` perms).
+- Admin-client `storage.getFile({ bucketId, fileId })` (validates existence + size metadata).
+- `mimeType = file.mimeType || defaultMimeTypeForAssetType(type) || "application/octet-stream"` (browsers send empty types for GLB/USDZ).
+- `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size: file.sizeOriginal, checksum: file.signature } })`.
 
-| Endpoint | File type | Max size | Auth (middleware) | AssetType created |
-|---|---|---|---|---|
-| `referenceImageUploader` | `image` | 16 MB, 1 file | `Role.BRAND` | `REFERENCE_IMAGE` |
-| `modelGlbUploader` | `blob` | 128 MB, 1 file | `Role.ADMIN` | `MODEL_GLB` |
-| `modelUsdzUploader` | `blob` | 128 MB, 1 file | `Role.ADMIN` | `MODEL_USDZ` |
+### 10. Archival
 
-Each middleware calls `requireAuth()` (`core.ts:56`) which wraps `requirePrincipal({ roles: [...] })` and converts auth errors to `UploadThingError` with appropriate codes — `StaleSessionError`/`UnauthenticatedError` → `FORBIDDEN` (403), `ForbiddenError` → `FORBIDDEN` (403), others → `INTERNAL_SERVER_ERROR` (500). After auth, the middleware generates an `assetId` via `crypto.randomUUID()`, slugifies the file name, sets `customId: assetId` + `name: slugifiedName` via the `UTFiles` symbol, and returns `{ userId, assetType, assetId, originalName }` as metadata. See §12 for the full naming convention.
+`adminSubmitProject` (`src/app/actions/admin.ts`, transaction): archives prior READY GLB/USDZ rows (projectId link preserved for "Previous models"), links the new rows. **No post-commit cleanup** — archived files are always **kept** in Appwrite Storage (user decision). Archived models stay viewable via the proxy ("Previous models" list) and, while the project is published, via their read:any grant. The legacy `utapi.deleteFiles` branch was removed with the UploadThing package in Phase 5.
 
-`onUploadComplete` calls `createAssetAndBackup(metadata, file)` (`core.ts:10`):
-1. Builds the GDrive backup name: `<assetId>.<ext>` via `buildBackupName()` (see §12).
-2. `prisma.asset.create({ id: metadata.assetId, type, status: READY, key: file.key, url: file.ufsUrl, ownerId, originalName: metadata.originalName, mimeType, size })` — `key` stores the real UploadThing object key; `id` is the UUID = UploadThing `customId`.
-3. Fire-and-forget `gdriveAdapter.backupFile(file.key, asset.url, asset.mimeType, backupName)` — on success sets `backupSynced: true` + `gdriveFileId`; on failure logs and leaves `backupSynced: false`.
-4. Returns `{ asset: { id, url, key: file.key, type, status, mimeType, size } }` as `serverData` (consumed by the client hook).
+### 11. File validation rules
 
-**Route handler:** `src/app/api/uploadthing/route.ts:1` — `createRouteHandler({ router: ourFileRouter })` exports `GET` + `POST`.
-
-### 7. `usePresignedUpload` client hook
-
-`src/lib/hooks/use-presigned-upload.ts:1` (`"use client"`). A thin wrapper over UploadThing's `useUploadThing` that exposes a stable `{ upload, isUploading, progress, error, reset }` interface decoupled from UploadThing's API:
-
-```ts
-export function usePresignedUpload(endpoint: keyof OurFileRouter): UsePresignedUploadReturn
-// upload(file, _type) → Asset | null    (calls startUpload([file]), returns serverData.asset)
-// isUploading: boolean
-// progress: number                       (0–100, from UploadThing v7 onUploadProgress)
-// error: string | null
-// reset(): void
-```
-
-The `_type` param is accepted for historical API compatibility (the endpoint already determines the asset type via middleware) — it's ignored. The hook surfaces `isUploading`/`error` via callbacks (`onUploadProgress`/`onClientUploadComplete`/`onUploadError`) and feeds the byte-level `progress` number straight from `onUploadProgress(p: number)`. Reset clears progress + error back to `0`/`null`. The admin `/admin/tasks` modal renders a thin `h-1.5` progress bar + percentage label inside each upload tile while `isUploading` is true, so the user has live feedback during large GLB/USDZ uploads.
-
-**Consumer:** `src/app/tasks/TasksClient.tsx:140` (GLB), `:141` (USDZ), `:149` (reference images) — three instances with the three endpoint names. The `Asset` returned flows into `uploadedAssets` (reference) or `glbAsset`/`usdzAsset` state (models), then into `createProject` / `markAsCompleted` via their asset IDs.
-
-### 8. UploadThing React helpers
-
-`src/lib/uploadthing.ts:1` — `generateReactHelpers<OurFileRouter>()` produces the typed `useUploadThing` + `uploadFiles` used by the hook. The `OurFileRouter` type is exported from `src/app/api/uploadthing/core.ts:76`.
-
-### 9. File validation rules
-
-| Asset type | UploadThing type gate | Max size | MIME enforcement |
+| Asset type | Gate | Max size | MIME enforcement |
 |---|---|---|---|
-| `REFERENCE_IMAGE` | `image` (UT validates image MIME pre-upload) | 16 MB | Strong — UT rejects non-images |
-| `MODEL_GLB` | `blob` (accepts any file) | 128 MB | Weak — file picker filters by `.glb` extension; MIME not validated server-side |
-| `MODEL_USDZ` | `blob` | 128 MB | Weak — file picker filters by `.usdz` extension |
+| `REFERENCE_IMAGE` | console bucket extension gate `jpg png webp gif avif` + client `allowedExtensions` | 16 MB (console max-file) | Bucket-level (antivirus ON) |
+| `MODEL_GLB` | client `["glb"]` | 128 MB (hook) / 150 MB (console max-file) | Weak — picker filters by extension; `recordAssetUpload` defaults mime to `model/gltf-binary` |
+| `MODEL_USDZ` | client `["usdz"]` | same | Weak — defaults to `model/vnd.usdz+zip` |
 
-For MVP this is acceptable (only ADMIN uploads models, and the picker pre-filters). For hardening, add a post-upload MIME check in `onUploadComplete` and delete the object if it doesn't match `model/gltf-binary` / `model/vnd.usdz(+zip)`.
+### 12. `next.config.mjs`
 
-### 10. Public access & caching
+`images.remotePatterns`: `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (direct Appwrite CDN reads — glb/usdz loads go through the proxy, but future `<Image>`-served refs may hit the CDN). `serverActions.bodySizeLimit: '16mb'` (general server-action payload cap — unrelated to UploadThing, which is gone) kept for action payloads.
 
-- **Public reads:** UploadThing `*.ufs.sh` URLs are publicly readable by default — no auth, no signed URL, no CORS issue for embeds (third-party storefronts fetch anonymously). This is the property that made Filebase unsuitable.
-- **Security through unguessable keys:** object keys are auto-generated by UploadThing (opaque random strings). Reference images are technically public if someone guesses the URL, but the URL is not discoverable without knowing the project/asset id. The `customId` (= `asset.id` UUID) is set for `utapi` operations but does not appear in the public URL. Acceptable for MVP.
-- **Caching:** the SDK config endpoint (`GET /api/sdk/v1/config/[projectId]`) sets `Cache-Control: public, s-maxage=3600, stale-while-revalidate=86400`. UploadThing object URLs are immutable (new versions get new keys) so they can be cached aggressively by CDNs/browsers.
+### 13. Environment variables
 
-### 11. `next.config.mjs` remote patterns
+| Var | Used for | Location |
+|---|---|---|
+| `APPWRITE_API_KEY` | Server-side proxy streaming, `getFile`, `updateFile` (perms) | `.env` (gitignored), read via `src/lib/appwrite.ts:8` |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | Client + server endpoint | public |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | Client + server project | public |
 
-`next.config.mjs:6` whitelists `*.ufs.sh` (UploadThing CDN) and `images.unsplash.com` (seed data) for `next/image` direct reads. There is no `localPatterns` entry anymore — see §4b for why the optimizer no longer touches the asset proxy:
-```js
-images: { remotePatterns: [
-  { protocol: 'https', hostname: 'images.unsplash.com' },
-  { protocol: 'https', hostname: '*.ufs.sh' },
-] }
-```
-
-### 12. File naming & cross-storage tracking
-
-`src/lib/storage/naming.ts:1` provides three utilities. The design uses `asset.id` (a UUID we generate) as the **single cross-storage tracker** — it is the UploadThing `customId`, the DB primary key, and the GDrive backup filename (with extension).
-
-**Identifier mapping:**
-
-| Where | Identifier | Example | Set by |
-|---|---|---|---|
-| DB `Asset.id` | UUID (we generate) | `72dbc4d8-63b6-4ed7-892f-5b02fdcd8cd3` | `generateAssetId()` in middleware |
-| UploadThing `customId` | = `asset.id` | same UUID | `UTFiles` override in middleware |
-| UploadThing object key | auto-generated by UT | `O7geNJdBfaHscCQEDsWWN23swt7C0Mu9H6DOKYqfdRyGmzv5` | UploadThing (not controllable) |
-| DB `Asset.key` | = real UT object key | same as above | `file.key` in `onUploadComplete` |
-| UploadThing URL | `https://<key>.ufs.sh` | `https://O7geN...ufs.sh` | UploadThing (not controllable) |
-| DB `Asset.url` | = UT URL | same as above | `file.ufsUrl` in `onUploadComplete` |
-| GDrive backup filename | `<asset.id>.<ext>` | `72dbc4d8-...cd3.png` | `buildBackupName()` in `onUploadComplete` |
-
-**Utilities (`src/lib/storage/naming.ts:1`):**
-1. **`generateAssetId()`** — `crypto.randomUUID()`. Called in middleware; the result becomes `Asset.id`, UploadThing `customId`, and the GDrive filename base.
-2. **`slugify(name)`** — lowercases the base, replaces non-alphanumeric runs with `-`, preserves the extension. Used to set the UploadThing file `name` metadata (visible in `utapi.listFiles()` output) — not used for the key or URL.
-3. **`buildBackupName(assetId, originalName)`** — returns `<assetId>.<ext>` (extension lowercased from the original name). Used as the GDrive backup filename.
-
-**UploadThing lookup by customId:**
-```ts
-utapi.getFileUrls(asset.id, { keyType: "customId" })   // get the CDN URL
-utapi.deleteFiles(asset.id, { keyType: "customId" })  // delete the file
-```
-
-**GDrive lookup:** search the backup folder for a file named `<asset.id>.<ext>` — one-to-one with the DB row.
-
-**Why not control the UploadThing key?** UploadThing v7's FileRouter does not expose the object storage key — it is always auto-generated. Only `customId` (an API alias) and `name` (metadata) can be set via `UTFiles`. So the URL `https://<key>.ufs.sh` always contains the auto-generated key, not our UUID. The `customId` bridges this: it lets us operate on the file via `utapi` using `asset.id` without knowing the real key.
-
-**Flow (per upload):**
-1. `middleware({ files })` (`core.ts:75`) calls `requirePrincipal()`, generates `assetId`, slugifies the file name, sets `customId: assetId` + `name: sluggedName` via `UTFiles`, returns `{ userId, assetType, assetId, originalName }`.
-2. `onUploadComplete` (`core.ts:10`) builds `backupName = buildBackupName(assetId, originalName)`.
-3. `prisma.asset.create({ id: assetId, key: file.key, url: file.ufsUrl, ... })` — `key` stores the real UT key; `id` is the UUID = customId.
-4. `gdriveAdapter.backupFile(file.key, asset.url, asset.mimeType, backupName)` — GDrive file named `<assetId>.<ext>`.
-
-**Edge cases:**
-- Files without extensions: GDrive filename is just the UUID (GDrive infers type from `mimeType` in the upload request).
-- Non-ASCII filenames: `slugify` strips non-`[a-z0-9]` chars for the UT `name` metadata; the GDrive name uses only the UUID + extension, so non-ASCII never reaches GDrive.
-- Multiple files with identical original names: UUID guarantees unique DB ids, UT customIds, and GDrive filenames.
+> Removed in Phase 5: `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_*`, `GDRIVE_BACKUP_FOLDER_ID` — no longer in `.env` or `.env.example`.
 
 ## Data flow
 
 ### Brand uploads reference images
-1. Brand opens "New Task" modal in `TasksClient.tsx`.
-2. File picker → `usePresignedUpload("referenceImageUploader").upload(file, "REFERENCE_IMAGE")` → UploadThing middleware runs `requirePrincipal({ roles: [BRAND] })` → browser uploads to S3 → `onUploadComplete` creates `Asset` (READY, `url: file.ufsUrl`) + async GDrive backup.
-3. Hook returns the `Asset`; client stores it in `uploadedAssets` (max 5).
-4. "Queue Generation" → `createProject(name, assetIds, sku, instructions, dimensions)` (`project.ts:8`) — Serializable txn: quota check, verifies all `assetIds` are `READY` + owned by caller, creates `PENDING` project, links assets via `asset.updateMany({ data: { projectId } })`.
+1. Brand opens "New Task" modal in `TasksClient.tsx` → `useAppwriteUpload(...).upload(file, "REFERENCE_IMAGE")`.
+2. Browser `storage.createFile` (session cookie, `label:BRAND` create perm) → `recordAssetUpload` → TablesDB `assets` row (READY, `provider: "appwrite"`, `$id` = fileId).
+3. Hook returns `RecordedAsset`; client stores it in `uploadedAssets` (max 5).
+4. "Queue Generation" → `createProject(name, assetIds, sku, instructions, dimensions)` — tx: quota decrement (`usageLimits`), verify asset rows READY + owned, create PENDING project, link assets (`projectId` set, `isNull` guard).
 
 ### Admin uploads 3D model
 1. Admin opens a PENDING or REVISIONS project from `/admin/tasks` → Management modal.
-2. Uploads GLB → `usePresignedUpload("modelGlbUploader").upload(file, "MODEL_GLB")` (same flow). Optionally uploads USDZ → `modelUsdzUploader`. When a `READY` GLB/USDZ is already linked, the modal shows a **Current** card (filename · size · View) and the dropzone label flips to **"Replace GLB/USDZ file"** with a `RefreshCw` icon.
-3. (No SDK config form — defaults are baked into the embed viewer via `src/lib/embed-config.ts`.)
-4. "Submit for Review" → `adminSubmitProject(projectId, glbAssetId, usdzAssetId?)` (`admin.ts:46`) — runs in a single `prisma.$transaction`:
-   - **Status flip.** Atomic `updateMany` requiring `status ∈ {PENDING, REVISIONS}` → sets `COMPLETED` (does NOT write `sdkConfig`; the embed viewer uses `DEFAULT_SDK_CONFIG` from `src/lib/embed-config.ts:1` as fallback).
-   - **Archive prior models.** `findMany` + `updateMany` to flip any pre-existing `READY` MODEL_GLB/USDZ on the project (excluding the new asset ids) to `AssetStatus.ARCHIVED`. The `projectId` link is **preserved** so the admin modal's "Previous models" collapsible can list them. Their UT `key`s are collected.
-   - **Link new models.** `updateMany` setting `projectId` from `null` for the new asset ids.
-   - **Post-commit UT delete.** `UTApi.deleteFiles(archivedKeys)` (`src/lib/uploadthing-server.ts:1`) is fired fire-and-forget using `uploadthing/server` v7 — return shape `{ success, deletedCount }` is logged on failure, never thrown. UploadThing copies of archived models are removed within ~seconds. GDrive backups are intentionally **not** deleted — the asset's `gdriveFileId` remains valid and the file can be retrieved via `GET /api/admin/assets/{assetId}/gdrive-download` (302 → `drive.google.com/file/d/{id}/view`).
+2. Uploads GLB → `upload(file, "MODEL_GLB")` (same flow; `label:ADMIN` create perm). Optional USDZ → `MODEL_USDZ`. "Replace GLB/USDZ file" dropzone label when a READY model is already linked.
+3. "Submit for Review" → `adminSubmitProject` — tx: status flip (`PENDING|REVISIONS` → `COMPLETED`), archive prior READY models (files **always kept** — no post-commit cleanup), link new rows.
 
 ### Brand reviews and publishes
-1. Brand opens a COMPLETED card → Review modal → `ThreeDConfigurator` loads the GLB from `asset.url` (UploadThing CDN).
-2. "Approve & Publish" → `brandPublishProject(projectId)` (`project.ts:60`) — owner-only, atomic `updateMany` requiring `COMPLETED` + `brandId: caller` → sets `PUBLISHED`.
-3. "Request Changes" opens a sub-form for a note → `brandSendForRevisions(projectId, note)` (`project.ts:89`) — owner-only, requires `status ∈ {COMPLETED, PUBLISHED}` and non-empty note. Serializable txn: atomic `updateMany` → sets `REVISIONS` + creates `RevisionRequest { projectId, note, requestedBy }` row.
-4. Brand can also send a PUBLISHED project for revisions (same action); in that case the embed stops serving immediately via `revalidatePath('/embed/[id]')`.
+1. Brand opens a COMPLETED card → Review modal → `ThreeDConfigurator` loads the GLB **via the proxy** (session-authenticated).
+2. "Approve & Publish" → `brandPublishProject`: **grant `read:any` on GLB/USDZ storage files first**, then guarded flip → `PUBLISHED`. Embed becomes publicly loadable.
+3. "Request Changes" → `brandSendForRevisions(projectId, note)`: flip → `REVISIONS` + revision row; if `wasPublished`, **revoke** `read:any` (`permissions: []`) + revalidate embed.
 
-### Embed serves 3D model
-1. Third-party storefront loads iframe → `GET /embed/{projectId}` (`src/app/embed/[projectId]/page.tsx:30`).
-2. Page queries `project.assets` → finds `MODEL_GLB` + optional `MODEL_USDZ` URLs (UploadThing CDN) + `sdkConfig`.
-3. `EmbedViewer` loads `<model-viewer>` with the GLB.
-4. SDK config endpoint `GET /api/sdk/v1/config/{projectId}` returns `{ assetUrls: { glb, usdz }, sdkConfig }` — same shape regardless of provider.
-
-### GDrive backup
-1. After `onUploadComplete` creates the `Asset`, `gdriveAdapter.backupFile(file.key, asset.url, asset.mimeType, backupName)` is called fire-and-forget (`core.ts:31-41`). `backupName` is `<asset.id>.<ext>` (see §12) — the same UUID that is the DB primary key and the UploadThing `customId`.
-2. The adapter `fetch()`es `asset.url` (UploadThing CDN) and wraps `response.body` as a Node `Readable` via `Readable.fromWeb` (avoids buffering the entire file — critical for 128MB GLB models).
-3. `drive.files.create({ requestBody: { name: backupName, parents: [GDRIVE_BACKUP_FOLDER_ID], mimeType }, media: { mimeType, body: stream }, fields: "id" })`.
-4. On success → `asset.update({ data: { backupSynced: true, gdriveFileId } })`.
-5. On failure → error logged, `backupSynced` stays `false` (no retry mechanism yet — see Open questions).
-
-## Environment variables
-
-`.env.example:1`:
-
-```bash
-# UploadThing — File storage (required)
-UPLOADTHING_TOKEN="<your-uploadthing-token>"   # from https://uploadthing.com/dashboard → API Keys
-
-# Google Drive — Backup storage (optional but recommended)
-# Create a Desktop-app OAuth 2.0 Client ID in Google Cloud Console → Credentials
-GOOGLE_OAUTH_CLIENT_ID="<from Google Cloud Console>"           # OAuth 2.0 Client ID (Desktop app)
-GOOGLE_OAUTH_CLIENT_SECRET="<from Google Cloud Console>"       # paired with above
-GOOGLE_OAUTH_REFRESH_TOKEN="<from: npx tsx scripts/get-gdrive-refresh-token.ts>"  # one-time consent flow
-GDRIVE_BACKUP_FOLDER_ID="<google-drive-folder-id>"              # folder ID from the Drive URL
-```
-
-The adapter checks for all 4 `GOOGLE_OAUTH_*` / `GDRIVE_*` vars at startup; if any are missing, it logs a warning and no-ops (uploads succeed, backup is skipped). The refresh token is obtained via `scripts/get-gdrive-refresh-token.ts` (run once locally). On Vercel, set the same 4 vars — no filesystem or browser needed in production.
-
-## Dependencies
-
-**Current (`package.json`):**
-```json
-{
-  "uploadthing": "^7.7.4",
-  "@uploadthing/react": "^7.3.3",
-  "googleapis": "^173.0.0"
-}
-```
-
-**Removed during the Filebase→UploadThing revert:**
-```json
-{
-  "@aws-sdk/client-s3": "^3.x",
-  "@aws-sdk/s3-request-presigner": "^3.x"
-}
-```
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `src/app/api/uploadthing/core.ts` | FileRouter — 3 uploaders + `createAssetAndBackup` helper |
-| `src/app/api/uploadthing/route.ts` | `createRouteHandler` → `GET`/`POST` |
-| `src/app/api/v1/assets/[assetId]/file/route.ts` | Public-for-published, proxy-with-fallback asset delivery endpoint (`UT → GDrive`) |
-| `src/lib/uploadthing.ts` | `generateReactHelpers<OurFileRouter>()` → `useUploadThing`, `uploadFiles` |
-| `src/lib/uploadthing-server.ts` | Server-only `UTApi` singleton from `uploadthing/server` v7 — used by `adminSubmitProject` to delete archived UploadThing keys post-commit |
-| `src/lib/hooks/use-presigned-upload.ts` | Client hook: `{ upload, isUploading, error, reset }` wrapping `useUploadThing` |
-| `src/lib/storage/types.ts` | `StorageAdapter` + `BackupAdapter` interfaces (provider abstraction) |
-| `src/lib/storage/gdrive-client.ts` | `getGDriveClient()` — cached OAuth2-authenticated `google.drive({v3,auth})` singleton; used by both backup writes and fallback reads |
-| `src/lib/storage/gdrive-adapter.ts` | `GDriveAdapter` (BackupAdapter impl) — singleton `gdriveAdapter` — delegates auth to `getGDriveClient()` |
-| `src/lib/storage/asset-delivery.ts` | `deliverAsset()` — server-side `UT ↔ GDrive` fallback with 8s UT timeout (2s GDrive timeout when `preferGDrive: true` on `ARCHIVED` assets). Returns `DeliveryResult \| DeliveryFailure` |
-| `scripts/get-gdrive-refresh-token.ts` | One-time helper: runs OAuth consent flow, prints `GOOGLE_OAUTH_REFRESH_TOKEN` |
-| `src/lib/storage/index.ts` | Barrel: exports `gdriveAdapter`, `getGDriveClient`, `isGDriveConfigured`, types |
-| `prisma/schema.prisma` | `Asset` model + `AssetType`/`AssetStatus` enums (provider default `"uploadthing"`) |
-| `prisma/seed.ts` | Creates Asset rows with `provider: "external"` (Khronos/Unsplash URLs) |
-| `next.config.mjs` | `images.remotePatterns`: `*.ufs.sh` + `images.unsplash.com` (no `localPatterns` — see §4b; the asset proxy is reached via `<Image unoptimized>`, not the optimizer) |
-
-**Consumers (rewired through `/api/v1/assets/[assetId]/file` proxy):** `src/app/api/sdk/v1/config/[projectId]/route.ts`, `src/app/embed/[projectId]/route.ts` (via the static HTML), `src/app/actions/project.ts` (`getUserProjects`), `src/app/actions/admin.ts` (`getAllTasks`), `src/app/admin/tasks/AdminTasksClient.tsx` (history rows + admin "View" links through `archivedAssetUrls` mapping). The brand's `/tasks` viewer and embed viewer both consume these URLs transparently.
-
-## Model archival on replacement
-
-When the admin submits a project whose state allows resubmission (PENDING initial, REVISIONS re-do), `adminSubmitProject` (`admin.ts:46`) treats a new GLB/USDZ as a replacement if the project already has a `READY` MODEL_GLB/USDZ linked. The behavior is atomic and split into four steps:
-
-1. **Status flip** — `updateMany` Project where `status ∈ {PENDING, REVISIONS}` → `COMPLETED`. Atomic guard; concurrent admins can't double-submit.
-2. **Archive prior models** — `findMany` + `updateMany` to set `Asset.status = ARCHIVED` for any `READY` MODEL_GLB/USDZ on the project that is **not** one of the new asset ids. The `projectId` link is preserved (`@@index([projectId, type, status])` keeps the lookup O(1)). The archived keys are collected.
-3. **Link new models** — `updateMany` setting `projectId` from `null` for the new asset ids. With the old ones already `ARCHIVED`, the constraint `status: 'READY'` is what guarantees a single live model per type per project.
-4. **Post-commit UT cleanup** — fire-and-forget `UTApi.deleteFiles(archivedKeys)` from `src/lib/uploadthing-server.ts:1` (a single shared `UTApi` instance using `uploadthing/server` v7, which auto-reads `UPLOADTHING_TOKEN`). Return shape `{ success, deletedCount }` — failures are logged via `console.error`, never thrown. The DB has already committed, so a UT outage leaves the audit trail intact and only orphans the UT objects (acceptable).
-
-**Storage topology after multiple rounds:**
-
-```
-Project X
-├── Asset A  (READy, MODEL_GLB, projectId=X, key=k1)    ← current, served by embed
-├── Asset B  (ARCHIVED, MODEL_GLB, projectId=X, key=k2)  ← previous round, UT deleted, GDrive retained
-└── Asset C  (ARCHIVED, MODEL_GLB, projectId=X, key=k3)  ← earliest, UT deleted, GDrive retained
-```
-
-**GDrive backup** is intentionally **not** deleted on archive — the asset's `gdriveFileId` remains valid. The admin modal's "Previous models" collapsible links each archived row to `GET /api/admin/assets/{assetId}/gdrive-download` (`src/app/api/admin/assets/[assetId]/gdrive-download/route.ts:1`), which 302-redirects to `https://drive.google.com/file/d/{gdriveFileId}/view` (admin-only auth gate is sufficient for MVP). This means every resubmit round costs +1 object on UT (briefly, removed post-commit) and +1 object on GDrive (permanent, but cheap on the 15 GB free tier). The brand's `usageLimits` quota is **not** consumed on resubmit — only `createProject` consumes quota.
-
-**Asset status lifecycle (updated):** `UPLOADING` (transient) → `READY` (upload complete, live) → `ARCHIVED` (replaced by a newer model on the same project). The `PUBLISHED` and `DELETED` values remain defined but unused — see Open questions §1 below.
+### Embed serves 3D model (public)
+1. Storefront loads iframe → `GET /embed/{projectId}` → TablesDB gate → HTML template.
+2. `embed-viewer.html` fetches `GET /api/sdk/v1/config/{projectId}` → `assetUrls.glb` = absolute Appwrite `/view` URL with `?project=` (read:any + project param required for anonymous fetch — Phase 6 bug 3) → `<model-viewer src=...>`; optional `ios-src` usdz.
+3. Viewer posts events to `POST /api/sdk/v1/events` → TablesDB `analytics_events`.
 
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| UploadThing 2 GB storage cap hit | Medium | ~150 models at 10–50 MB = 1.5–7.5 GB. Monitor; upgrade to a paid plan when needed. GDrive backup provides a durable off-platform copy. |
-| UploadThing outage / deleted file on archived model | Medium (was High) | `GET /api/v1/assets/[assetId]/file` proxies with transparent UT→GDrive fallback (8s UT, 2s GDrive when `preferGDrive` for `ARCHIVED` assets). Observed via `x-source` response header in production logs. Deleted UT files for archived assets are now recoverable: `preferGDrive` consults the still-valid `gdriveFileId` first. |
-| Doubled egress — every read proxied through Vercel | Low at current scale, Medium at production | Path is `browser → /api/v1/assets/[assetId]/file (proxy) → UT/GDrive` (one Vercel hop). Earlier `/_next/image` indirection has been removed in favour of `<Image unoptimized>` (see §4b). Acceptable now; revisit per Open questions §6. |
-| GDrive refresh token revoked or expired | Low | Re-run `npx tsx scripts/get-gdrive-refresh-token.ts` to obtain a new one. Refresh tokens don't expire unless explicitly revoked in Google Account settings. |
-| Vercel function timeout for GDrive backup of large GLB | Low | Backup is fire-and-forget; if it times out, the UploadThing upload + Asset creation already succeeded. `backupSynced` stays false. |
-| Large GLB files (50 MB+) fail browser upload | Low | UploadThing supports large files; tested at 128 MB cap. Progress UI shown via `isUploading`. |
-| GLB/USDZ MIME not validated server-side | Low | File picker filters by extension; only ADMIN uploads models. Add post-upload MIME check for hardening. |
-| Asset status lifecycle gaps (no auto PUBLISHED) | Low | `ARCHIVED` is set on replacement (see "Model archival on replacement"); `PUBLISHED` and `DELETED` are still unused. See Open questions §1. |
+| Storage file perms desync from row status (grant succeeded but flip failed, etc.) | Low | Grant-before-flip + best-effort revoke on flip failure; revoke failures logged. Row status remains the in-app gate. |
+| Session cookie expiry during a large browser upload | Low | `createFile` fails mid-upload → orphan cleanup via best-effort `deleteFile`; user retries. |
+| Every in-app read proxied through Vercel egress | Low-Medium at scale | `Cache-Control: private, max-age=60` on the proxy; embed reads hit the CDN directly (no Vercel hop). Revisit if bandwidth cost grows. |
+| 150 GB storage cap (plan `auto-1`, pro group, $0) | Low | ~150 models at 10–50 MB = 1.5–7.5 GB. Archived files are kept intentionally — monitor usage. |
+| GLB/USDZ MIME not validated server-side | Low | File picker filters by extension; only ADMIN uploads models. Optional: post-upload MIME check + delete. |
+| Seed/legacy `external`/`uploadthing` URLs go stale | Low | Proxy falls back to the stored URL only; legacy rows are read-only historical data. |
+| Server action returns raw Appwrite row → "Only plain objects…" error in the client console | Medium (broken UX) | **Never return an Appwrite row object from a server action.** Always project to a plain object first (e.g. `return { success: true, projectId: created.$id }`). `Models.Row` instances carry `$permissions`/`$sequence`/etc. whose prototypes/metadata break Next.js's Server→Client serialization. Bug found and fixed in `createProject` after Phase 4 gate. |
 
 ## Open questions
 
-1. **Asset status on project publish/delete:** When a project moves to `PUBLISHED` (or is unpublished/deleted), should its assets transition to `PUBLISHED`/`ARCHIVED`/`DELETED`? Currently `brandPublishProject` only updates the `Project.status` — `Asset.status` stays `READY`. Recommend: set assets to `PUBLISHED` on publish, `DELETED` (with object deletion) on explicit project deletion. `ARCHIVED` is now used for replaced models (see "Model archival on replacement"). Future task.
-2. **File deletion UI / orphan cleanup:** Removing an image from `uploadedAssets` in the New Task modal only removes it from client state — the UploadThing object + `Asset` row remain. The replacement flow now calls `UTApi.deleteFiles` for archived models (see "Model archival on replacement"). A user-facing "delete this file" action for reference images is still missing. Future task.
-3. **GDrive backup retry:** If backup fails, `backupSynced` stays false with no retry. Recommend: a background job scanning for `backupSynced = false` assets and retrying. Future task.
-4. **Custom domain for UploadThing:** UploadThing supports custom domains on paid plans. For production brand consistency, consider `assets.studiov.com` mapped to the UploadThing CDN. Future task.
-5. **Reintroducing a `StorageAdapter`:** If direct S3 (e.g., R2 or S3 with public reads) is ever needed, the `StorageAdapter` interface is retained; add an `S3StorageAdapter` + a `presign`/`confirm` route pair and swap consumers off UploadThing. The provider abstraction is already in place via the `Asset` table.
-6. **Vercel egress from the proxy (`/api/v1/assets/[assetId]/file`):** every read transits Vercel (`browser → proxy → UT/GDrive`, one Vercel hop after the most recent `<Image unoptimized>` change). The 8s UT timeout still introduces latency on the first failed request; `ARCHIVED` assets mitigate this with `preferGDrive` (2s GDrive first). If bandwidth cost grows or p95 latency tightens, consider: (a) serving `<model-viewer>` directly against UT and only routing fallback through the proxy (preserves redirect-fast path), (b) a streaming proxy that speculatively fetches GDrive in parallel and uses whichever resolves first, or (c) signed URL fallback hooks for the rare UT outage. Open until traffic justifies the complexity.
+1. **Asset status on publish:** rows stay `READY` after publish (files get read:any). A `PUBLISHED` row status is defined but unused — revisit if analytics need to distinguish.
+2. **File deletion UI / orphan cleanup:** removing an image from `uploadedAssets` in the New Task modal only removes it from client state — the storage file + `assets` row remain (pre-existing behavior). Future task.
+3. **Archived-file retention:** per user decision, archived model files are kept forever in Appwrite Storage. A TTL/cleanup job is a future task if the plan's 150 GB cap ever matters.
+4. **Bandwidth:** plan allows 2,000 GB/month. The proxy path adds one Vercel hop per in-app read; direct CDN URLs already cover the embed path.
 
 ## Migration history
 
 ### Migration 1 — Cloudflare R2 → Filebase (July 2026, COMPLETE then reverted)
-Built an S3-compatible `R2Adapter` + presigned-URL flow. Migrated to Filebase to eliminate the credit-card requirement. See `tasks/plan.md` for the full migration record. **This migration was reverted** (see Migration 2) because Filebase's free tier only supports private buckets, breaking anonymous embed reads.
+See `tasks/plan.md`. Reverted because Filebase's free tier only supports private buckets, breaking anonymous embed reads.
 
-### Migration 2 — Filebase → UploadThing (July 2026, CURRENT)
-Reverted the Filebase presigned-URL architecture back to UploadThing. Key reasons and changes:
+### Migration 2 — Filebase → UploadThing (July 2026, superseded)
+Reverted the Filebase presigned-URL architecture back to UploadThing (`*.ufs.sh` public CDN) + Google Drive backup. See `tasks/revert-to-uploadthing.md`. Removed from the active path in Migration 3; legacy code + env vars fully deleted in Phase 5.
 
-- **Why:** Filebase free tier = private buckets only → anonymous public reads (required by `/embed` and `/api/sdk/v1/config`) return 403. UploadThing free tier (2 GB storage, unlimited egress, no credit card) supports public serving via `*.ufs.sh` URLs.
-- **Key insight:** All `asset.url` consumers (embeds, SDK config, dashboards, actions) stayed **unchanged** — they read a URL that now points to `*.ufs.sh` instead of `*.s3.filebase.io`. Only the **upload mechanism** changed.
-- **Files created:** `src/app/api/uploadthing/core.ts`, `src/app/api/uploadthing/route.ts`.
-- **Files rewritten:** `src/lib/hooks/use-presigned-upload.ts` (now wraps `useUploadThing`), `src/lib/storage/index.ts` (dropped `s3Adapter` export, kept `gdriveAdapter` + types).
-- **Files deleted:** `src/app/api/upload/presign/route.ts`, `src/app/api/upload/confirm/route.ts`, `src/lib/storage/s3-adapter.ts`.
-- **Config updated:** `.env.example` (`FILEBASE_*` → `UPLOADTHING_TOKEN`), `next.config.mjs` (`*.s3.filebase.io` → `*.ufs.sh`), `prisma/schema.prisma` (`provider @default("filebase")` → `@default("uploadthing")`).
-- **Deps:** added `uploadthing` + `@uploadthing/react`, removed `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`. Kept `googleapis` (GDrive backup stays).
-- **Unchanged:** `Asset` model, all migrations, seed data, `gdrive-adapter.ts`, `types.ts`, and every `asset.url` consumer.
+### Migration 3 — UploadThing + GDrive → Appwrite Storage (August 2026, CURRENT)
+Full replacement (Phase 4 of `tasks/appwrite-migration.md`): browser-direct uploads to Appwrite buckets, `assets` rows in TablesDB (row `$id` = storage fileId), auth-gated streaming proxy for in-app reads, direct CDN URLs for published embeds via publish-time `read:any` grants. **Phase 5 completed the removal:** `utapi` cleanup branch deleted from `adminSubmitProject`, `src/lib/uploadthing-server.ts` + gdrive-download route + `prisma/` deleted, `UPLOADTHING_TOKEN`/`GOOGLE_OAUTH_*`/`GDRIVE_*` env vars stripped.
 
-Full revert plan: `tasks/revert-to-uploadthing.md`.
+**Files created:** `src/app/actions/record-asset.ts`, `src/lib/use-appwrite-upload.ts`.
+**Files rewritten:** `src/app/api/v1/assets/[assetId]/file/route.ts` (TablesDB + streaming), `src/app/api/sdk/v1/config/[projectId]/route.ts` + `src/app/api/sdk/v1/events/route.ts` + `src/app/embed/[projectId]/route.ts` (TablesDB), `src/app/actions/project.ts` (grant/revoke), `src/app/actions/admin.ts` (archival; the legacy provider-split cleanup branch was removed in Phase 5), `src/lib/appwrite-config.ts` (bucket id, `buildFileUrl`, `bucketForAssetType`, mime defaults), `src/app/tasks/TasksClient.tsx` + `src/app/admin/tasks/AdminTasksClient.tsx` (hook swap, GDrive copy/link removal), `next.config.mjs` (remote patterns).
+**Files deleted:** `src/app/api/uploadthing/` (route + core), `src/lib/hooks/use-presigned-upload.ts`, `src/lib/uploadthing.ts`, `src/lib/storage/` (types, gdrive-adapter, gdrive-client, asset-delivery, naming, index). **Phase 5 deletions:** `src/lib/uploadthing-server.ts`, `src/app/api/admin/assets/[assetId]/gdrive-download/route.ts`, `prisma/`, `scripts/get-gdrive-refresh-token.ts`, `scripts/get-published-id.ts`.
 
 ## References
 
-- `../WEBSITE.md` §10 File upload workflow · §5 API routes (UploadThing handler + GDrive download redirect + proxy `/api/v1/assets/[assetId]/file`) · §6 Model replacement lifecycle · §8 `adminSubmitProject`
-- `../pages/tasks.md` — New Task / Review / Published modals (the upload consumers + "Model last updated" caption)
-- `../pages/admin.md` §3 — Admin modal: "Replace" copy, "Previous models" collapsible (now served through the proxy route)
-- `tasks/revert-to-uploadthing.md` — the Filebase→UploadThing revert plan
-- `tasks/plan.md` + `tasks/todo.md` — the earlier R2→Filebase migration record
-- `deployment.md` — Vercel env var setup (UploadThing + GDrive)
-- `naming.ts` — cross-storage tracking utilities (`slugify`, `generateAssetId`, `buildBackupName`)
+- `../WEBSITE.md` §10 File upload workflow · §5 API routes · §6 Model replacement lifecycle · §8 server actions
+- `../pages/tasks.md` — New Task / Review / Published modals (upload consumers + thumbnails)
+- `../pages/admin.md` §3 — Admin modal: "Replace" copy, "Previous models" collapsible
+- `tasks/appwrite-migration.md` §0 Phase 4 — the migration record with SDK-level corrections
+- `deployment.md` — Vercel env var setup

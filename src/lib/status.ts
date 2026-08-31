@@ -1,4 +1,4 @@
-import { ProjectStatus } from "@/generated/prisma/client";
+import { ProjectStatus } from "@/lib/enums";
 import { Clock, MessageSquareWarning, PackageCheck, CheckCircle2 } from "lucide-react";
 import type { BadgeTone } from "@/components/ui/Badge";
 

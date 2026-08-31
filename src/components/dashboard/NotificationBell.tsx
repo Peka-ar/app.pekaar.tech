@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useClickOutside } from "@/lib/use-click-outside";
 import { PROJECT_STATUS_META, BRAND_LABEL } from "@/lib/status";
 import { Badge } from "@/components/ui/Badge";
-import { ProjectStatus } from "@/generated/prisma/client";
+import { ProjectStatus } from "@/lib/enums";
 
 export interface NotificationProject {
   id: string;
