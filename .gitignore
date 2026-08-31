@@ -26,6 +26,13 @@
 perf-server.log
 .agents/
 
+# agent/docs tooling — kept local only, never deploy-relevant
+.agents/skills
+AGENTS.md
+design.md
+skills-lock.json
+tasks/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
