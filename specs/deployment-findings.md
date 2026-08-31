@@ -39,12 +39,14 @@ Both deployments talk to the **same Appwrite Cloud project** — data, auth user
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Non-sensitive |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Non-sensitive |
 | `NEXT_PUBLIC_APP_URL` | `https://studio-v-indol.vercel.app` | Non-sensitive |
+| `CRON_SECRET` | Random 64-hex, generated + added via CLI (`vercel env add CRON_SECRET production`) on 2026-08-31 | Sensitive |
 
 All 14 pre-migration vars (Prisma/Postgres `DATABASE_URL`/`DIRECT_URL`, `AUTH_SECRET`, UploadThing, Google OAuth, Gmail, GDrive, `ADMIN_*`) were removed — zero references remain in the migrated code.
 
 **Findings:**
 - `NEXT_PUBLIC_*` vars are baked into the client bundle at build time — changing them requires a redeploy (Vercel: the env-var edit UI prompts "Redeploy"; CLI: push an empty commit or `vercel deploy --prod`).
 - Vercel CLI defaults new env vars to **sensitive**; sensitive values still reach builds/runtime, but `NEXT_PUBLIC_*` values are public anyway — keep them non-sensitive so they're inspectable.
+- **2026-08-31 backend-hardening deploy (`c0b6803`):** pushed `main` to `Kaizen3424/StudioV` and it did **not** trigger the auto-deploy webhook within the polling window; deployed instead via CLI: `vercel --prod --yes` → `https://studio-dcjsy5zfo-kaizens-projects-89bbbf37.vercel.app`, aliased to `https://studio-v-indol.vercel.app`, Ready in 1m. Includes `vercel.json` cron (`GET /api/cron/maintenance` @ `0 2 * * *`). Verified after deploy: `/api/health` → `200 {"status":"ok","appwrite":"ok"}`; `/api/cron/maintenance` → `401` without the bearer secret (fail-closed guard works).
 - **CLI quirk:** `vercel env add <name> preview` hangs on an interactive "Git branch?" prompt that ignores piped stdin. Workaround — REST API:
   `POST https://api.vercel.com/v10/projects/<projectId>/env?teamId=<teamId>&upsert=true` with `{"key","value","target":["preview"],"type":"encrypted"|"sensitive"}` and `Authorization: Bearer <token>` (token: `~/AppData/Roaming/xdg.data/com.vercel.cli/auth.json`).
 - Sign-in on Vercel flows through `POST /api/appwrite/sign-in/email-password` (the `@appwrite.io/react` proxy) — verified working; see §8 smoke results.
