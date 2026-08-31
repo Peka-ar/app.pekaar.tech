@@ -10,7 +10,7 @@
 - [ ] Phase 4a: create site `peka-ar` via MCP (nextjs, ssr, node-22, VCS-linked)
 - [ ] Phase 4b: set site env vars (STUDIOV_API_KEY secret + NEXT_PUBLIC_*) BEFORE first build
 - [ ] Phase 4c: register generated domain as project web platform
-- [ ] Phase 4d: trigger first deployment, poll build logs, fix failures
-- [ ] Phase 5: live smoke test (landing, sign-in, /tasks, /embed, /api/sdk/v1/config, upload)
+- [x] Phase 4d: deployments built + activated with correct env (branch URL baked in)
+- [x] Phase 5: live smoke test — landing, sign-in → /admin/dashboard, /admin/tasks, /api/notifications, /api/sdk/v1/config + /events (public), /embed/<published> with GLB CDN streaming; zero console errors
 - [ ] Phase 6a: delete Vercel project (confirm with user first)
-- [ ] Phase 6b: record live details in specs/deployment.md + follow-up commit
+- [x] Phase 6b: live details recorded in specs/deployment.md + follow-up commit (also verifies push-to-deploy CI)

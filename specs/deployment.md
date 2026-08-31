@@ -13,18 +13,26 @@ Production runtime for STUDIO.V. This document is the **operational handbook** f
 | Field | Value |
 |---|---|
 | **Host** | Appwrite Sites — site ID `peka-ar`, project "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) |
-| **Production URL** | (generated domain — see console: Sites → peka-ar → Domains; recorded in §1.1 below after first deploy) |
+| **Production URL** | `https://branch-main-86d3a7e.appwrite.network` (**branch URL** — constant, always serves the latest `main` deployment) |
 | **GitHub repo** | `https://github.com/Peka-ar/website` (org repo; Appwrite GitHub App installed on the Peka-ar org) |
 | **Branch deployed** | `main` (every push to `main` auto-builds + auto-activates a new deployment) |
 | **Framework / adapter** | Next.js (16, App Router) / **SSR** adapter — default output mode, no `output` config in `next.config.mjs` |
 | **Build runtime** | Node 22 (`node-22`) |
 | **Build commands** | install `npm install` · build `npm run build` · output `./.next` |
 | **VCS installation** | `6a94f8463518365b9872` (provider github, org Peka-ar); repo ID `1339382325` |
+| **First live deployment** | `6a9509027178ddba4b54` (commit `9b88c16` "v2 - appwrite migration", ready 2026-08-31) |
+| **Web platform** | ID `peka-ar-site`, hostname `branch-main-86d3a7e.appwrite.network` |
+
+### 1.1 URL types on this site
+| URL | Pattern | Behavior |
+|---|---|---|
+| **Branch URL** (production) | `https://branch-main-86d3a7e.appwrite.network` | Constant — re-points to the latest successful `main` deployment on every push |
+| Commit URL | `https://commit-<commit-hash>.appwrite.network` | Pinned to a commit |
+| Deployment URL | `https://<deployment-id>.appwrite.network` | Rotates every deployment — never use in configs |
+
+There is no site-level vanity domain by default — the **branch URL is the canonical production URL**. `NEXT_PUBLIC_APP_URL` and the web platform hostname are both set to the branch URL. (A custom domain added later would supersede it — see §8.)
 
 Pushes to non-`main` branches build preview deployments (visible to Appwrite org members only) — see Appwrite docs "Previews". PRs get a comment with the preview URL unless silent mode is on.
-
-### 1.1 Live values recorded after first deployment
-> To be filled in `specs/deployment.md` on the follow-up docs commit: generated domain, first deployment ID, web platform ID.
 
 ---
 
@@ -48,7 +56,7 @@ Appwrite Sites reads variables in this precedence: **Appwrite-injected `APPWRITE
 | `STUDIOV_API_KEY` | Appwrite server API key `studiov-server` (secret site variable) | Read by `src/lib/appwrite.ts` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY`. Scopes: users/sessions/tables/columns/indexes/rows read+write, buckets/files read+write, messaging read+write, usage.read |
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Public |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Public |
-| `NEXT_PUBLIC_APP_URL` | `https://<generated-domain>` | **Baked into the client bundle at build time** — must be set before the first build; changing it requires a new deployment |
+| `NEXT_PUBLIC_APP_URL` | `https://branch-main-86d3a7e.appwrite.network` | **Baked into the client bundle at build time** — must be set before the first build; changing it requires a new deployment |
 
 Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_KEY` (the fallback handles both). `ADMIN_*` vars are only needed by `npm run sync-admin` / `npm run seed:appwrite` — never set on the site (they would let anyone with console access reset the admin password; they are run locally against the same Appwrite project).
 
@@ -175,7 +183,7 @@ No git revert, no rebuild, no DB changes — Appwrite re-points the site at the 
 
 ## 8. Custom domains (deferred)
 
-Currently on the generated `*.appwrite.global`-style domain. To add a custom domain later:
+Currently on the generated **branch URL** `https://branch-main-86d3a7e.appwrite.network` (constant across deployments — always serves latest `main`). To add a custom domain later:
 1. Console → Sites → peka-ar → **Domains** → Add domain
 2. **Subdomain** (recommended): add a CNAME record at your DNS provider pointing to the hostname Appwrite shows
 3. **Apex domain**: either delegate NS records to `ns1.appwrite.zone` / `ns2.appwrite.zone` (Appwrite then manages all DNS — recreate any MX/TXT records there) or use CNAME flattening if your provider supports it
