@@ -44,7 +44,7 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 | Layer | Tech | Notes |
 |---|---|---|
 | Framework | **Next.js 16** (App Router, Turbopack) | `next.config.mjs` — `images.remotePatterns` retains `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (Appwrite CDN). Asset proxy is reached through `unoptimized` `<Image>` consumers, not via `/_next/image` (see §5). |
-| Hosting | **Appwrite Sites** — site `peka-ar`, SSR adapter, Node 22, auto-deploy from `Peka-ar/website` `main` | Production handbook: `specs/deployment.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/lib/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars). Vercel project deleted at migration (commit "v2 - appwrite migration"). |
+| Hosting | **Vercel** (primary — project `studio-v`, auto-deploy from `Kaizen3424/StudioV` `main`, remote `legacy`) + **Appwrite Sites** (site `peka-ar`, dormant/frozen at `0e72d57` — revival steps in `specs/deployment-findings.md` §3) | Production handbook: `specs/deployment.md`. Full live-values record: `specs/deployment-findings.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/lib/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel uses `STUDIOV_API_KEY` for parity). |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | PostCSS-based, tokens in `globals.css` |
 | 3D | **Google `<model-viewer>` 4.1.0/4.2.0** via `next/script` | No SSR — dynamically imported |
 | Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client hooks + SSR helpers) + `node-appwrite` (server) | `src/app/api/appwrite/[...appwrite]/route.ts` (handlers), `src/app/providers.tsx`, `src/lib/appwrite.ts`, `src/lib/auth-guards.ts` |
@@ -57,7 +57,7 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 
 **Scripts:** `npm run dev` · `npm run build` · `npm run start` · `npm run lint` (eslint)
 
-**Env vars:** `APPWRITE_API_KEY` (local/Vercel) — on Appwrite Sites the same key is set as the site variable `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved there); read via the fallback in `src/lib/appwrite.ts`. Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`. Full reference: `specs/deployment.md` §3 + `.env.example`.
+**Env vars:** local `.env` uses `APPWRITE_API_KEY`; on Vercel and Appwrite Sites the same key is set as `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved on Sites; Vercel keeps the name for parity) — read via the fallback in `src/lib/appwrite.ts`. Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`. Full reference: `specs/deployment.md` §3 + `specs/deployment-findings.md` §2/§3 + `.env.example`.
 
 ---
 
@@ -503,7 +503,7 @@ File: `.env.example:1`. All required for full functionality.
 
 **Removed in Phase 5** (no longer in `.env.example`): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN`, `GDRIVE_BACKUP_FOLDER_ID`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. Stripe vars were never wired (no handler exists) and were dropped from `.env.example`.
 
-**Production deploy:** see `deployment.md`.
+**Production deploy:** `git push legacy main` (Vercel). See `deployment.md` + `deployment-findings.md`.
 
 ---
 
@@ -518,7 +518,8 @@ File: `.env.example:1`. All required for full functionality.
 
 **Related (implemented, extended since written):**
 - `auth-stabilization.md` — task plan for the `requirePrincipal` + email-fallback hardening (implemented). Extended with `StaleSessionError` + `requirePrincipalOrRedirect()` for stale-session self-healing (added Jul 2026).
-- `deployment.md` — Vercel deploy guide + post-deploy checklist + local-vs-prod credential table.
+- `deployment.md` — production operational handbook (Vercel primary + Appwrite Cloud backend ops, rollback, env vars, day-to-day workflow).
+- `deployment-findings.md` — live values for both hosts (Vercel + dormant Appwrite Sites site), env-var matrix, git remotes map, migration findings, custom-domain purchase checklist.
 
 ---
 

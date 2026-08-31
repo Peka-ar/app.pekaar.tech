@@ -1,38 +1,26 @@
-# Deployment — Appwrite Sites + Appwrite Cloud
+# Deployment — Vercel (primary) + Appwrite Cloud backend
 
-> Parent: [`./WEBSITE.md`](./WEBSITE.md)
+> Parent: [`./WEBSITE.md`](./WEBSITE.md) · Full live-values record + migration findings: [`./deployment-findings.md`](./deployment-findings.md)
 
 Production runtime for STUDIO.V. This document is the **operational handbook** for the live deployment: what is deployed, where, how to inspect it, how to update it, how to recover from a bad deploy, and how to do day-to-day code changes safely.
 
-**Hosting is fully inside Appwrite**: the Next.js app runs on **Appwrite Sites** (SSR), and Auth/TablesDB/Storage/email are Appwrite Cloud services in the same project. The previous Vercel deployment was deleted after migration (commit "v2 - appwrite migration").
+**Split hosting (2026-08-31):** the Next.js app runs on **Vercel** (primary — until a custom domain is bought), and **all backend services are Appwrite Cloud** (Auth + TablesDB + Storage + email, project "Peka.ar"). A second, fully working deployment exists on **Appwrite Sites** (site `peka-ar`) but is **dormant** — frozen at commit `0e72d57`; see `deployment-findings.md` §3 to revive it. Both deployments share the same Appwrite backend, so data is identical.
 
 ---
 
-## 1. Live deployment
+## 1. Live deployment (Vercel)
 
 | Field | Value |
 |---|---|
-| **Host** | Appwrite Sites — site ID `peka-ar`, project "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) |
-| **Production URL** | `https://branch-main-86d3a7e.appwrite.network` (**branch URL** — constant, always serves the latest `main` deployment) |
-| **GitHub repo** | `https://github.com/Peka-ar/website` (org repo; Appwrite GitHub App installed on the Peka-ar org) |
-| **Branch deployed** | `main` (every push to `main` auto-builds + auto-activates a new deployment) |
-| **Framework / adapter** | Next.js (16, App Router) / **SSR** adapter — default output mode, no `output` config in `next.config.mjs` |
-| **Build runtime** | Node 22 (`node-22`) |
-| **Build commands** | install `npm install` · build `npm run build` · output `./.next` |
-| **VCS installation** | `6a94f8463518365b9872` (provider github, org Peka-ar); repo ID `1339382325` |
-| **First live deployment** | `6a9509027178ddba4b54` (commit `9b88c16` "v2 - appwrite migration", ready 2026-08-31) |
-| **Web platform** | ID `peka-ar-site`, hostname `branch-main-86d3a7e.appwrite.network` |
+| **Host** | Vercel — project `studio-v` (`prj_RjTtGXyFvNs7fGf1nsqCOSr71gv1`), team `kaizens-projects-89bbbf37` |
+| **Production URL** | `https://studio-v-indol.vercel.app` |
+| **GitHub repo** | `https://github.com/Kaizen3424/StudioV` (git remote `legacy`) |
+| **Branch deployed** | `main` (every push auto-builds a production deployment) |
+| **Framework / runtime** | Next.js 16 (Turbopack) auto-detected, Node 24.x, zero config |
+| **CLI** | Vercel CLI 57 (logged in as `kaizen3424`; `.vercel/` link exists locally, gitignored) |
+| **First migrated deploy** | `studio-4xr1ty9tr` (commit `9c1122e`, Ready in 35s, 2026-08-31) |
 
-### 1.1 URL types on this site
-| URL | Pattern | Behavior |
-|---|---|---|
-| **Branch URL** (production) | `https://branch-main-86d3a7e.appwrite.network` | Constant — re-points to the latest successful `main` deployment on every push |
-| Commit URL | `https://commit-<commit-hash>.appwrite.network` | Pinned to a commit |
-| Deployment URL | `https://<deployment-id>.appwrite.network` | Rotates every deployment — never use in configs |
-
-There is no site-level vanity domain by default — the **branch URL is the canonical production URL**. `NEXT_PUBLIC_APP_URL` and the web platform hostname are both set to the branch URL. (A custom domain added later would supersede it — see §8.)
-
-Pushes to non-`main` branches build preview deployments (visible to Appwrite org members only) — see Appwrite docs "Previews". PRs get a comment with the preview URL unless silent mode is on.
+Deploy = `git push legacy main`. There is no build command config — Vercel runs `npm install` + `npm run build` from `package.json`.
 
 ---
 
@@ -40,29 +28,34 @@ Pushes to non-`main` branches build preview deployments (visible to Appwrite org
 
 | Service | Role | Where it's configured |
 |---|---|---|
-| **Appwrite Cloud** | Hosting (Sites) + Auth + TablesDB (`studiov`, 5 tables) + Storage (2 buckets) + transactional email | console at https://cloud.appwrite.io (project "Peka.ar") |
-| **GitHub** | Source control; Appwrite Sites watches `Peka-ar/website` | Appwrite Console → Sites → peka-ar → Settings → Git repository |
+| **Vercel** | Hosting (SSR, auto-deploy from `Kaizen3424/StudioV` `main`) | https://vercel.com/kaizens-projects-89bbbf37/studio-v |
+| **Appwrite Cloud** | Auth + TablesDB (`studiov`, 5 tables) + Storage (2 buckets) + transactional email | console at https://cloud.appwrite.io (project "Peka.ar") |
+| **GitHub** | Source control; Vercel watches `Kaizen3424/StudioV` (remote `legacy`) | Vercel dashboard → Settings → Git |
 
 Stripe is **not** wired — no `/api/webhooks/stripe` handler exists and the `STRIPE_*` env vars were dropped from `.env.example` in Phase 5. Billing is a post-launch add.
 
 ---
 
-## 3. Environment variables
+## 3. Environment variables (Vercel)
 
-Appwrite Sites reads variables in this precedence: **Appwrite-injected `APPWRITE_*` (highest, cannot be overridden)** → **site variables** → **project variables**. **Never set user variables with the `APPWRITE_` prefix** — Appwrite reserves it (injected vars include `APPWRITE_SITE_API_KEY`, `APPWRITE_SITE_PROJECT_ID`, `APPWRITE_VCS_*`, etc.).
+Set in Vercel dashboard → studio-v → Settings → Environment Variables (or CLI `vercel env add`). All 14 pre-migration vars (Prisma/Postgres, UploadThing, Google OAuth, Gmail, GDrive, `ADMIN_*`) were **removed** on 2026-08-31 — zero references remain in the code.
 
-| Variable | Value on Sites | Notes |
-|---|---|---|
-| `STUDIOV_API_KEY` | Appwrite server API key `studiov-server` (secret site variable) | Read by `src/lib/appwrite.ts` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY`. Scopes: users/sessions/tables/columns/indexes/rows read+write, buckets/files read+write, messaging read+write, usage.read |
-| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Public |
-| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Public |
-| `NEXT_PUBLIC_APP_URL` | `https://branch-main-86d3a7e.appwrite.network` | **Baked into the client bundle at build time** — must be set before the first build; changing it requires a new deployment |
+| Variable | Value | Target | Sensitivity |
+|---|---|---|---|
+| `STUDIOV_API_KEY` | Appwrite server API key (same value as local `APPWRITE_API_KEY`) | Production + Preview | Sensitive |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | Production + Preview | Non-sensitive |
+| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | Production + Preview | Non-sensitive |
+| `NEXT_PUBLIC_APP_URL` | `https://studio-v-indol.vercel.app` | Production + Preview | Non-sensitive |
 
-Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_KEY` (the fallback handles both). `ADMIN_*` vars are only needed by `npm run sync-admin` / `npm run seed:appwrite` — never set on the site (they would let anyone with console access reset the admin password; they are run locally against the same Appwrite project).
+Read by `src/lib/appwrite.ts:7` as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (the fallback exists because Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel has no such restriction but uses `STUDIOV_API_KEY` to keep parity with the dormant Sites deployment).
 
-**Variable changes only take effect on the next deployment** — after creating/updating/deleting a site variable, trigger a redeploy (Sites → Deployments → … or `sites_create_duplicate_deployment`).
+Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_KEY` (the fallback handles both). `ADMIN_*` vars are only needed by `npm run sync-admin` / `npm run seed:appwrite` — never set on Vercel (they would let anyone with dashboard access reset the admin password; they are run locally against the same Appwrite project).
 
-**Appwrite sessions** are tied to the project's API keys, not env secrets. Rotating the server API key requires updating the `STUDIOV_API_KEY` site variable + redeploying. Passwords live only inside Appwrite (Argon2).
+**`NEXT_PUBLIC_*` vars are baked into the client bundle at build time** — after editing any of them, redeploy (dashboard prompts, or `vercel deploy --prod --prebuilt`, or push an empty commit) or the old value keeps serving.
+
+**CLI quirk:** `vercel env add <name> preview` hangs on an interactive "Git branch?" prompt that ignores piped stdin — use the REST API instead (`deployment-findings.md` §2).
+
+**Appwrite sessions** are tied to the project's API keys, not env secrets. Rotating the server API key requires updating `STUDIOV_API_KEY` on Vercel + redeploying. Passwords live only inside Appwrite (Argon2).
 
 ---
 
@@ -71,7 +64,7 @@ Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` instead of `STUDIOV_API_K
 **Project:** "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) at https://cloud.appwrite.io. Managed via the console — there are **no code-declared schema migrations**. Database schema (TablesDB database `studiov`, 5 tables), indexes, buckets (`models`, `reference-images`), and email SMTP are configured in the console and documented in `WEBSITE.md` §9/§10 and `file-storage-architecture.md`.
 
 ### Web platform registration
-The site's generated domain is registered as a **web platform** on the project (Console → Overview → Platforms). Browser-direct Storage uploads (`useAppwriteUpload`) are made from this hostname; keep the platform entry in sync if the domain changes.
+Every origin that makes browser-direct Appwrite calls must be a registered **web platform** on the project (Console → Overview → Platforms) — otherwise Appwrite rejects with `general_unknown_origin` (403). Registered: `studio-v-indol.vercel.app` (`web-production-site`), `branch-main-86d3a7e.appwrite.network` (`peka-ar-site`), `localhost` (`local-dev-web`). Keep these in sync whenever the production domain changes (e.g. custom domain — checklist in `deployment-findings.md` §7).
 
 ### Schema changes
 Tables/columns/indexes are edited in the Appwrite console → Databases → `studiov` → table → Columns/Indexes. After changing a schema, update `WEBSITE.md` §9 and the relevant deep-dive. There is no `prisma migrate` equivalent — **make schema changes manually and update docs**.
@@ -109,9 +102,11 @@ npm run build
 # 3. Commit atomically (one logical change per commit)
 git add -p
 git commit -m "type(scope): subject" -m "Body explains the *why*, not the *what*."
-# 4. Push → Appwrite Sites auto-builds and auto-activates
-git push origin main
+# 4. Push → Vercel auto-builds a production deployment
+git push legacy main
 ```
+
+> The deploy remote is `legacy` (`Kaizen3424/StudioV`) — **not** `origin` (`Peka-ar/website`, watched by the dormant Appwrite Sites site). Push to `origin` only when reviving Sites (`deployment-findings.md` §3).
 
 ### Commit message style
 - **Conventional Commits prefix** — `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
@@ -121,7 +116,7 @@ git push origin main
 - On Windows PowerShell, use two `-m` flags rather than a literal newline; chain commands with `&&` (not `;`).
 
 ### Branching
-Trunk-based: `main` is the only long-lived branch. For risky work, use a feature branch — pushes to non-production branches create **preview deployments** (Appwrite org members only). Note: preview deployments share the same site env vars as production (there is no per-env var separation like Vercel's) — do not point previews at a different DB via env; gate in code if needed.
+Trunk-based: `main` is the only long-lived branch. For risky work, use a feature branch — pushes to non-`main` branches create **Preview deployments** on Vercel (one URL per branch, share the same Appwrite backend + Preview env vars). Do not point previews at a different backend via env — gate in code if needed.
 
 ### Before every push
 1. `npm run lint` — must be silent (no output = pass)
@@ -130,44 +125,45 @@ Trunk-based: `main` is the only long-lived branch. For risky work, use a feature
 4. **Read your own diff** — `git log -p HEAD~1`
 
 ### After every push
-1. Appwrite Console → Sites → peka-ar → **Deployments** tab → watch the new build
-2. **Wait for "Ready"** — don't assume it succeeded (failed builds do NOT replace the active deployment)
-3. Open the build logs if it failed
-4. Hit the live URL and smoke-test
+1. Vercel dashboard → studio-v → **Deployments** → watch the new build (or `vercel ls`)
+2. **Wait for "Ready"** — don't assume it succeeded (failed builds never become production)
+3. Open the build/runtime logs if it failed (`vercel inspect <url>`, `vercel logs <url>`)
+4. Hit the live URL and smoke-test (see `deployment-findings.md` §6 for the checklist)
 
 ---
 
-## 6. Operating the site (Console + MCP)
+## 6. Operating the deployment (dashboard + CLI)
 
-The Appwrite Console (https://cloud.appwrite.io → Peka.ar → Sites → peka-ar) is the primary interface. The Appwrite MCP server (this repo's tooling) can do the same operations programmatically (`sites_create`, `sites_update`, `sites_create_variable`, `sites_create_vcs_deployment`, `sites_get_deployment`, `sites_list_logs`, etc. — authenticated against the console).
+The Vercel dashboard (https://vercel.com/kaizens-projects-89bbbf37/studio-v) is the primary interface; the Vercel CLI works against it (authed as `kaizen3424`).
 
 | Task | Where |
 |---|---|
-| Watch deployments / build logs | Sites → peka-ar → Deployments → click a deployment |
-| Runtime + error logs | Sites → peka-ar → Logs |
-| Update env vars | Sites → peka-ar → Settings → Environment variables (**redeploy after**) |
-| Update build settings / Git config | Sites → peka-ar → Settings → Build settings / Git repository |
-| Add a custom domain | Sites → peka-ar → Domains → Add domain (CNAME for subdomains; NS delegation for apex) |
-| Disable the site (maintenance) | Sites → peka-ar → Settings → disable toggle (Server SDK access continues to work) |
-| Rebuild without new code | Deployments → create duplicate deployment (picks up changed env vars/commands) |
+| Watch deployments / build logs | Dashboard → Deployments, or `vercel ls` / `vercel inspect <url>` |
+| Runtime + error logs | Dashboard → Deployments → Functions/Logs, or `vercel logs <url>` (server `console.error` output appears here) |
+| Update env vars | Dashboard → Settings → Environment Variables, or `vercel env add/rm` (**redeploy after** — `NEXT_PUBLIC_*` bake at build) |
+| Add a custom domain | Dashboard → Settings → Domains (+ Appwrite platform registration — full checklist in `deployment-findings.md` §7) |
+| Pause deployments / maintenance | Dashboard → Settings → pause Git integration |
+| Rebuild without new code | Dashboard → Deployments → … → Redeploy, or `vercel deploy --prod` (picks up changed env vars) |
 
-**Debugging rules of thumb** (from Appwrite docs):
-- If config changes don't seem to apply — **redeploy the site**; variable/command changes only take effect on the next deployment.
-- SSR request logs (including `console.log`/`console.error` from server code) appear in the site **Logs** tab.
-- `APPWRITE_DEPLOYMENT_TYPE` env var tells the app how the running deployment was created (`vcs`, `cli`, `manual`).
+**Debugging rules of thumb:**
+- If env-var changes don't seem to apply — **redeploy**; `NEXT_PUBLIC_*` values are inlined at build time.
+- Runtime route errors (`catch` blocks, `console.error`) are visible via `vercel logs` — check there before guessing.
+- The dormant Appwrite Sites site (`peka-ar`) has its own Console logs — only relevant after reviving it.
 
 ---
 
-## 7. Rollback strategy
+## 7. Rollback strategy (Vercel)
 
-Rollback = **re-activate a previous deployment**. Every deployment is preserved (subject to deployment retention settings).
+Rollback = **promote a previous production deployment**. Every deployment is retained (and immutable).
 
 ```text
-Console: Sites → peka-ar → Deployments → (previous Ready deployment) → Activate
-MCP:     sites_update_site_deployment { site_id: "peka-ar", deployment_id: <id> }
+Dashboard: Deployments → (previous Ready production deployment) → … → Promote to Production
+CLI:       vercel rollback <deployment-url>        # e.g. vercel rollback https://studio-4xr1ty9tr-kaizens-projects-89bbbf37.vercel.app
 ```
 
-No git revert, no rebuild, no DB changes — Appwrite re-points the site at the stored deployment.
+No git revert, no rebuild, no DB changes — Vercel re-points the production domain at the stored deployment.
+
+*(Appwrite Sites rollback, when revived: Console → Sites → peka-ar → Deployments → Activate, or MCP `sites_update_site_deployment`.)*
 
 **Trigger conditions** (roll back immediately if any):
 - HTTP 5xx error rate spikes (server crashes)
@@ -181,25 +177,18 @@ No git revert, no rebuild, no DB changes — Appwrite re-points the site at the 
 
 ---
 
-## 8. Custom domains (deferred)
+## 8. Custom domains (deferred until purchase)
 
-Currently on the generated **branch URL** `https://branch-main-86d3a7e.appwrite.network` (constant across deployments — always serves latest `main`). To add a custom domain later:
-1. Console → Sites → peka-ar → **Domains** → Add domain
-2. **Subdomain** (recommended): add a CNAME record at your DNS provider pointing to the hostname Appwrite shows
-3. **Apex domain**: either delegate NS records to `ns1.appwrite.zone` / `ns2.appwrite.zone` (Appwrite then manages all DNS — recreate any MX/TXT records there) or use CNAME flattening if your provider supports it
-4. Wait for verification (DNS can take up to 48h) — SSL is provisioned automatically
-5. Update `NEXT_PUBLIC_APP_URL` site variable to the new domain and **redeploy** (it's baked into the client bundle)
-6. Register the new domain as a web platform on the project (Console → Overview → Platforms) so browser-direct uploads keep working
-7. Add the domain to the project's **Allowed Domains** (Settings) so API calls from it are accepted
+Currently on `https://studio-v-indol.vercel.app`. When a domain is bought, follow the step-by-step checklist in **`deployment-findings.md` §7** (Vercel domain add → update `NEXT_PUBLIC_APP_URL` + redeploy → register the domain as an Appwrite web platform → optional Appwrite Sites revival path).
 
 ---
 
 ## 9. Monitoring and error reporting
 
-**Current state:** Appwrite site logs (Console → Sites → peka-ar → Logs) only. No external error tracking.
+**Current state:** Vercel runtime logs (`vercel logs`, dashboard → Logs) only. No external error tracking.
 
 **Recommended week-1 adds:**
-- **Sentry** (`@sentry/nextjs`, `npx @sentry/wizard@latest`) — add `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` as site variables, redeploy
+- **Sentry** (`@sentry/nextjs`, `npx @sentry/wizard@latest`) — add `SENTRY_DSN` + `NEXT_PUBLIC_SENTRY_DSN` as Vercel env vars, redeploy
 - **Uptime monitoring** (https://uptimerobot.com free tier) — HTTP 200 checks on `/` and `/api/notifications` (a 401 still proves the server is up)
 - **Auth rate limiting** — the auth actions/routes are public; brute-forceable in theory (Upstash Ratelimit)
 
@@ -209,20 +198,22 @@ Currently on the generated **branch URL** `https://branch-main-86d3a7e.appwrite.
 
 | Task | Command |
 |---|---|
-| First-time setup on a new laptop | `npm install` |
+| First-time setup on a new laptop | `npm install` (Vercel link already in `.vercel/`; CLI auth per machine) |
 | Run dev server | `npm run dev` |
 | Lint | `npm run lint` |
 | Build | `npm run build` |
 | Sync admin user | `npm run sync-admin` (with `ADMIN_*` env vars set locally) |
 | Seed demo data (local/dev only) | `npm run seed:appwrite` |
-| Deploy | `git push origin main` (auto-build + auto-activate) |
-| Rebuild without new code | Console → Deployments → duplicate deployment |
-| Roll back | Console → Deployments → activate a previous Ready deployment |
-| Watch build logs | Console → Sites → peka-ar → Deployments → deployment |
-| Watch runtime logs | Console → Sites → peka-ar → Logs |
-| Open the live site | Sites → peka-ar → Domains (generated domain) |
-| Open Appwrite console | https://cloud.appwrite.io |
-| Open GitHub repo | https://github.com/Peka-ar/website |
+| **Deploy** | `git push legacy main` |
+| Rebuild without new code | Dashboard → Deployments → Redeploy, or `vercel deploy --prod` |
+| Roll back | `vercel rollback <previous-deployment-url>` |
+| Watch deployments | `vercel ls` |
+| Watch runtime logs | `vercel logs <deployment-url>` |
+| List env vars | `vercel env ls` |
+| Open the live site | https://studio-v-indol.vercel.app |
+| Open Vercel dashboard | https://vercel.com/kaizens-projects-89bbbf37/studio-v |
+| Open Appwrite console | https://cloud.appwrite.io (project "Peka.ar") |
+| Open GitHub repo | https://github.com/Kaizen3424/StudioV |
 
 ---
 
@@ -268,13 +259,13 @@ website/
 
 | Element | Location |
 |---|---|
-| Server API key env fallback (`STUDIOV_API_KEY ?? APPWRITE_API_KEY`) | `src/lib/appwrite.ts:4` |
+| Server API key env fallback (`STUDIOV_API_KEY ?? APPWRITE_API_KEY`) | `src/lib/appwrite.ts:7` |
 | Local env var template (documents both key names) | `.env.example:1` |
 | Next.js config (CORS, security headers, image patterns) | `next.config.mjs:1` |
 | Tailwind v4 + design tokens | `src/app/globals.css:1` |
 | Admin bootstrap script | `scripts/sync-admin.ts:1` |
 | Demo seed script | `scripts/seed-appwrite.ts:1` |
-| Deployment plan (this migration) | `tasks/plan.md` |
+| Deployment plan + findings (local-only, untracked) | `tasks/plan.md`, `specs/deployment-findings.md` |
 | Appwrite SSR auth handlers | `src/app/api/appwrite/[...appwrite]/route.ts:1` |
 
 ---
@@ -282,11 +273,11 @@ website/
 ## 13. See also
 
 - [`./WEBSITE.md`](./WEBSITE.md) — full app reference, data model, route map, server action reference
+- [`./deployment-findings.md`](./deployment-findings.md) — live values for BOTH hosts, env-var matrix, migration findings, custom-domain checklist
 - [`./file-storage-architecture.md`](./file-storage-architecture.md) — Appwrite Storage architecture (browser-direct uploads, proxy, publish grants/revokes)
 - [`./auth-stabilization.md`](./auth-stabilization.md) — historical task plan (implemented; explains `requirePrincipal` + `StaleSessionError` rationale)
-- [`./pages/auth.md`](./pages/auth.md`) — `/auth*` flow deep dive + email-failure recovery
-- [`./pages/admin.md`](./pages/admin.md`) — `/admin/*` deep dive
-- [`../AGENTS.md`](../AGENTS.md) — repo-wide agent rules (read first, keep `specs/` accurate)
-- [`../design.md`](../design.md) — design system spec
+- [`./pages/auth.md`](./pages/auth.md) — `/auth*` flow deep dive + email-failure recovery
+- [`./pages/admin.md`](./pages/admin.md) — `/admin/*` deep dive
+- [`../design.md`](../design.md) — design system spec (local-only)
 - [`../.env.example`](../.env.example) — env var template
-- Appwrite Sites docs: https://appwrite.io/docs/products/sites
+- Appwrite docs: https://appwrite.io/docs · Vercel docs: https://vercel.com/docs
