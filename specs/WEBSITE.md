@@ -44,7 +44,7 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 | Layer | Tech | Notes |
 |---|---|---|
 | Framework | **Next.js 16** (App Router, Turbopack) | `next.config.mjs` — `images.remotePatterns` retains `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (Appwrite CDN). Asset proxy is reached through `unoptimized` `<Image>` consumers, not via `/_next/image` (see §5). |
-| Hosting | **Vercel** (primary — project `studio-v`, auto-deploy from `Kaizen3424/StudioV` `main`, remote `legacy`) + **Appwrite Sites** (site `peka-ar`, dormant/frozen at `0e72d57` — revival steps in `specs/deployment-findings.md` §3) | Production handbook: `specs/deployment.md`. Full live-values record: `specs/deployment-findings.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/server/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars; Vercel uses `STUDIOV_API_KEY` for parity). |
+| Hosting | **Appwrite Sites** (primary since 2026-09-01 — site `peka-ar` at **https://pekaar.tech**, auto-deploy from `Peka-ar/website` `main`, remote `origin`) + **Vercel** (frozen mirror at `studio-v-indol.vercel.app`, Git integration paused at commit `855391e` — still serves old embed URLs + fires nightly cron) | Production handbook: `specs/deployment.md`. Full live-values record: `specs/deployment-findings.md`. Server API key is read as `STUDIOV_API_KEY ?? APPWRITE_API_KEY` (`src/server/appwrite.ts` — Appwrite Sites forbids user-set `APPWRITE_`-prefixed vars). |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | PostCSS-based, tokens in `globals.css` |
 | 3D | **Google `<model-viewer>` 4.1.0/4.2.0** via `next/script` | No SSR — dynamically imported |
 | Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client hooks + SSR helpers) + `node-appwrite` (server) | `src/app/api/appwrite/[...appwrite]/route.ts` (handlers), `src/app/providers.tsx`, `src/server/appwrite.ts`, `src/server/auth-guards.ts` |
@@ -59,7 +59,7 @@ Revision notes are stored in the `RevisionRequest` table (one row per request) s
 
 **Scripts:** `npm run dev` · `npm run build` · `npm run start` · `npm run lint` (eslint) · `npm run test` (vitest) · `npm run sync-admin` · `npm run seed:appwrite` · `npm run ensure-backend` (provisions `rate_limits` table + hardens buckets; idempotent)
 
-**Env vars:** local `.env` uses `APPWRITE_API_KEY`; on Vercel and Appwrite Sites the same key is set as `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved on Sites; Vercel keeps the name for parity) — read via the fallback in `src/server/appwrite.ts`. Validated at boot by `src/server/env.ts` (fails fast listing every invalid var). Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`, optional `ADMIN_*`, `CRON_SECRET`, `LOG_LEVEL`. Full reference: `specs/deployment.md` §3 + `specs/deployment-findings.md` §2/§3 + `.env.example`.
+**Env vars:** local `.env` uses `APPWRITE_API_KEY`; on Appwrite Sites the same key is set as `STUDIOV_API_KEY` (the `APPWRITE_` prefix is reserved on Sites) — read via the fallback in `src/server/appwrite.ts`. Validated at boot by `src/server/env.ts` (fails fast listing every invalid var). Plus `NEXT_PUBLIC_APPWRITE_ENDPOINT`, `NEXT_PUBLIC_APPWRITE_PROJECT_ID`, `NEXT_PUBLIC_APP_URL`, optional `ADMIN_*`, `CRON_SECRET`, `LOG_LEVEL`. Full reference: `specs/deployment.md` §3 + `specs/deployment-findings.md` §2/§3 + `.env.example`.
 
 ---
 
@@ -123,7 +123,7 @@ website/
 │   ├── proxy.ts               # proxy (middleware) — cookie-presence route gating only
 │   └── types/                 # ambient type augmentations
 ├── scripts/                   # sync-admin.ts (Appwrite bootstrap), seed-appwrite.ts (demo seed), ensure-backend.ts (rate_limits table + bucket hardening)
-├── vercel.json                # Vercel Cron schedule: /api/cron/maintenance @ 02:00 UTC daily
+├── vercel.json                # Vercel Cron schedule (consumed by the frozen Vercel deployment; Appwrite Sites ignores it): /api/cron/maintenance @ 02:00 UTC daily
 ├── design.md                  # design system spec (read alongside §9 below)
 ├── specs/                     # ← you are here
 └── tasks/                     # migration records (plan.md, todo.md, revert-to-uploadthing.md, appwrite-migration.md)
@@ -173,7 +173,7 @@ All 16 `page.tsx` are **server components**. Interactivity lives in `*Client.tsx
 
 ### `GET /api/health`
 - **Auth:** none. Verifies the admin client can reach Appwrite (creates a throwaway `getProject` on the admin client).
-- **Responses:** `200 { ok: true }` · `503 { ok: false, error }` (Appwrite unreachable / bad API key). Wrapped in `withApi` so unexpected errors become a JSON 500. Intended for Vercel/uptime monitors.
+- **Responses:** `200 { ok: true }` · `503 { ok: false, error }` (Appwrite unreachable / bad API key). Wrapped in `withApi` so unexpected errors become a JSON 500. Intended for uptime monitors.
 - **File:** `src/app/api/health/route.ts:1`
 
 ### Uploads — no API route (Phase 4)
@@ -185,8 +185,8 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 ### `GET|POST /api/auth/[...nextauth]`
 - **File:** DELETED in Appwrite migration Phase 1 — replaced by `GET|POST /api/appwrite/[...appwrite]` above.
 
-### `GET /api/cron/maintenance` — Vercel Cron entrypoint
-- **File:** `src/app/api/cron/maintenance/route.ts:1` · schedule `0 2 * * *` in `vercel.json`
+### `GET /api/cron/maintenance` — nightly maintenance entrypoint
+- **File:** `src/app/api/cron/maintenance/route.ts:1` · schedule `0 2 * * *` in `vercel.json` — currently triggered by **Vercel Cron against the frozen Vercel deployment** (which holds `CRON_SECRET`). If the Vercel project is deleted, move the trigger to an external scheduler hitting `https://pekaar.tech/api/cron/maintenance` + set `CRON_SECRET` as a site variable (see `deployment.md` §3).
 - **Auth:** fail closed — `Authorization: Bearer ${CRON_SECRET}`. Unset `CRON_SECRET` → `503`; mismatch → `401`.
 - Runs nightly maintenance (see `backend-architecture.md` §11): storage-permission reconciliation (PUBLISHED projects' model assets must carry `read:any`, else revoked), `rate_limits` retention (> 48h), `analytics_events` retention (> 90d).
 - **Response:** `200 { ok: true, storage: { scanned, granted, revoked, failures }, rateLimitsDeleted, analyticsEventsDeleted }`
@@ -209,7 +209,7 @@ Uploads no longer hit a Next.js API route. The browser calls Appwrite Storage di
 - **Responses:** `200` with stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present, and a `[asset-proxy]` log line. `404 { error: "asset unavailable" }` if the row is missing, status ∉ {READY, PUBLISHED, ARCHIVED}, or the upstream fetch fails.
 - **Consumers:** every in-app asset read — server-side rewrites in `getAllTasks`/`getUserProjects` (`src/lib/project-augment.ts:61` `proxyUrl`), and client-side compositions in `TasksClient.tsx` (`:81-93, :390, :479, :729, :821, :1253`) + `AdminTasksClient.tsx` (`:253, :383, :453, :510`). The public embed does **not** use this route (it reads direct CDN URLs from the SDK config — see §11).
 - **`<Image>` consumers:** every `<Image>` that points at the proxy carries the `unoptimized` prop. **Why:** Next's image optimizer at `/_next/image` does a server-side `fetch(href)` without forwarding request headers (per official Next docs at https://nextjs.org/docs/app/api-reference/components/image#src). The proxy's `requirePrincipal` cookie check therefore always rejects `/_next/image`'s no-cookie fetch and surfaces a misleading "received null" error. `unoptimized` makes the **browser** fetch the proxy URL directly (cookies attached), the proxy resolves the session, and bytes stream through. Reference thumbnails/lighboxes don't benefit meaningfully from Next image optimization (small fixed-size, already WebP-friendly). `next.config.mjs` keeps `remotePatterns: ['images.unsplash.com', 'fra.cloud.appwrite.io']` for seed + potential direct CDN reads.
-- **Trade-off:** every in-app read proxies through Vercel (single hop) — the public embed path avoids it entirely via CDN URLs. Acceptable at our scale; revisit if bandwidth becomes a constraint.
+- **Trade-off:** every in-app read proxies through the SSR host (single hop) — the public embed path avoids it entirely via CDN URLs. Acceptable at our scale; revisit if bandwidth becomes a constraint.
 
 ---
 
@@ -432,7 +432,7 @@ Permanent, idempotent admin management. Run with `npm run sync-admin`. Reads `AD
 
 **Flow:**
 1. Client instantiates `useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions })` (`src/lib/use-appwrite-upload.ts:40`) — uses the pre-built `storage` service from `useAppwrite()` (session-authenticated client, `@appwrite.io/react` provider) and exposes `{ upload, isUploading, progress, error, reset }`.
-2. `upload(file, type)` validates size/extensions, then `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress })` — the browser uploads **directly to Appwrite** (bypassing Vercel's serverless body limit — important for 100MB+ GLB files). `onProgress` receives `{ progress: 0-100 }` (client SDK `UploadProgress` is percent, not bytes) and drives the live progress bar in the upload tiles.
+2. `upload(file, type)` validates size/extensions, then `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress })` — the browser uploads **directly to Appwrite** (bypassing the SSR host's request body limit — important for 100MB+ GLB files). `onProgress` receives `{ progress: 0-100 }` (client SDK `UploadProgress` is percent, not bytes) and drives the live progress bar in the upload tiles.
 3. On success → `recordAssetUpload({ fileId, type })` server action (`src/app/actions/record-asset.ts:38`): `requirePrincipal` by type (REFERENCE_IMAGE → BRAND, MODELS → ADMIN — mirrors the bucket `create` perms), admin-client `storage.getFile` for metadata, server-side `ASSET_POLICY` enforcement (extension allowlist + size cap; rejection → best-effort `deleteFile`), then an **idempotent** `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size, checksum } })` — re-upload to an already-recorded file id updates/reuses the existing row (ownership-checked) instead of failing.
 4. The hook returns the `RecordedAsset` `{ id, url, type, status, mimeType, size, originalName }` (no `key`) — stored in `uploadedAssets` (brand) or `glbAsset`/`usdzAsset` (admin).
 5. Failure mapping: 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; best-effort `deleteFile` orphan cleanup.
@@ -530,14 +530,14 @@ File: `.env.example:1`. All required for full functionality.
 | `ADMIN_EMAIL` | Permanent admin email (required for `npm run sync-admin` and `npm run seed:appwrite`) |
 | `ADMIN_PASSWORD` | Permanent admin password (≥ 8 chars, set via Appwrite `updatePassword` on sync) |
 | `ADMIN_NAME` | Admin display name (optional, defaults to "Studio Admin") |
-| `CRON_SECRET` | Optional (≥ 16 chars); guards `GET /api/cron/maintenance` (Vercel Cron sends `Authorization: Bearer ${CRON_SECRET}`; fail-closed when unset/mismatched) |
+| `CRON_SECRET` | Optional (≥ 16 chars); guards `GET /api/cron/maintenance` (the cron trigger — currently Vercel Cron on the frozen deployment — sends `Authorization: Bearer ${CRON_SECRET}`; fail-closed when unset/mismatched). Not set on Appwrite Sites while the frozen Vercel deployment triggers the cron |
 | `LOG_LEVEL` | Optional; `debug`/`info`/`warn`/`error`, default `info` (`src/server/logging.ts`) |
 
 **Validated at boot** by `src/server/env.ts` (zod; fails fast listing every invalid var). Missing/malformed required vars block server startup — run `npm run dev` locally with `.env` present.
 
 **Removed in Phase 5** (no longer in `.env.example`): `DATABASE_URL`, `DIRECT_URL`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_CLIENT_ID`/`_SECRET`/`_REFRESH_TOKEN`, `GDRIVE_BACKUP_FOLDER_ID`, `GMAIL_USER`, `GMAIL_APP_PASSWORD`. Stripe vars were never wired (no handler exists) and were dropped from `.env.example`.
 
-**Production deploy:** `git push legacy main` (Vercel). See `deployment.md` + `deployment-findings.md`.
+**Production deploy:** `git push origin main` (Appwrite Sites → https://pekaar.tech). See `deployment.md` + `deployment-findings.md`.
 
 ---
 
@@ -553,8 +553,8 @@ File: `.env.example:1`. All required for full functionality.
 
 **Related (implemented, extended since written):**
 - `auth-stabilization.md` — task plan for the `requirePrincipal` + email-fallback hardening (implemented). Extended with `StaleSessionError` + `requirePrincipalOrRedirect()` for stale-session self-healing (added Jul 2026).
-- `deployment.md` — production operational handbook (Vercel primary + Appwrite Cloud backend ops, rollback, env vars, day-to-day workflow).
-- `deployment-findings.md` — live values for both hosts (Vercel + dormant Appwrite Sites site), env-var matrix, git remotes map, migration findings, custom-domain purchase checklist.
+- `deployment.md` — production operational handbook (Appwrite Sites primary at pekaar.tech + Appwrite Cloud backend ops, rollback, env vars, day-to-day workflow, frozen-Vercel record).
+- `deployment-findings.md` — live values for both hosts (Appwrite Sites primary + frozen Vercel mirror), env-var matrix, git remotes map, migration findings, custom-domain setup record.
 
 ---
 

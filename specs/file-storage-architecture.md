@@ -4,7 +4,7 @@
 
 ## Overview
 
-STUDIO.V stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing Vercel's serverless body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
+STUDIO.V stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing the SSR host's request body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
 
 - **In-app reads** (thumbnails, review modals, "Previous models") — auth-gated proxy `GET /api/v1/assets/[assetId]/file` which streams bytes from Appwrite with the server API key.
 - **Published embeds** (third-party storefronts) — direct CDN URLs (`assets.url`, the Appwrite `/view` endpoint) made publicly readable by granting `read:any` on the storage file at publish time.
@@ -24,7 +24,7 @@ Two buckets (console config, Phase 0 of `tasks/appwrite-migration.md`):
 - File-level `read:any` is only ever granted on **published projects' GLB/USDZ files** (see §4). Reference images never get `read:any`.
 - `assets.url` stores the absolute `/view` URL: `${APPWRITE_ENDPOINT}/storage/buckets/{bucketId}/files/{fileId}/view?project=${APPWRITE_PROJECT_ID}`, built server-side via `buildFileUrl` (`src/lib/appwrite-config.ts:13`) — the server SDK's `getFileView` returns bytes, not a URL. **The `?project=` param is required**: Appwrite rejects anonymous `/view` requests without project context (404 even for `read("any")` files — verified 2026-08-30, Phase 6 bug 3). The SDK config endpoint re-derives the URL on-the-fly for `provider === "appwrite"` rows (see §6), so the stored `url` is a convenience cache, not the authoritative URL for published assets.
 
-### 2. Browser-direct uploads (bypass Vercel's body limit)
+### 2. Browser-direct uploads (bypass the SSR host's body limit)
 
 ```
 Client (useAppwriteUpload)            Appwrite Storage              Next.js (recordAssetUpload)
@@ -89,7 +89,7 @@ Bucket-level `read` is label-scoped, so the **proxy route is the only in-app del
    - `provider ∈ {external, uploadthing}` (seed / legacy rows) → plain `fetch(asset.url)`.
 4. Response headers: stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present. A log line records every hit (`route.ts:66`).
 
-No 302 fast path — the proxy always streams so auth and source detection stay server-side. One Vercel egress hop per read.
+No 302 fast path — the proxy always streams so auth and source detection stay server-side. One SSR-host egress hop per read.
 
 **Consumers (all point at the proxy):** `TasksClient.tsx` thumbnails/lightbox (`:81, :93, :729, :821, :993, :1166, :1253`), `AdminTasksClient.tsx` thumbnails + "Current GLB/USDZ View" links (`:81, :253, :383, :453, :510`), "Previous models" entries (archived rows), `getUserProjects`/`getAllTasks` derived `referenceUrls`/`assetUrls`/`archivedAssetUrls` (`src/lib/project-augment.ts:61` `proxyUrl` helper). `<Image unoptimized>` remains the pattern for thumbnail reads (the optimizer's anonymous fetch would 401).
 
@@ -185,7 +185,7 @@ Consumers:
 |---|---|---|
 | Storage file perms desync from row status (grant succeeded but flip failed, etc.) | Low | Grant-before-flip + best-effort revoke on flip failure; revoke failures logged. Row status remains the in-app gate. |
 | Session cookie expiry during a large browser upload | Low | `createFile` fails mid-upload → orphan cleanup via best-effort `deleteFile`; user retries. |
-| Every in-app read proxied through Vercel egress | Low-Medium at scale | `Cache-Control: private, max-age=60` on the proxy; embed reads hit the CDN directly (no Vercel hop). Revisit if bandwidth cost grows. |
+| Every in-app read proxied through the SSR host's egress | Low-Medium at scale | `Cache-Control: private, max-age=60` on the proxy; embed reads hit the CDN directly (no proxy hop). Revisit if bandwidth cost grows. |
 | 150 GB storage cap (plan `auto-1`, pro group, $0) | Low | ~150 models at 10–50 MB = 1.5–7.5 GB. Archived files are kept intentionally — monitor usage. |
 | GLB/USDZ MIME not validated server-side | Low | File picker filters by extension; only ADMIN uploads models. Optional: post-upload MIME check + delete. |
 | Seed/legacy `external`/`uploadthing` URLs go stale | Low | Proxy falls back to the stored URL only; legacy rows are read-only historical data. |
@@ -196,7 +196,7 @@ Consumers:
 1. **Asset status on publish:** rows stay `READY` after publish (files get read:any). A `PUBLISHED` row status is defined but unused — revisit if analytics need to distinguish.
 2. **File deletion UI / orphan cleanup:** removing an image from `uploadedAssets` in the New Task modal only removes it from client state — the storage file + `assets` row remain (pre-existing behavior). Future task.
 3. **Archived-file retention:** per user decision, archived model files are kept forever in Appwrite Storage. A TTL/cleanup job is a future task if the plan's 150 GB cap ever matters.
-4. **Bandwidth:** plan allows 2,000 GB/month. The proxy path adds one Vercel hop per in-app read; direct CDN URLs already cover the embed path.
+4. **Bandwidth:** plan allows 2,000 GB/month. The proxy path adds one SSR-host hop per in-app read; direct CDN URLs already cover the embed path.
 
 ## Migration history
 
@@ -219,4 +219,4 @@ Full replacement (Phase 4 of `tasks/appwrite-migration.md`): browser-direct uplo
 - `../pages/tasks.md` — New Task / Review / Published modals (upload consumers + thumbnails)
 - `../pages/admin.md` §3 — Admin modal: "Replace" copy, "Previous models" collapsible
 - `tasks/appwrite-migration.md` §0 Phase 4 — the migration record with SDK-level corrections
-- `deployment.md` — Vercel env var setup
+- `deployment.md` — Appwrite Sites env var setup + hosting handbook

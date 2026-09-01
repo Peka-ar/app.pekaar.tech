@@ -62,7 +62,7 @@ Appwrite table **`rate_limits`** (db `studiov`, created by `scripts/ensure-backe
 - `remaining === 0` → reject (throw `RateLimitError`).
 - **Fail-open:** any Appwrite error while enforcing logs and passes the request (downtime must not block auth/ingest).
 - Documented slop: Appwrite row updates are not fully serialized per key, so the true ceiling is ~limit + concurrent-writers-in-flight.
-- `clientIpFromRequest` / `clientIpForAction` extract the real client IP from `x-forwarded-for`/`x-real-ip` (Vercel), falling back to `"unknown"`.
+- `clientIpFromRequest` / `clientIpForAction` extract the real client IP from `x-forwarded-for`/`x-real-ip` (set by the hosting edge — Appwrite Sites / Vercel), falling back to `"unknown"`.
 
 ### Applied limits
 
@@ -126,9 +126,9 @@ Publish semantics (unchanged from prior behavior, now centralized):
 
 ## 11. Nightly maintenance cron
 
-**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 60` (raise to 300 on a paid Vercel plan if the reconcile sweep grows).
+**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 60` (raise if the reconcile sweep grows). **Trigger source (2026-09-01):** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
 
-**Auth guard (fail closed):** Vercel Cron sends `Authorization: Bearer ${CRON_SECRET}`. If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match `Bearer ${env.CRON_SECRET}` → `401`. Any other failure goes through `handleApiError`.
+**Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match `Bearer ${env.CRON_SECRET}` → `401`. Any other failure goes through `handleApiError`.
 
 **Work (`runMaintenance`, `src/server/services/maintenance.service.ts`) — runs the three steps in parallel:**
 
