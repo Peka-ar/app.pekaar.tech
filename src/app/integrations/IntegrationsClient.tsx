@@ -90,7 +90,7 @@ const PLATFORMS: PlatformDef[] = [
     key: "shopify",
     name: "Shopify",
     tagline: "Custom liquid block / product template",
-    steps: "For Shopify, paste this iframe into a custom liquid block or product template section. It loads the published STUDIO.V viewer automatically.",
+    steps: "For Shopify, paste this iframe into a custom liquid block or product template section. It loads the published Peka AR viewer automatically.",
     Logo: ShopifyLogo,
   },
   {
@@ -118,7 +118,7 @@ const PLATFORMS: PlatformDef[] = [
     key: "other",
     name: "Other",
     tagline: "Anywhere HTML is allowed",
-    steps: "For any other storefront, paste the iframe wherever custom HTML is supported. If your storefront enforces a content security policy, allow frame-src against your STUDIO.V origin.",
+    steps: "For any other storefront, paste the iframe wherever custom HTML is supported. If your storefront enforces a content security policy, allow frame-src against your Peka AR origin (pekaar.tech).",
     Logo: OtherLogo,
   },
 ];

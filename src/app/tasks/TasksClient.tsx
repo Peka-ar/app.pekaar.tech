@@ -100,7 +100,7 @@ const getViewerProduct = (project: TaskJob): Product | null => {
     id: project.id,
     name: project.name,
     category: 'Chairs',
-    brand: project.brand?.name || 'STUDIO.V',
+    brand: project.brand?.name || 'Peka AR',
     price: 0,
     src: glb,
     usdz,

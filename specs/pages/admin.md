@@ -255,7 +255,7 @@ interface AdminLayoutProps {
 ```
 
 **Structure:**
-- Left sidebar (desktop only, `w-64`): STUDIO.V logo + nav links (Overview → `/admin/dashboard`, Users → `/admin/users`, Tasks Management → `/admin/tasks`, Analytics → `/admin/analytics`), user profile (initials avatar + name/role) + Sign Out form.
+- Left sidebar (desktop only, `w-64`): Peka AR wordmark (`src/components/Wordmark.tsx` — Manrope + coral dot) + nav links (Overview → `/admin/dashboard`, Users → `/admin/users`, Tasks Management → `/admin/tasks`, Analytics → `/admin/analytics`), user profile (initials avatar + name/role) + Sign Out form.
 - Header (sticky): hamburger `Menu` button (mobile only, opens `AdminMobileNavDrawer`), title (`h1`, serif italic, `text-lg sm:text-2xl`), action slot (hidden below `sm`), `ThemeToggle`, `NotificationBell`.
 - `<main>` content area: `p-4 sm:p-6` (mobile-first padding to avoid cramped 360px viewports).
 

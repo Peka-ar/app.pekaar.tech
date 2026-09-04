@@ -104,7 +104,7 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8">
-        <h1 className="text-4xl font-serif text-[var(--color-text-primary)] mb-2">Join STUDIO.V</h1>
+        <h1 className="text-4xl font-display font-semibold text-[var(--color-text-primary)] mb-2">Join Peka AR</h1>
         <p className="text-[var(--color-text-secondary)] text-sm">Create your brand&apos;s interactive showroom today.</p>
       </div>
 

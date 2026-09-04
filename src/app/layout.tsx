@@ -42,8 +42,21 @@ const jetbrains = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "STUDIO.V | Image-to-3D Pipeline",
-  description: "Premium micro-SaaS for D2C brands. Convert standard product photography into interactive 3D assets.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://pekaar.tech"),
+  title: "Peka AR — Product photos to interactive 3D",
+  description:
+    "Peka AR turns product photography into artist-finished, web-optimized 3D assets — live on your storefront in hours, with one-line embed and AR view-in-room.",
+  openGraph: {
+    title: "Peka AR — Product photos to interactive 3D",
+    description:
+      "Peka AR turns product photography into artist-finished, web-optimized 3D assets — live on your storefront in hours, with one-line embed and AR view-in-room.",
+  },
+  twitter: {
+    card: "summary",
+    title: "Peka AR — Product photos to interactive 3D",
+    description:
+      "Peka AR turns product photography into artist-finished, web-optimized 3D assets — live on your storefront in hours, with one-line embed and AR view-in-room.",
+  },
 };
 
 export default async function RootLayout({

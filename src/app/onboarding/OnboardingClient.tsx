@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Boxes, Building2, Camera, Code2, Layers3, Refres
 import { completeOnboarding } from "@/app/actions/auth";
 import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
+import { Wordmark } from "@/components/Wordmark";
 
 const categoryOptions = ["Furniture", "Home decor", "Fashion", "Beauty", "Electronics", "Other"];
 const platformOptions = ["Shopify", "WooCommerce", "Webflow", "Custom", "Other"];
@@ -58,7 +59,7 @@ export default function OnboardingClient() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.18),transparent_36%)]" />
           <div className="relative flex h-full flex-col justify-between gap-12">
             <div>
-              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">STUDIO.V setup</p>
+              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60"><Wordmark className="font-display font-semibold tracking-[0.2em] uppercase" dotClassName="text-[var(--color-accent)]" /> setup</p>
               <h1 className="mt-6 max-w-md text-4xl font-serif leading-tight sm:text-5xl">Build your 3D commerce workspace.</h1>
               <p className="mt-5 max-w-sm text-sm leading-6 text-white/65">Answer a few setup questions so your upload flow, admin review, and integration guidance match how your brand sells.</p>
             </div>
@@ -103,7 +104,7 @@ export default function OnboardingClient() {
                   <Layers3 className="mb-6 h-8 w-8 text-[var(--color-text-muted)]" />
                   <h2 className="text-2xl sm:text-3xl lg:text-4xl font-serif">From product photos to embeddable 3D.</h2>
                   <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                    {[{ icon: Camera, title: "Upload", body: "Send multi-angle product photography and dimensions." }, { icon: RefreshCw, title: "Generate", body: "STUDIO.V prepares web-ready GLB and USDZ assets." }, { icon: Code2, title: "Embed", body: "Publish an iframe viewer into your storefront." }].map(({ icon: Icon, title, body }) => (
+                    {[{ icon: Camera, title: "Upload", body: "Send multi-angle product photography and dimensions." }, { icon: RefreshCw, title: "Generate", body: "Peka AR prepares web-ready GLB and USDZ assets." }, { icon: Code2, title: "Embed", body: "Publish an iframe viewer into your storefront." }].map(({ icon: Icon, title, body }) => (
                       <div key={title} className="rounded-3xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-5">
                         <Icon className="mb-4 h-5 w-5 text-[var(--color-text-primary)]" />
                         <h3 className="font-mono text-[11px] font-bold uppercase tracking-widest">{title}</h3>

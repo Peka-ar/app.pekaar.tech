@@ -12,7 +12,7 @@ export default function PrivacyPage() {
           </p>
 
           <p>
-            This document serves as a temporary placeholder for the Privacy Policy that will govern how STUDIO.V collects, uses, discloses, and manages user data. The final version should be drafted or reviewed by a qualified legal professional.
+            This document serves as a temporary placeholder for the Privacy Policy that will govern how Peka AR (pekaar.tech) collects, uses, discloses, and manages user data. The final version should be drafted or reviewed by a qualified legal professional.
           </p>
 
           <p>

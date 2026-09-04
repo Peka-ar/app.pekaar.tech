@@ -2,7 +2,7 @@
 
 > Parent: [`./WEBSITE.md`](./WEBSITE.md) · Full live-values record + migration findings: [`./deployment-findings.md`](./deployment-findings.md)
 
-Production runtime for STUDIO.V. This document is the **operational handbook** for the live deployment: what is deployed, where, how to inspect it, how to update it, how to recover from a bad deploy, and how to do day-to-day code changes safely.
+Production runtime for Peka AR. This document is the **operational handbook** for the live deployment: what is deployed, where, how to inspect it, how to update it, how to recover from a bad deploy, and how to do day-to-day code changes safely.
 
 **Primary since 2026-09-01:** the Next.js app runs on **Appwrite Sites** (site `peka-ar`) at **https://pekaar.tech** — custom apex domain, NS-delegated to Appwrite DNS (setup record in §8). All backend services are the same **Appwrite Cloud** project "Peka.ar" (Auth + TablesDB + Storage + email), so web and backend live in one platform now. The former primary, **Vercel** (project `studio-v`), is **frozen** — Git integration paused on 2026-09-01 at commit `855391e`. Its URL `https://studio-v-indol.vercel.app` still serves that frozen copy (old third-party embeds keep working) and its Vercel Cron still fires nightly, but it no longer deploys on push. Full frozen-host record: `deployment-findings.md` §3.
 

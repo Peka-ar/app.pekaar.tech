@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Box } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { Wordmark } from './Wordmark';
 
 const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin', '/auth'];
 
@@ -22,7 +23,7 @@ export function TopNav() {
             <div className="w-8 h-8 rounded-full border border-[var(--color-text-primary)] flex items-center justify-center bg-transparent shrink-0">
               <Box className="w-4 h-4 text-[var(--color-text-primary)]" aria-hidden="true" />
             </div>
-            <span className="text-[15px] sm:text-lg font-light tracking-tight font-serif text-[var(--color-text-primary)] shrink-0 hidden sm:block">STUDIO.V</span>
+            <Wordmark className="text-[15px] sm:text-lg font-semibold tracking-tight font-display text-[var(--color-text-primary)] shrink-0 hidden sm:block" />
           </Link>
           <div className="hidden md:flex items-center gap-6 ml-6">
              <Link href="#showroom-catalog-panel" className="text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Product</Link>

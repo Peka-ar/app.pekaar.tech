@@ -6,6 +6,7 @@ import { useAuth } from "@appwrite.io/react";
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
+import { Wordmark } from '../Wordmark';
 import { logout } from '@/app/actions/auth';
 
 interface NavItem {
@@ -144,12 +145,10 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
                 <rect x="3" y="3" width="18" height="18" rx="2" />
               </svg>
             </div>
-            <span
-              className="text-[12px] font-light tracking-[0.2em] uppercase font-serif"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              STUDIO.V
-            </span>
+            <Wordmark
+              className="text-[12px] font-semibold tracking-[0.2em] uppercase font-display"
+              dotClassName="text-[var(--accent)]"
+            />
           </Link>
           <Button
             variant="ghost"

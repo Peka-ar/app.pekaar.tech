@@ -4,7 +4,7 @@
 
 ## Overview
 
-STUDIO.V stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing the SSR host's request body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
+Peka AR stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing the SSR host's request body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
 
 - **In-app reads** (thumbnails, review modals, "Previous models") — auth-gated proxy `GET /api/v1/assets/[assetId]/file` which streams bytes from Appwrite with the server API key.
 - **Published embeds** (third-party storefronts) — direct CDN URLs (`assets.url`, the Appwrite `/view` endpoint) made publicly readable by granting `read:any` on the storage file at publish time.

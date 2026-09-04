@@ -8,6 +8,7 @@ import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
 import Image from "next/image";
 import { Box, ArrowLeft } from 'lucide-react';
 import { LinkButton } from "@/components/ui/LinkButton";
+import { Wordmark } from "@/components/Wordmark";
 
 type AuthView = 'signin' | 'signup' | 'forgot-password';
 
@@ -34,7 +35,7 @@ export default function AuthClient() {
           <div className="w-8 h-8 rounded-full border border-white/20 flex items-center justify-center">
             <Box className="w-4 h-4 text-white" aria-hidden="true" />
           </div>
-          <span className="text-white text-lg font-light tracking-[0.25em] uppercase font-serif">STUDIO.V</span>
+          <Wordmark className="text-white text-lg font-semibold tracking-[0.25em] uppercase font-display" dotClassName="text-[var(--color-accent)]" />
         </div>
 
         <div className="absolute bottom-12 left-12 z-20 max-w-md">

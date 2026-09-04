@@ -12,7 +12,7 @@ export default function TermsPage() {
           </p>
 
           <p>
-            This document serves as a temporary placeholder for the Terms of Service agreement that will govern users&apos; use of the STUDIO.V platform. The final version should be drafted or reviewed by a qualified legal professional.
+            This document serves as a temporary placeholder for the Terms of Service agreement that will govern users&apos; use of the Peka AR (pekaar.tech) platform. The final version should be drafted or reviewed by a qualified legal professional.
           </p>
 
           <p>

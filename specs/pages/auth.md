@@ -2,7 +2,7 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) · Source: `src/app/auth/page.tsx:1`, `src/app/auth/verify/page.tsx:1`, `src/app/auth/reset-password/page.tsx:1` + components in `src/components/auth/`
 
-STUDIO.V uses **Appwrite Cloud** (region `fra`, project `6a8562a20037b62075e1`) end-to-end for auth: sessions, email verification (link-based), and password recovery. The `@appwrite.io/react` package owns the client-side session (cookies, sign-in/sign-out) via the SSR handler at `/api/appwrite/[...appwrite]`; `src/server/auth-guards.ts` resolves the canonical principal (session + `users` TableDB row) server-side. There is **no OTP flow and no magic-link/`Token` model** — Appwrite's native link-based verification (`updateVerification`) and recovery (`updateRecovery`) replace both (Phase 2 of `tasks/appwrite-migration.md`, DONE 2026-08-19).
+Peka AR uses **Appwrite Cloud** (region `fra`, project `6a8562a20037b62075e1`) end-to-end for auth: sessions, email verification (link-based), and password recovery. The `@appwrite.io/react` package owns the client-side session (cookies, sign-in/sign-out) via the SSR handler at `/api/appwrite/[...appwrite]`; `src/server/auth-guards.ts` resolves the canonical principal (session + `users` TableDB row) server-side. There is **no OTP flow and no magic-link/`Token` model** — Appwrite's native link-based verification (`updateVerification`) and recovery (`updateRecovery`) replace both (Phase 2 of `tasks/appwrite-migration.md`, DONE 2026-08-19).
 
 ---
 
@@ -35,7 +35,7 @@ redirect("/dashboard");
 Role-aware redirect for existing sessions: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`; no session (or stale/suspended — `requirePrincipal` throws) → `AuthClient`.
 
 ### `AuthClient.tsx` (`src/app/auth/AuthClient.tsx:1`) — client
-A two-column layout. Left half (lg+): dark `#1A1A1A` panel with the first demo product image (`PRODUCTS[0].thumbnail`) at 50% opacity, a gradient scrim, the STUDIO.V logo, and the "Elevate your catalog with stereoscopic realism." editorial copy. Right half: white panel with "Back to Home" `LinkButton`s (mobile + desktop variants) and a centered `max-w-md` container that swaps between the three forms based on local `view` state.
+A two-column layout. Left half (lg+): dark `#1A1A1A` panel with the first demo product image (`PRODUCTS[0].thumbnail`) at 50% opacity, a gradient scrim, the Peka AR wordmark (`src/components/Wordmark.tsx` — Manrope + coral dot), and the "Elevate your catalog with stereoscopic realism." editorial copy. Right half: white panel with "Back to Home" `LinkButton`s (mobile + desktop variants) and a centered `max-w-md` container that swaps between the three forms based on local `view` state.
 
 **State:** `type AuthView = 'signin' | 'signup' | 'forgot-password'` — `useState<AuthView>('signin')`. Navigation via `onNavigate={(v) => setView(v as AuthView)}` passed to each form. No `onSuccess` wiring — `SignUpForm` owns its post-submit state internally (inbox screen).
 

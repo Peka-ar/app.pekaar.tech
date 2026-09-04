@@ -8,6 +8,7 @@ import NotificationBell from './NotificationBell';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Button } from '../ui/Button';
 import { ThemeToggle } from '../ThemeToggle';
+import { Wordmark } from '../Wordmark';
 import { logout } from '@/app/actions/auth';
 
 interface DashboardLayoutProps {
@@ -65,12 +66,10 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
             >
               <Box className="w-4 h-4" style={{ color: 'var(--text-primary)' }} aria-hidden="true" />
             </div>
-            <span
-              className="text-[12px] font-light tracking-[0.2em] uppercase font-serif"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              STUDIO.V
-            </span>
+            <Wordmark
+              className="text-[12px] font-semibold tracking-[0.2em] uppercase font-display"
+              dotClassName="text-[var(--accent)]"
+            />
           </Link>
         </div>
 
