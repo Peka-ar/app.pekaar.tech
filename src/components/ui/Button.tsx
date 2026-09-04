@@ -14,16 +14,16 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 }
 
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'btn-primary active:scale-95',
-  secondary: 'btn-secondary active:scale-95',
-  ghost: 'text-[var(--color-text-primary)] hover:bg-[var(--color-canvas-secondary)] rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]',
-  destructive: 'bg-red-600 text-white rounded-full text-[10px] uppercase tracking-widest font-medium active:scale-95 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]',
+  primary: 'btn-primary',
+  secondary: 'btn-secondary',
+  ghost: 'inline-flex items-center justify-center gap-2 font-semibold text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-canvas-soft)] rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]',
+  destructive: 'inline-flex items-center justify-center gap-2 font-semibold bg-[var(--negative)] text-white rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-[10px]',
-  md: 'px-5 py-2.5 text-[11px]',
-  lg: 'px-8 py-3.5 text-[12px]',
+  sm: 'h-10 px-4 text-sm',
+  md: 'h-12 px-6 text-base',
+  lg: 'h-12 px-8 text-base',
 };
 
 export function Button({

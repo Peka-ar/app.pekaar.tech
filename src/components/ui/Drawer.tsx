@@ -107,17 +107,18 @@ export function Drawer({
 
   const drawerContent = (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/50"
+      className="fixed inset-0 z-50 flex justify-end bg-[rgba(20,20,16,0.55)] dark:bg-[rgba(20,20,16,0.75)]"
       onClick={handleBackdropClick}
     >
-      <div
+        <div
         ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="drawer-title"
         aria-describedby={description ? 'drawer-description' : undefined}
         className={cn(
-          'fixed top-0 right-0 h-full bg-[var(--color-surface)] rounded-l-2xl shadow-2xl flex flex-col',
+          'fixed top-0 right-0 h-full bg-[var(--color-surface)] rounded-l-[24px] flex flex-col',
+          'shadow-[var(--shadow-1)]',
           sizeClasses[size],
           'transition-transform duration-300 ease-out',
           isOpen ? 'translate-x-0' : 'translate-x-full'

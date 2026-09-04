@@ -11,12 +11,12 @@ export interface BadgeProps {
 }
 
 const toneClasses: Record<BadgeTone, string> = {
-  neutral: 'bg-[var(--color-canvas-secondary)] text-[var(--color-text-secondary)] border border-[var(--color-border-default)]',
-  success: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  warning: 'bg-amber-50 text-amber-700 border border-amber-200',
-  danger: 'bg-red-50 text-red-700 border border-red-200',
-  info: 'bg-blue-50 text-blue-700 border border-blue-200',
-  inverted: 'bg-[var(--color-canvas-inverted)] text-white border border-[var(--color-canvas-inverted)]',
+  neutral: 'bg-[var(--canvas-soft)] text-[var(--text-secondary)] border border-transparent',
+  success: 'bg-[var(--positive-pale)] text-[var(--positive-copy)] border border-transparent',
+  warning: 'bg-[var(--warning-pale)] text-[var(--warning-copy)] border border-transparent',
+  danger: 'bg-[var(--negative-pale)] text-[var(--negative-copy)] border border-transparent',
+  info: 'bg-[var(--accent-pale)] text-[var(--accent-copy)] border border-transparent',
+  inverted: 'bg-[var(--ink)] text-[var(--on-ink)] border border-transparent',
 };
 
 export function Badge({ tone = 'neutral', icon, children, className }: BadgeProps) {

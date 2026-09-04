@@ -5,19 +5,20 @@ export type CardVariant = 'default' | 'inverted' | 'muted';
 
 export interface CardProps {
   variant?: CardVariant;
+  lined?: boolean;
   className?: string;
   children: React.ReactNode;
 }
 
 const variantClasses: Record<CardVariant, string> = {
-  default: 'bg-[var(--color-surface)] border-[var(--color-border-default)]',
-  inverted: 'bg-[var(--color-canvas-inverted)] border-[var(--color-canvas-inverted)]',
-  muted: 'bg-[var(--color-canvas-secondary)] border-[var(--color-border-default)]',
+  default: 'bg-[var(--color-surface)]',
+  inverted: 'bg-[var(--ink)] text-[var(--on-ink)]',
+  muted: 'bg-[var(--color-canvas-soft)]',
 };
 
-export function Card({ variant = 'default', className, children }: CardProps) {
+export function Card({ variant = 'default', lined = false, className, children }: CardProps) {
   return (
-    <div className={cn('rounded-3xl border shadow-sm', variantClasses[variant], className)}>
+    <div className={cn(lined ? 'card-lined' : 'card', variantClasses[variant], className)}>
       {children}
     </div>
   );

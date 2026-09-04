@@ -115,8 +115,8 @@ export function Modal({
   const modalContent = (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50',
-        variant === 'takeover' && 'bg-black/80'
+        'fixed inset-0 z-50 flex items-center justify-center p-4',
+        variant === 'takeover' ? 'bg-black/80' : 'bg-[rgba(20,20,16,0.55)] dark:bg-[rgba(20,20,16,0.75)]'
       )}
       onClick={handleBackdropClick}
     >
@@ -127,7 +127,8 @@ export function Modal({
         aria-labelledby="modal-title"
         aria-describedby={description ? 'modal-description' : undefined}
         className={cn(
-          'bg-[var(--color-surface)] rounded-2xl shadow-xl w-full',
+          'bg-[var(--color-surface)] rounded-[24px] w-full',
+          'shadow-[var(--shadow-2)]',
           sizeClasses[size],
           variant === 'takeover' && 'h-full flex flex-col'
         )}
@@ -135,7 +136,7 @@ export function Modal({
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-default)]">
           <div>
-            <h2 id="modal-title" className="text-lg font-semibold text-[var(--color-text-primary)]">
+            <h2 id="modal-title" className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
               {title}
             </h2>
             {description && (

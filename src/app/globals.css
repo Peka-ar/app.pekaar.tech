@@ -1,68 +1,94 @@
 @import "tailwindcss";
 
 @theme {
-  --font-serif: var(--font-serif-loaded), Georgia, serif;
-  --font-sans: var(--font-sans-loaded), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-mono-loaded), ui-monospace, monospace;
+  --font-display: var(--font-display-loaded), ui-sans-serif, system-ui, sans-serif;
+  --font-sans:    var(--font-sans-loaded), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:    var(--font-mono-loaded), ui-monospace, SFMono-Regular, monospace;
+  /* COMPAT (delete in Phase 6): font-serif consumers get Manrope until their phase migrates them */
+  --font-serif:   var(--font-display-loaded), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ─── Semantic design tokens (light mode defaults) ─── */
 :root {
-  --canvas:          #faf9f5;
-  --canvas-secondary:#efe9de;
+  /* surfaces */
+  --canvas:          #f1f1ea;
+  --canvas-soft:     #e4e6dc;
   --surface:         #ffffff;
-  --canvas-inverted: #181715;
-
-  --text-primary:    #141413;
-  --text-secondary:  #3d3d3a;
-  --text-muted:      #6c6a64;
-  --border-default:  #e6dfd8;
-
-  --primary:         #cc785c;
-  --primary-hover:   #a9583e;
-  --on-primary:      #ffffff;
-
-  /* ── Aliases so --color-* references resolve (fixes undefined-token bug) ── */
-  --color-canvas:           var(--canvas);
-  --color-canvas-secondary: var(--canvas-secondary);
-  --color-surface:          var(--surface);
-  --color-canvas-inverted:  var(--canvas-inverted);
-  --color-text-primary:     var(--text-primary);
-  --color-text-secondary:   var(--text-secondary);
-  --color-text-muted:       var(--text-muted);
-  --color-border-default:   var(--border-default);
-  --color-primary:          var(--primary);
-  --color-on-primary:       var(--on-primary);
-
-  /* ── Bold accent palette (light mode only) ── */
-  --accent-1: #ff5a3c;
-  --accent-2: #5b5bd6;
-  --accent-3: #1fb6a6;
-  --accent-gradient: linear-gradient(120deg, #ff5a3c 0%, #ff8a3c 28%, #5b5bd6 70%, #1fb6a6 100%);
-  --accent-gradient-soft: linear-gradient(120deg, rgba(255,90,60,0.16) 0%, rgba(91,91,214,0.16) 60%, rgba(31,182,166,0.16) 100%);
+  --ink:             #161510;
+  --on-ink:          #e4e6dc;
+  /* text */
+  --text-primary:    #161510;
+  --text-secondary:  #55544a;
+  --text-muted:      #6f6d64;
+  --border-default:  #d9dbd0;
+  /* accent (brand, constant across themes) */
+  --accent:          #ce3f1c;
+  --accent-hover:    #b03516;
+  --accent-pressed:  #a52f12;
+  --on-accent:       #ffffff;
+  --accent-pale:     #fbe3d6;
+  --accent-copy:     #9c3412;
+  /* semantic */
+  --positive:        #15844e;  --positive-copy: #0d5c36;  --positive-pale: #def1e4;
+  --warning:         #b26a00;  --warning-copy:  #7a4a00;  --warning-pale:  #faeecf;
+  --negative:        #c4302a;  --negative-copy: #8e1f1b;  --negative-pale: #f9dedc;
+  /* elevation */
+  --shadow-1: 0 1px 2px rgba(22,21,16,.05), 0 8px 24px -8px rgba(22,21,16,.12);
+  --shadow-2: 0 2px 6px rgba(22,21,16,.06), 0 24px 48px -16px rgba(22,21,16,.22);
+  /* aliases (keep: Tailwind arbitrary-value binding) */
+  --color-canvas: var(--canvas);  --color-canvas-soft: var(--canvas-soft);
+  --color-surface: var(--surface);--color-ink: var(--ink);
+  --color-text-primary: var(--text-primary);   --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);       --color-border-default: var(--border-default);
+  --color-accent: var(--accent);  --color-accent-copy: var(--accent-copy);
 }
 
 /* ─── Dark mode overrides ─── */
 .dark {
-  --canvas:          #141413;
-  --canvas-secondary:#252320;
-  --surface:         #1f1e1b;
-  --canvas-inverted: #f5f3ee;
+  --canvas:          #141410;
+  --canvas-soft:     #1d1c18;
+  --surface:         #24231e;
+  /* --ink and --on-ink unchanged: brand-dark strips read the same in both themes */
+  --text-primary:    #f2f1ea;
+  --text-secondary:  #bdbab0;
+  --text-muted:      #8f8c82;
+  --border-default:  #3a392f;
+  --accent-pale:     #4a2317;
+  --accent-copy:     #ff9a7a;
+  --positive-copy:   #4cc27c;  --positive-pale: #163b27;
+  --warning-copy:    #e3a23a;  --warning-pale:  #3d2f0a;
+  --negative-copy:   #f0706a;  --negative-pale: #40181a;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 12px 28px -12px rgba(0,0,0,.5);
+  --shadow-2: 0 2px 8px rgba(0,0,0,.45), 0 28px 56px -16px rgba(0,0,0,.6);
+}
 
-  --text-primary:    #f5f3ee;
-  --text-secondary:  #c4c0b6;
-  --text-muted:      #9a968d;
-  --border-default:  #3d3d3a;
-
-  --primary:         #cc785c;
-  --primary-hover:   #a9583e;
-  --on-primary:      #ffffff;
-
-  /* Slightly punchier gradient for dark mode contrast */
-  --accent-1: #ff6b4a;
-  --accent-2: #7575e8;
-  --accent-3: #2dd4c0;
-  --accent-gradient: linear-gradient(120deg, #ff6b4a 0%, #ff9650 28%, #7575e8 70%, #2dd4c0 100%);
+/* ─── v1 → v2 COMPAT (delete in Phase 6; tracked in design.md §13) ─── */
+:root {
+  --primary:          var(--accent);          /* old --color-primary consumers */
+  --primary-hover:    var(--accent-hover);
+  --on-primary:       var(--on-accent);
+  --canvas-secondary: var(--canvas-soft);     /* old --color-canvas-secondary consumers */
+  --canvas-inverted:  var(--ink);             /* inverted pills/panels → brand ink */
+  /* retired gradient system, remapped to coral so .mesh-bg/.gradient-text/.glow-border
+     render as monochrome coral until Phases 3–5 rewrite their consumers */
+  --accent-1: #ce3f1c;
+  --accent-2: #b03516;
+  --accent-3: #9c3412;
+  --accent-gradient: linear-gradient(120deg, #ce3f1c 0%, #b03516 100%);
+  --accent-gradient-soft: linear-gradient(120deg, rgba(206,63,28,.14) 0%, rgba(165,47,18,.14) 100%);
+}
+.dark {
+  --accent-1: #e75c35;
+  --accent-2: #ce3f1c;
+  --accent-3: #ff9a7a;
+  --accent-gradient: linear-gradient(120deg, #e75c35 0%, #ce3f1c 100%);
+}
+/* old --color-* alias forms that v1 components reference directly */
+:root {
+  --color-primary:          var(--accent);
+  --color-on-primary:       var(--on-accent);
+  --color-canvas-secondary: var(--canvas-soft);
+  --color-canvas-inverted:  var(--ink);
 }
 
 /* ─── Global base styles ─── */
@@ -92,18 +118,29 @@
   :focus:not(:focus-visible) {
     outline: none;
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
-/* ─── Reusable component classes ─── */
+/* ─── Reusable component classes (v2) ─── */
 @layer components {
   .card {
-    background-color: var(--surface);
-    border-radius: 1.5rem;
-    border: 1px solid var(--border-default);
-    box-shadow: 0 1px 3px rgba(20,20,19,0.08);
+    background: var(--surface);
+    border-radius: 24px;
+    border: none;
+    box-shadow: none;
   }
-  .dark .card {
-    box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  .card-lined {
+    background: var(--surface);
+    border-radius: 24px;
+    border: 1px solid var(--border-default);
   }
 
   .btn-primary {
@@ -111,74 +148,93 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    background-color: var(--primary);
-    color: var(--on-primary);
-    border-radius: 0.5rem;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 0 1.25rem;
-    height: 40px;
-    transition: opacity 0.2s;
-    outline: none;
+    background-color: var(--accent);
+    color: var(--on-accent);
+    border-radius: 9999px;
+    height: 48px;
+    padding: 0 24px;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .btn-primary:hover { opacity: 0.9; }
-  .btn-primary:active { transform: scale(0.95); }
+  .btn-primary:hover { background-color: var(--accent-hover); }
+  .btn-primary:active { background-color: var(--accent-pressed); transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.45; cursor: default; }
 
   .btn-secondary {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    background-color: var(--canvas);
+    background: var(--surface);
     color: var(--text-primary);
     border: 1px solid var(--border-default);
-    border-radius: 0.5rem;
-    font-size: 14px;
-    font-weight: 500;
-    padding: 0 1.25rem;
-    height: 40px;
-    transition: border-color 0.2s;
-    outline: none;
+    border-radius: 9999px;
+    height: 48px;
+    padding: 0 24px;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
   }
   .btn-secondary:hover { border-color: var(--text-primary); }
+  .btn-secondary:active { background: var(--canvas-soft); }
 
   .label-mono {
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
+    font-weight: 500;
     font-family: var(--font-mono);
   }
 
   .pill {
-    padding: 0.25rem 0.625rem;
+    padding: 4px 12px;
     border-radius: 9999px;
-    font-size: 9px;
+    font-size: 12px;
     font-family: var(--font-mono);
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     text-transform: uppercase;
+    font-weight: 500;
   }
 
   .input-base {
+    height: 48px;
     border: 1px solid var(--border-default);
-    border-radius: 0.75rem;
-    background-color: var(--canvas);
+    border-radius: 12px;
+    background: var(--surface);
     color: var(--text-primary);
-    font-size: 0.875rem;
-    transition: border-color 0.2s;
+    font-size: 16px;
+    padding: 0 16px;
+    transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
     outline: none;
   }
   .input-base:focus { border-color: var(--text-primary); }
+  .input-base.input-error,
+  .input-error {
+    border-color: var(--negative);
+  }
+  .textarea-base {
+    border: 1px solid var(--border-default);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text-primary);
+    font-size: 16px;
+    padding: 12px 16px;
+    transition: border-color 150ms cubic-bezier(0.16, 1, 0.3, 1);
+    outline: none;
+  }
+  .textarea-base:focus { border-color: var(--text-primary); }
 
   .th-mono {
-    padding: 1rem 1.5rem;
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.12em;
     font-family: var(--font-mono);
     color: var(--text-muted);
+    padding: 16px 24px;
   }
 
-  /* ─── Bold / fancy helper classes (light mode) ─── */
+  /* DEPRECATED — delete in Phase 6 (consumers remain until Phase 3/5) */
   .gradient-text {
     background-image: var(--accent-gradient);
     -webkit-background-clip: text;

@@ -126,7 +126,7 @@ Top-right corner, vertical button stack (`.controls` in `public/embed-viewer.htm
 | `#btn-rotate` | `RotateCcw` SVG, spins via `animation: spin 8s linear infinite` when `aria-pressed="true"` (matches landing's `animationDuration: '8s'`) | Toggles `mv.autoRotate`. Active state: `background: var(--text-primary); color: #fff; border-color: var(--text-primary)`. Inactive state: white with muted icon. |
 | `#btn-reset` | `Compass` SVG (lucide-style polygon inside circle) | Sets `mv.cameraOrbit = "0deg 75deg 105%"` and `mv.cameraTarget = "0m 0.4m 0m"` (identical to `ThreeDConfigurator.tsx:74-76`). |
 
-Both buttons have `aria-label`, `:focus-visible` ring per `design.md:49` (`2px solid #1A1A1A`), and `cursor: pointer`. They are positioned `top: 16px; right: 16px; z-index: 20;` (over the model, but only after load — the loader uses `z-index: 10` so it never sits behind the controls).
+Both buttons have `aria-label`, `:focus-visible` ring per `design.md` §10.1 (`2px solid #1A1A1A`), and `cursor: pointer`. They are positioned `top: 16px; right: 16px; z-index: 20;` (over the model, but only after load — the loader uses `z-index: 10` so it never sits behind the controls).
 
 ## AR button
 
@@ -150,7 +150,7 @@ A third action, slotted into `<model-viewer>` via the standard `slot="ar-button"
 - Hover darkens to `#2A2825`; `:active { transform: scale(0.97) }`
 - `box-shadow: 0 2px 8px rgba(0,0,0,0.12)`
 - `aria-label="View in your space"`; icon `aria-hidden="true"`
-- `:focus-visible` ring per `design.md:49`
+- `:focus-visible` ring per `design.md` §10.1
 
 **Capability gating:** the button starts `hidden` and is revealed only on the `<model-viewer>` `load` event if `mv.canActivateAR` is truthy. On desktop browsers (and any other device without a usable AR mode) `canActivateAR` is `false` and the button never appears — no dead click target.
 

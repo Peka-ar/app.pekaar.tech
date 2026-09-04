@@ -8,7 +8,7 @@ export interface TableProps {
 
 export function Table({ className, children }: TableProps) {
   return (
-    <div className={cn('w-full overflow-auto', className)}>
+    <div className={cn('w-full overflow-auto rounded-[16px] border border-[var(--color-border-default)] bg-[var(--color-surface)]', className)}>
       <table className="w-full border-collapse">{children}</table>
     </div>
   );
@@ -21,7 +21,7 @@ export interface TableHeadProps {
 
 export function TableHead({ className, children }: TableHeadProps) {
   return (
-    <thead className={cn('th-mono bg-[var(--color-canvas-secondary)] text-left', className)}>
+    <thead className={cn('th-mono bg-[var(--color-canvas-soft)] text-left border-b border-[var(--color-border-default)]', className)}>
       {children}
     </thead>
   );

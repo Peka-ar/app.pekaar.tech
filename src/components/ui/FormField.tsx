@@ -15,14 +15,14 @@ export function FormField({ label, htmlFor, error, hint, required, children }: F
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="text-[var(--negative)] ml-1">*</span>}
       </Label>
       {children}
       {hint && !error && (
         <p className="text-xs text-[var(--color-text-muted)]">{hint}</p>
       )}
       {error && (
-        <p role="alert" className="text-xs text-red-600">
+        <p role="alert" className="text-xs text-[var(--negative-copy)]">
           {error}
         </p>
       )}

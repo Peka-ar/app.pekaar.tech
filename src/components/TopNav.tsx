@@ -14,7 +14,7 @@ export function TopNav() {
   if (shouldHide) return null;
 
   return (
-    <header className="bg-[var(--color-canvas)]/90 border-b border-[var(--color-border-default)] sticky top-0 z-50 backdrop-blur-md">
+    <header className="bg-[var(--color-surface)]/80 border-b border-[var(--color-border-default)] sticky top-0 z-50 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
 
         <div className="flex items-center gap-2.5 sm:gap-4 overflow-hidden">
@@ -25,18 +25,24 @@ export function TopNav() {
             <span className="text-[15px] sm:text-lg font-light tracking-tight font-serif text-[var(--color-text-primary)] shrink-0 hidden sm:block">STUDIO.V</span>
           </Link>
           <div className="hidden md:flex items-center gap-6 ml-6">
-             <Link href="#showroom-catalog-panel" className="text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Product</Link>
-             <Link href="#features" className="text-[14px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Features</Link>
+             <Link href="#showroom-catalog-panel" className="text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Product</Link>
+             <Link href="#features" className="text-sm font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors">Features</Link>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
           <ThemeToggle />
           <Link
             href="/auth"
-            className="px-4 py-2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] hover:border-[var(--color-text-primary)] border border-transparent rounded-md text-[14px] font-medium hidden sm:block transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
+            className="hidden sm:inline-flex items-center justify-center h-10 px-5 text-sm font-semibold rounded-full bg-[var(--color-surface)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] hover:border-[var(--color-text-primary)] transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
           >
             Sign in
+          </Link>
+          <Link
+            href="/auth"
+            className="hidden sm:inline-flex items-center justify-center h-10 px-5 text-sm font-semibold rounded-full bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-hover)] active:bg-[var(--accent-pressed)] active:scale-[0.98] transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
+          >
+            Get started
           </Link>
         </div>
 

@@ -163,7 +163,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
 
         <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
           <div
-            className="text-[9px] uppercase tracking-widest font-mono mb-4 px-3 pt-2"
+            className="label-mono mb-4 px-3 pt-2"
             style={{ color: 'var(--text-muted)' }}
           >
             Menu
@@ -176,15 +176,15 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
                 key={item.name}
                 href={item.path}
                 onClick={handleLinkClick}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[10px] uppercase tracking-widest font-mono transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{
-                  backgroundColor: isActive ? 'var(--text-primary)' : 'transparent',
-                  color: isActive ? 'var(--on-primary)' : 'var(--text-secondary)',
+                  backgroundColor: isActive ? 'var(--accent-pale)' : 'transparent',
+                  color: isActive ? 'var(--accent-copy)' : 'var(--text-secondary)',
                   outlineColor: 'var(--text-primary)',
                 }}
                 onMouseEnter={e => {
                   if (!isActive) {
-                    e.currentTarget.style.backgroundColor = 'var(--canvas-secondary)';
+                    e.currentTarget.style.backgroundColor = 'var(--canvas-soft)';
                     e.currentTarget.style.color = 'var(--text-primary)';
                   }
                 }}
@@ -210,7 +210,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
               <div
                 className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-mono"
                 style={{
-                  backgroundColor: 'var(--canvas-secondary)',
+                  backgroundColor: 'var(--canvas-soft)',
                   border: '1px solid var(--border-default)',
                 }}
               >
@@ -236,9 +236,9 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
             <form action={logout}>
               <button
                 type="submit"
-                className="w-full mt-1 px-3 py-1.5 text-[9px] font-mono uppercase tracking-widest text-left rounded-lg transition-colors"
+                className="w-full mt-1 px-3 py-1.5 text-xs font-mono uppercase tracking-widest text-left rounded-lg transition-colors"
                 style={{ color: 'var(--text-muted)' }}
-                onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.backgroundColor = 'var(--canvas-secondary)'; }}
+                onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.backgroundColor = 'var(--canvas-soft)'; }}
                 onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
                 Sign Out

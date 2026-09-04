@@ -5,14 +5,15 @@ import { Providers } from "./providers";
 import { TopNav } from "@/components/TopNav";
 import { createNextServerHelpers } from "@appwrite.io/react/server/next";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "@/lib/appwrite-config";
-const cormorant = localFont({
+
+const manrope = localFont({
   src: [
-    { path: "../assets/fonts/cormorant-300.woff2", weight: "300", style: "normal" },
-    { path: "../assets/fonts/cormorant-400.woff2", weight: "400", style: "normal" },
-    { path: "../assets/fonts/cormorant-500.woff2", weight: "500", style: "normal" },
-    { path: "../assets/fonts/cormorant-600.woff2", weight: "600", style: "normal" },
+    { path: "../assets/fonts/manrope-500.woff2", weight: "500", style: "normal" },
+    { path: "../assets/fonts/manrope-600.woff2", weight: "600", style: "normal" },
+    { path: "../assets/fonts/manrope-700.woff2", weight: "700", style: "normal" },
+    { path: "../assets/fonts/manrope-800.woff2", weight: "800", style: "normal" },
   ],
-  variable: "--font-serif-loaded",
+  variable: "--font-display-loaded",
   display: "swap",
   preload: true,
 });
@@ -54,7 +55,7 @@ export default async function RootLayout({
   const session = await helpers.readSessionCookie();
 
   return (
-    <html lang="en" className={`${cormorant.variable} ${inter.variable} ${jetbrains.variable} antialiased h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${manrope.variable} ${inter.variable} ${jetbrains.variable} antialiased h-full`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
