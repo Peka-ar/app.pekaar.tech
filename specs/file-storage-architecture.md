@@ -1,53 +1,53 @@
-# File Storage Architecture Spec
+# File Storage Architecture
 
-> **Current state:** Appwrite Storage is the sole file provider. UploadThing and Google Drive are fully removed (Phase 5) — no legacy cleanup code, gdrive-download route, or UT env vars remain. Only historical **rows** (`provider: "uploadthing"`/`"external"`) persist as read-only seed/legacy data. This document is the single source of truth for the file handling system's current design. Earlier architectures (Filebase, UploadThing + GDrive) are preserved in §14 Migration history.
+> **Parent:** [`./WEBSITE.md`](./WEBSITE.md) — deep dive on file handling: uploads, delivery, permissions, archival.
 
 ## Overview
 
-Peka AR stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** 3D models, and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`, endpoint `https://fra.cloud.appwrite.io/v1`). Files upload **browser-direct** to Appwrite (bypassing the SSR host's request body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
+Peka AR stores three kinds of assets — **reference images** (brand-uploaded product photos), **GLB** and **USDZ** 3D models — in **Appwrite Storage** (project `6a8562a20037b62075e1`, region `fra`). Files upload **browser-direct** to Appwrite (bypassing the SSR host's request body limit — essential for 100 MB+ GLB files), are recorded as rows in the TablesDB `assets` table, and are served through two paths:
 
-- **In-app reads** (thumbnails, review modals, "Previous models") — auth-gated proxy `GET /api/v1/assets/[assetId]/file` which streams bytes from Appwrite with the server API key.
-- **Published embeds** (third-party storefronts) — direct CDN URLs (`assets.url`, the Appwrite `/view` endpoint) made publicly readable by granting `read:any` on the storage file at publish time.
+- **In-app reads** (thumbnails, review modals, "Previous models") — auth-gated proxy `GET /api/v1/assets/[assetId]/file`, which streams bytes from Appwrite with the server API key.
+- **Published embeds** (third-party storefronts) — direct CDN URLs (the Appwrite `/view` endpoint) made publicly readable by granting `read:any` on the storage file at publish time.
+
+Legacy seed/hero rows carry `provider: "external"` (GitHub/Unsplash URLs) — read-only data, fetched verbatim by the proxy.
 
 ## Architecture decisions
 
-### 1. Appwrite Storage as the sole provider
+### 1. Two buckets, label-gated
 
-Two buckets (console config, Phase 0 of `tasks/appwrite-migration.md`):
+| Bucket | ID | Max file | Extension gate | Create perm | Read perm |
+|---|---|---|---|---|---|
+| Models | `models` | 150 MB | glb/usdz (enforced by `ensure-backend`) | `label:ADMIN` | `label:ADMIN` |
+| Reference images | `reference-images` | 16 MB | jpg png webp gif avif | `label:BRAND` | `label:BRAND` |
 
-| Bucket | ID | Max file | Extension gate | Create perm | Read perm | Encryption | Antivirus |
-|---|---|---|---|---|---|---|---|
-| Models | `models` | 150 MB | none | `label:ADMIN` | `label:ADMIN` | OFF (>20 MB skip) | OFF |
-| Reference images | `reference-images` | 16 MB | `jpg png webp gif avif` | `label:BRAND` | `label:BRAND` | ON | ON |
-
-- Browser uploads are authenticated by the **session cookie** (`appwrite-session-6a8562a20037b62075e1`) via the `@appwrite.io/react` client; the bucket `create` permission gates the role.
+- Browser uploads are authenticated by the **session cookie** via the `@appwrite.io/react` client; the bucket `create` permission gates the role.
 - File-level `read:any` is only ever granted on **published projects' GLB/USDZ files** (see §4). Reference images never get `read:any`.
-- `assets.url` stores the absolute `/view` URL: `${APPWRITE_ENDPOINT}/storage/buckets/{bucketId}/files/{fileId}/view?project=${APPWRITE_PROJECT_ID}`, built server-side via `buildFileUrl` (`src/lib/appwrite-config.ts:13`) — the server SDK's `getFileView` returns bytes, not a URL. **The `?project=` param is required**: Appwrite rejects anonymous `/view` requests without project context (404 even for `read("any")` files — verified 2026-08-30, Phase 6 bug 3). The SDK config endpoint re-derives the URL on-the-fly for `provider === "appwrite"` rows (see §6), so the stored `url` is a convenience cache, not the authoritative URL for published assets.
+- `assets.url` stores the absolute `/view` URL, built server-side via `buildFileUrl` (`src/lib/appwrite-config.ts`). **The `?project=<id>` param is required**: Appwrite rejects anonymous `/view` requests without project context (404 even for `read("any")` files). The SDK config endpoint re-derives the URL on-the-fly, so the stored `url` is a convenience cache, not authoritative.
 
-### 2. Browser-direct uploads (bypass the SSR host's body limit)
+### 2. Browser-direct uploads
 
 ```
 Client (useAppwriteUpload)            Appwrite Storage              Next.js (recordAssetUpload)
-   │                                      │                                │
-   │── storage.createFile({bucketId,     │                                │
-   │     fileId: ID.unique(), file,      │  (browser → Appwrite direct,    │
-   │     onProgress }) ─────────────────→│   session-authenticated)        │
-   │   ← progress { 0-100 } ─────────────│                                │
-   │                                      │                                │
-   │── recordAssetUpload({fileId, type}) ────────────────────────────────→│── requirePrincipal(by type)
-   │                                      │                                │── storage.getFile (admin client)
-   │                                      │                                │── TablesDB createRow(assets, rowId: fileId)
-   │←── { asset } ────────────────────────│                                │
+    │                                      │                                │
+    │── storage.createFile({bucketId,     │                                │
+    │     fileId: ID.unique(), file,      │  (browser → Appwrite direct,    │
+    │     onProgress }) ─────────────────→│   session-authenticated)        │
+    │   ← progress { 0-100 } ─────────────│                                │
+    │                                      │                                │
+    │── recordAssetUpload({fileId, type}) ────────────────────────────────→│── requirePrincipal(by type)
+    │                                      │                                │── storage.getFile (admin client)
+    │                                      │                                │── TablesDB createRow(assets, rowId: fileId)
+    │←── { asset } ────────────────────────│                                │
 ```
 
-- **`fileId` = assets row `$id`** — a single identifier across storage and the database. The client generates it with `ID.unique()`; `recordAssetUpload` reuses it as the row id. The action is **idempotent by `rowId = fileId`** (`record-asset.ts:75`) — a retried call or a browser that uploaded but never received the response reuses the existing row (ownership-checked) instead of creating a duplicate.
-- The server never proxies upload bytes. The `serverActions.bodySizeLimit: '16mb'` limit remains in `next.config.mjs` for the (small) action payloads — it is a general Next.js server-action cap, unrelated to file uploads (browser-direct to Appwrite).
-- The client SDK `createFile` `onProgress` receives `UploadProgress = { progress: 0-100 }` (percent), unlike the server SDK's `{ progress, bytesUploaded, bytesTotal }`.
-- **Client-side session requirement (Phase 6 bug 1):** uploads are browser-direct to `fra.cloud.appwrite.io`, so the client SDK must hold the session. The `@appwrite.io/react` SSR sign-in only sets the httpOnly cookie (and returns `{ user }`); the provider's client is built per page load with `setSession(ssr.session)` from the root-layout prop. A **soft-navigation** sign-in keeps that prop `null`, so `storage.createFile` would go out as a guest and fail the label-gated bucket `create`. `SignInForm` therefore calls `client.setSession(sessionSecret)` (secret returned by `getSessionPrincipal`, `auth.ts:219`) before navigating — see `pages/auth.md` §2.
+- **`fileId` = assets row `$id`** — a single identifier across storage and database (client generates it with `ID.unique()`; the action reuses it as the row id). `recordAssetUpload` is **idempotent by `rowId = fileId`** — a retried call or a lost response reuses the existing row (ownership-checked) instead of duplicating.
+- The server never proxies upload bytes. `serverActions.bodySizeLimit: '16mb'` in `next.config.mjs` is a general action-payload cap, unrelated to uploads.
+- The client SDK `createFile` `onProgress` receives **percent** (`{ progress: 0-100 }`), unlike the server SDK's bytes-based progress.
+- **Client session requirement:** uploads are browser-direct, so the client SDK must hold the session. The `@appwrite.io/react` SSR sign-in only sets the httpOnly cookie; a **soft-navigation** sign-in leaves the provider's client `session = null`, so `storage.createFile` goes out as a guest and fails the label-gated `create`. `SignInForm` therefore calls `client.setSession(sessionSecret)` (secret returned by `getSessionPrincipal`) before navigating — see `pages/auth.md` §Sign In.
 
-### 3. The `assets` TablesDB row (canonical file record)
+### 3. The `assets` row (canonical file record)
 
-`AssetsRow` (`src/server/db/client.ts:50`) — mirrors the old Prisma `Asset` model, minus storage-provider fields:
+`AssetsRow` in `src/server/db/client.ts`:
 
 ```
 $id           = storage fileId          (single identifier, set by client ID.unique())
@@ -55,168 +55,133 @@ projectId     string | null             (null until linked by createProject / ad
 ownerId       string                    (principal.userId at upload time)
 type          "REFERENCE_IMAGE" | "MODEL_GLB" | "MODEL_USDZ"
 status        "READY" | "ARCHIVED"      (rows never enter UPLOADING/PUBLISHED/DELETED)
-provider      "appwrite"                (legacy: "uploadthing" | "external" for seed rows)
-fileId        string | null             (storage file id; null for seed rows — the old `key`/`gdriveFileId` columns are gone)
-url           string                    (absolute Appwrite /view URL; legacy rows keep their ufs.sh / external URL)
-originalName  string
-mimeType      string                    (falls back to type default: model/gltf-binary | model/vnd.usdz+zip)
-size          number                    (file.sizeOriginal)
-checksum      string | null             (file.signature — MD5)
+provider      "appwrite"                (legacy seed rows: "external")
+fileId        string | null             (null for seed rows)
+url           string                    (absolute Appwrite /view URL; legacy rows keep external URLs)
+originalName / mimeType / size / checksum
 ```
 
-New rows are created by `recordAssetUpload` with `projectId: null`, `status: "READY"`, `provider: "appwrite"` (`src/app/actions/record-asset.ts:86`). `projectId` is set later by `createProject` (reference images) or `adminSubmitProject` (models).
+New rows are created by `recordAssetUpload` with `projectId: null`, `status: "READY"`. `projectId` is set later by `createProject` (reference images) or `adminSubmitProject` (models).
 
 ### 4. Public access model (publish grant / unpublish revoke)
 
-Bucket-level `read` is label-scoped, so the **proxy route is the only in-app delivery path** (it fetches with the server API key, `APPWRITE_API_KEY` in `.env`). Public embed reads go through **file-level `read:any`**:
+Bucket-level `read` is label-scoped, so the **proxy route is the only in-app delivery path**. Public embed reads go through **file-level `read:any`**:
 
-- **Publish** (`brandPublishProjectService`, `src/server/services/project.service.ts:127` — action wrapper `src/app/actions/project.ts:31`): grant FIRST, flip status after:
-  1. `listAppwriteModelAssetsForProject(projectId)` (`project.service.ts:436`) — READY, `provider === "appwrite"`, GLB/USDZ rows with `fileId` (query: `equal(projectId)` + `Query.or([equal(type, GLB), equal(type, USDZ)])` + `equal(status, READY)` + `equal(provider, "appwrite")`).
-  2. `setFilePublicWithRetry(a, true)` (`src/server/storage.ts`) — admin-client `storage.updateFile({ bucketId, fileId, permissions: [read(any)] })`, 3 attempts with 250ms exp backoff, allSettled, failures logged only.
-  3. Guarded `updateRows` → `PUBLISHED`. If the flip fails: best-effort revoke + throw. Invariant: `PUBLISHED ⇒ files publicly readable`.
-- **Unpublish** (`brandSendForRevisionsService` when `wasPublished`, `project.service.ts:186`): flip status to `REVISIONS` in the transaction, then `setFilePublicWithRetry(a, false)` → `permissions: []` (node-appwrite v26 `updateFile` only sends `permissions` when defined, so `[]` clears file-level perms). Failures logged only (residual drift → nightly reconciliation, see `backend-architecture.md` §11).
-- `revalidatePath('/embed/[id]')` on both, so the embed gate and cached config refresh.
-- **Reference images never receive `read:any`.** `Permission`/`Role` are imported from `node-appwrite` aliased as `AppwriteRole` (`src/server/storage.ts:1`) to avoid clashing with the local `Role` enum from `@/server/auth-guards`.
+- **Publish** (`brandPublishProjectService` in `src/server/services/project.service.ts`): grant FIRST, flip status after.
+  1. `listAppwriteModelAssetsForProject(projectId)` — READY, `provider === "appwrite"`, GLB/USDZ rows with `fileId`.
+  2. `setFilePublicWithRetry(asset, true)` (`src/server/storage.ts`) — admin-client `storage.updateFile` with `permissions: [read(any)]`, 3 attempts / 250ms exp backoff.
+  3. Guarded `updateRows` → `PUBLISHED`. If the flip fails: best-effort revoke + throw. **Invariant: `PUBLISHED ⇒ files publicly readable`.**
+- **Unpublish** (`brandSendForRevisionsService` when `wasPublished`): flip status in the tx, then `setFilePublicWithRetry(asset, false)` → `permissions: []` (node-appwrite only sends `permissions` when defined, so `[]` clears file-level perms). Failures logged only — residual drift is covered by the nightly reconciliation sweep (`backend-architecture.md` §11).
+- Both revalidate `/embed/[id]`.
+- `Permission`/`Role` are imported from `node-appwrite` aliased as `AppwriteRole` (`src/server/storage.ts`) to avoid clashing with the local `Role` enum.
 
 ### 5. Asset delivery route — `GET /api/v1/assets/[assetId]/file`
 
-`src/app/api/v1/assets/[assetId]/file/route.ts:1` — TablesDB-backed, **always auth-gated** (no public bypass):
+**Always auth-gated** (no public bypass):
 
-1. `getRowSafe(assets, id)` → 404 `{ error: "asset unavailable" }` if missing or `status ∉ {READY, PUBLISHED, ARCHIVED}`.
-2. `requirePrincipal({ roles: [ADMIN, BRAND] })` → 401 `unauthorized` (Unauthenticated/Stale) / 403 `forbidden` (Forbidden). BRAND passes if `asset.ownerId === principal.userId` **OR** the linked project's `brandId` (`route.ts:29-41`) — unlinked uploads (rows created before `createProject` runs) are viewable by their owner, fixing the old Prisma route's 404-on-unlinked-assets bug.
-3. Delivery (`fetchAssetStream`, `route.ts:72`):
-   - `provider === "appwrite"` → `fetch("{endpoint}/storage/buckets/{bucket}/files/{fileId}/download")` with `X-Appwrite-Project` + `X-Appwrite-Key` headers; **streams `res.body`** (web stream, zero buffering — critical for 128 MB GLBs).
-   - `provider ∈ {external, uploadthing}` (seed / legacy rows) → plain `fetch(asset.url)`.
-4. Response headers: stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename="<encoded originalName>"`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present. A log line records every hit (`route.ts:66`).
+1. `getRowSafe(assets, id)` → 404 if missing or `status ∉ {READY, PUBLISHED, ARCHIVED}`.
+2. `requirePrincipal({ roles: [ADMIN, BRAND] })`. BRAND passes if `asset.ownerId === principal.userId` **OR** the linked project's `brandId` — unlinked uploads (rows created before `createProject` runs) are viewable by their owner.
+3. Delivery (`fetchAssetStream`): `provider === "appwrite"` → `fetch("{endpoint}/storage/buckets/{bucket}/files/{fileId}/download")` with `X-Appwrite-Project` + `X-Appwrite-Key` headers, **streaming `res.body`** (zero buffering — critical for 128 MB GLBs). Legacy/external providers → plain `fetch(asset.url)`.
+4. Headers: stored `mimeType` (type-default fallback), `Content-Disposition: inline; filename=…`, `Cache-Control: private, max-age=60`, upstream `Content-Length` when present.
 
-No 302 fast path — the proxy always streams so auth and source detection stay server-side. One SSR-host egress hop per read.
+No 302 fast path — the proxy always streams so auth and source detection stay server-side. One SSR-host egress hop per read; embed reads hit the CDN directly.
 
-**Consumers (all point at the proxy):** `TasksClient.tsx` thumbnails/lightbox (`:81, :93, :729, :821, :993, :1166, :1253`), `AdminTasksClient.tsx` thumbnails + "Current GLB/USDZ View" links (`:81, :253, :383, :453, :510`), "Previous models" entries (archived rows), `getUserProjects`/`getAllTasks` derived `referenceUrls`/`assetUrls`/`archivedAssetUrls` (`src/lib/project-augment.ts:61` `proxyUrl` helper). `<Image unoptimized>` remains the pattern for thumbnail reads (the optimizer's anonymous fetch would 401).
+**Consumers:** all `TasksClient`/`AdminTasksClient` thumbnails, lightboxes, and View links; derived `referenceUrls`/`assetUrls`/`archivedAssetUrls` in `src/lib/project-augment.ts` (`proxyUrl` helper). **`<Image unoptimized>` is the required pattern** for proxy reads — the optimizer's anonymous fetch would 401 (see `WEBSITE.md` §5).
 
 ### 6. SDK config / embed — direct CDN URLs
 
-- `GET /api/sdk/v1/config/[projectId]` (`src/app/api/sdk/v1/config/[projectId]/route.ts:1`): TablesDB-backed, PUBLISHED-only, returns `{ assetUrls: { glb, usdz }, sdkConfig }`. URLs are derived on-the-fly by `resolveAssetUrl(asset)` (`route.ts:6`) — `buildFileUrl(bucketForAssetType(type), fileId)` for `provider === "appwrite"` rows (so the `?project=` param is always present, independent of when the row was created), falling back to the stored `url` for external/legacy rows. Publicly readable because read:any was granted at publish. Fallback: first non-READY row per type if no READY exists. `Cache-Control: public, s-maxage=60, stale-while-revalidate=86400`.
-- `public/embed-viewer.html:143` sets `APP_URL = ""`, so absolute URLs pass through unchanged (`APP_URL + cfg.assetUrls.glb`).
-- `GET /embed/[projectId]` (`src/app/embed/[projectId]/route.ts:1`): TablesDB hasGlb check (required — the old Prisma gate couldn't see TablesDB rows, breaking publish→embed), serves the HTML template with `{PROJECT_ID}` replaced. No cache (no-store).
+- `GET /api/sdk/v1/config/[projectId]`: PUBLISHED-only; URLs derived on-the-fly by `resolveAssetUrl` — `buildFileUrl(bucketForAssetType(type), fileId)` for appwrite rows (always carries `?project=`), falling back to stored `url` for legacy/external rows. Publicly readable because read:any was granted at publish.
+- `public/embed-viewer.html` sets `APP_URL = ""`, so absolute CDN URLs pass through unchanged.
+- Full embed spec: `pages/embed.md`.
 
 ### 7. SDK events route
 
-`POST /api/sdk/v1/events` (`src/app/api/sdk/v1/events/route.ts:1`): validates `eventType ∈ {VIEW, INTERACTION, AR_LAUNCH}` + `sessionId` + `projectId`, PUBLISHED guard, then `createRow(analytics_events, { rowId: ID.unique(), data: { eventType, sessionId, projectId, brandId: project.brandId } })` → 201 `{ success, eventId }`.
+`POST /api/sdk/v1/events`: validates `eventType ∈ {VIEW, INTERACTION, AR_LAUNCH}` + `sessionId` + `projectId`, PUBLISHED guard, `createRow(analytics_events, …)` → `201 { success, eventId }`.
 
 ### 8. The upload hook — `useAppwriteUpload`
 
-`src/lib/use-appwrite-upload.ts:40` (`"use client"`):
+`src/lib/use-appwrite-upload.ts` (`"use client"`):
 
 ```ts
 useAppwriteUpload({ bucketId, maxSizeMB, allowedExtensions? })
   → { upload(file, type): Promise<UploadedAsset | null>, isUploading, progress: 0-100, error, reset }
 ```
 
-- Uses the pre-built `storage` service from `useAppwrite()` (the `@appwrite.io/react` provider constructs `new Storage(client)` with the session cookie attached — `node_modules/@appwrite.io/react/dist/esm/index.js:25`).
-- Client-side validation: size ≤ `maxSizeMB`, extension ∈ `allowedExtensions` (if provided).
-- `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress: (p) => setProgress(p.progress) })`, then `recordAssetUpload({ fileId, type })`.
-- Errors: `AppwriteException` 403 → permission, 413 → too large, 429 → rate limit, 400 → bucket rejection; otherwise the message. On failure, best-effort `storage.deleteFile` orphan cleanup.
-- Returns `RecordedAsset` (`record-asset.ts:16`): `{ id, url, type, status, mimeType, size, originalName }` — **no `key`**.
+- Uses the pre-built `storage` service from `useAppwrite()` (the provider attaches the session cookie).
+- Client-side validation: size ≤ `maxSizeMB`, extension ∈ `allowedExtensions`.
+- `storage.createFile({ bucketId, fileId: ID.unique(), file, onProgress })`, then `recordAssetUpload({ fileId, type })`.
+- Error mapping: 403 permission, 413 too large, 429 rate limit, 400 bucket rejection. On failure, best-effort `storage.deleteFile` orphan cleanup.
+- Returns `RecordedAsset`: `{ id, url, type, status, mimeType, size, originalName }`.
 
-Consumers:
-- `src/app/tasks/TasksClient.tsx:169` — `bucketId: APPWRITE_REFERENCE_IMAGES_BUCKET_ID`, 16 MB, `["jpg","jpeg","png","webp","gif","avif"]`; `upload(file, "REFERENCE_IMAGE")`.
-- `src/app/admin/tasks/AdminTasksClient.tsx:113,119` — two instances, `bucketId: APPWRITE_MODELS_BUCKET_ID`, 128 MB, `["glb"]` / `["usdz"]`; `upload(file, "MODEL_GLB")` / `upload(file, "MODEL_USDZ")`.
+Consumers: `TasksClient` (reference-images, 16 MB) and `AdminTasksClient` (two instances — glb + usdz, 128 MB each, bucket `models`).
 
 ### 9. `recordAssetUpload` server action
 
-`src/app/actions/record-asset.ts:38` — `recordAssetUpload({ fileId, type }) → { asset: RecordedAsset }`:
-- Role per type: `REFERENCE_IMAGE` → `[Role.BRAND]`; `MODEL_GLB`/`MODEL_USDZ` → `[Role.ADMIN]` (mirrors the bucket `create` perms).
-- Admin-client `storage.getFile({ bucketId, fileId })` (validates existence + size metadata).
-- `mimeType = file.mimeType || defaultMimeTypeForAssetType(type) || "application/octet-stream"` (browsers send empty types for GLB/USDZ).
-- `createRow(assets, { rowId: fileId, data: { projectId: null, ownerId, type, status: READY, provider: "appwrite", fileId, url: buildFileUrl(...), originalName, mimeType, size: file.sizeOriginal, checksum: file.signature } })`.
+`src/app/actions/record-asset.ts` — role per type (REFERENCE_IMAGE → BRAND; models → ADMIN, mirroring bucket `create` perms). Admin-client `storage.getFile` for metadata (validates existence); `mimeType = file.mimeType || defaultMimeTypeForAssetType(type)` (browsers send empty types for GLB/USDZ); idempotent `createRow(assets, { rowId: fileId, … })`.
 
 ### 10. Archival
 
-`adminSubmitProject` (`src/app/actions/admin.ts`, transaction): archives prior READY GLB/USDZ rows (projectId link preserved for "Previous models"), links the new rows. **No post-commit cleanup** — archived files are always **kept** in Appwrite Storage (user decision). Archived models stay viewable via the proxy ("Previous models" list) and, while the project is published, via their read:any grant. The legacy `utapi.deleteFiles` branch was removed with the UploadThing package in Phase 5.
+`adminSubmitProject` archives prior READY GLB/USDZ rows in the same transaction (projectId preserved for "Previous models") and links the new rows. **Archived files are always kept in Appwrite Storage** (user decision) — viewable via the proxy, and via their read:any grant while the project stays published. No quota impact on re-upload.
 
 ### 11. File validation rules
 
 | Asset type | Gate | Max size | MIME enforcement |
 |---|---|---|---|
-| `REFERENCE_IMAGE` | console bucket extension gate `jpg png webp gif avif` + client `allowedExtensions` | 16 MB (console max-file) | Bucket-level (antivirus ON) |
-| `MODEL_GLB` | client `["glb"]` | 128 MB (hook) / 150 MB (console max-file) | Weak — picker filters by extension; `recordAssetUpload` defaults mime to `model/gltf-binary` |
+| `REFERENCE_IMAGE` | bucket extension gate + client `allowedExtensions` | 16 MB | Bucket-level (antivirus ON) |
+| `MODEL_GLB` | client `["glb"]` | 128 MB (hook) / 150 MB (bucket) | Weak — picker filters by extension; mime defaults to `model/gltf-binary` |
 | `MODEL_USDZ` | client `["usdz"]` | same | Weak — defaults to `model/vnd.usdz+zip` |
 
-### 12. `next.config.mjs`
+### 12. Environment variables
 
-`images.remotePatterns`: `images.unsplash.com` (seed) + `fra.cloud.appwrite.io` (direct Appwrite CDN reads — glb/usdz loads go through the proxy, but future `<Image>`-served refs may hit the CDN). `serverActions.bodySizeLimit: '16mb'` (general server-action payload cap — unrelated to UploadThing, which is gone) kept for action payloads.
-
-### 13. Environment variables
-
-| Var | Used for | Location |
-|---|---|---|
-| `APPWRITE_API_KEY` | Server-side proxy streaming, `getFile`, `updateFile` (perms) | `.env` (gitignored), read via `src/server/appwrite.ts:5` (env validated by `src/server/env.ts`) |
-| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | Client + server endpoint | public |
-| `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | Client + server project | public |
-
-> Removed in Phase 5: `UPLOADTHING_TOKEN`, `GOOGLE_OAUTH_*`, `GDRIVE_BACKUP_FOLDER_ID` — no longer in `.env` or `.env.example`.
+| Var | Used for |
+|---|---|
+| `APPWRITE_API_KEY` (local) / `STUDIOV_API_KEY` (Sites) | Server-side proxy streaming, `getFile`, `updateFile` (permissions) |
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` / `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | Client + server endpoint/project |
 
 ## Data flow
 
 ### Brand uploads reference images
-1. Brand opens "New Task" modal in `TasksClient.tsx` → `useAppwriteUpload(...).upload(file, "REFERENCE_IMAGE")`.
-2. Browser `storage.createFile` (session cookie, `label:BRAND` create perm) → `recordAssetUpload` → TablesDB `assets` row (READY, `provider: "appwrite"`, `$id` = fileId).
-3. Hook returns `RecordedAsset`; client stores it in `uploadedAssets` (max 5).
-4. "Queue Generation" → `createProject(name, assetIds, sku, instructions, dimensions)` — tx: quota decrement (`usageLimits`), verify asset rows READY + owned, create PENDING project, link assets (`projectId` set, `isNull` guard).
+1. "New Task" modal → `upload(file, "REFERENCE_IMAGE")` → browser `storage.createFile` (`label:BRAND` create perm) → `recordAssetUpload` → READY `assets` row (`$id` = fileId).
+2. Hook returns `RecordedAsset`; client stores it in `uploadedAssets` (max 5).
+3. "Queue Generation" → `createProject(...)` — tx: quota decrement, verify assets READY + owned, create PENDING project, link assets.
 
 ### Admin uploads 3D model
-1. Admin opens a PENDING or REVISIONS project from `/admin/tasks` → Management modal.
-2. Uploads GLB → `upload(file, "MODEL_GLB")` (same flow; `label:ADMIN` create perm). Optional USDZ → `MODEL_USDZ`. "Replace GLB/USDZ file" dropzone label when a READY model is already linked.
-3. "Submit for Review" → `adminSubmitProject` — tx: status flip (`PENDING|REVISIONS` → `COMPLETED`), archive prior READY models (files **always kept** — no post-commit cleanup), link new rows.
+1. `/admin/tasks` management modal (PENDING or REVISIONS project).
+2. GLB upload (+ optional USDZ). "Replace GLB/USDZ file" dropzone when a READY model is already linked.
+3. "Submit for Review" → `adminSubmitProject` — tx: status flip, archive prior models (files kept), link new rows.
 
 ### Brand reviews and publishes
-1. Brand opens a COMPLETED card → Review modal → `ThreeDConfigurator` loads the GLB **via the proxy** (session-authenticated).
-2. "Approve & Publish" → `brandPublishProject`: **grant `read:any` on GLB/USDZ storage files first**, then guarded flip → `PUBLISHED`. Embed becomes publicly loadable.
-3. "Request Changes" → `brandSendForRevisions(projectId, note)`: flip → `REVISIONS` + revision row; if `wasPublished`, **revoke** `read:any` (`permissions: []`) + revalidate embed.
+1. Review modal → `ThreeDConfigurator` loads the GLB **via the proxy** (session-authenticated).
+2. "Approve & Publish" → grant `read:any` first, then flip → `PUBLISHED`.
+3. "Request Changes" → flip → REVISIONS + revision row; if wasPublished, revoke `read:any` + revalidate embed.
 
 ### Embed serves 3D model (public)
-1. Storefront loads iframe → `GET /embed/{projectId}` → TablesDB gate → HTML template.
-2. `embed-viewer.html` fetches `GET /api/sdk/v1/config/{projectId}` → `assetUrls.glb` = absolute Appwrite `/view` URL with `?project=` (read:any + project param required for anonymous fetch — Phase 6 bug 3) → `<model-viewer src=...>`; optional `ios-src` usdz.
-3. Viewer posts events to `POST /api/sdk/v1/events` → TablesDB `analytics_events`.
+1. Storefront iframe → `GET /embed/{projectId}` → PUBLISHED + GLB gates → HTML template.
+2. Viewer fetches `GET /api/sdk/v1/config/{projectId}` → `assetUrls.glb` (CDN URL with `?project=`, read:any) → `<model-viewer>`.
+3. Viewer posts `VIEW`/`INTERACTION`/`AR_LAUNCH` to `/api/sdk/v1/events`.
 
 ## Risks and mitigations
 
 | Risk | Impact | Mitigation |
 |---|---|---|
-| Storage file perms desync from row status (grant succeeded but flip failed, etc.) | Low | Grant-before-flip + best-effort revoke on flip failure; revoke failures logged. Row status remains the in-app gate. |
-| Session cookie expiry during a large browser upload | Low | `createFile` fails mid-upload → orphan cleanup via best-effort `deleteFile`; user retries. |
-| Every in-app read proxied through the SSR host's egress | Low-Medium at scale | `Cache-Control: private, max-age=60` on the proxy; embed reads hit the CDN directly (no proxy hop). Revisit if bandwidth cost grows. |
-| 150 GB storage cap (plan `auto-1`, pro group, $0) | Low | ~150 models at 10–50 MB = 1.5–7.5 GB. Archived files are kept intentionally — monitor usage. |
-| GLB/USDZ MIME not validated server-side | Low | File picker filters by extension; only ADMIN uploads models. Optional: post-upload MIME check + delete. |
-| Seed/legacy `external`/`uploadthing` URLs go stale | Low | Proxy falls back to the stored URL only; legacy rows are read-only historical data. |
-| Server action returns raw Appwrite row → "Only plain objects…" error in the client console | Medium (broken UX) | **Never return an Appwrite row object from a server action.** Always project to a plain object first (e.g. `return { success: true, projectId: created.$id }`). `Models.Row` instances carry `$permissions`/`$sequence`/etc. whose prototypes/metadata break Next.js's Server→Client serialization. Bug found and fixed in `createProject` after Phase 4 gate. |
+| Storage file perms desync from row status | Low | Grant-before-flip + best-effort revoke; nightly reconciliation sweep. Row status remains the in-app gate. |
+| Session cookie expiry during a large upload | Low | `createFile` fails mid-upload → best-effort `deleteFile` orphan cleanup; user retries. |
+| Every in-app read proxied through the SSR host egress | Low-Medium at scale | `private, max-age=60` on the proxy; embed reads hit the CDN directly. Revisit if bandwidth grows. |
+| 150 GB storage cap (free plan) | Low | Archived files kept intentionally — monitor usage; TTL job is a future task if the cap matters. |
+| GLB/USDZ MIME not validated server-side | Low | Picker filters by extension; only ADMIN uploads models. |
+| Legacy `external` URLs go stale | Low | Proxy fetches the stored URL verbatim; legacy rows are read-only. |
+| Server action returns a raw Appwrite row | Medium (broken UX) | **Never return an Appwrite row from a server action** — always project to a plain object first (`Models.Row` metadata breaks Next.js Server→Client serialization). |
 
 ## Open questions
 
-1. **Asset status on publish:** rows stay `READY` after publish (files get read:any). A `PUBLISHED` row status is defined but unused — revisit if analytics need to distinguish.
-2. **File deletion UI / orphan cleanup:** removing an image from `uploadedAssets` in the New Task modal only removes it from client state — the storage file + `assets` row remain (pre-existing behavior). Future task.
-3. **Archived-file retention:** per user decision, archived model files are kept forever in Appwrite Storage. A TTL/cleanup job is a future task if the plan's 150 GB cap ever matters.
-4. **Bandwidth:** plan allows 2,000 GB/month. The proxy path adds one SSR-host hop per in-app read; direct CDN URLs already cover the embed path.
-
-## Migration history
-
-### Migration 1 — Cloudflare R2 → Filebase (July 2026, COMPLETE then reverted)
-See `tasks/plan.md`. Reverted because Filebase's free tier only supports private buckets, breaking anonymous embed reads.
-
-### Migration 2 — Filebase → UploadThing (July 2026, superseded)
-Reverted the Filebase presigned-URL architecture back to UploadThing (`*.ufs.sh` public CDN) + Google Drive backup. See `tasks/revert-to-uploadthing.md`. Removed from the active path in Migration 3; legacy code + env vars fully deleted in Phase 5.
-
-### Migration 3 — UploadThing + GDrive → Appwrite Storage (August 2026, CURRENT)
-Full replacement (Phase 4 of `tasks/appwrite-migration.md`): browser-direct uploads to Appwrite buckets, `assets` rows in TablesDB (row `$id` = storage fileId), auth-gated streaming proxy for in-app reads, direct CDN URLs for published embeds via publish-time `read:any` grants. **Phase 5 completed the removal:** `utapi` cleanup branch deleted from `adminSubmitProject`, `src/lib/uploadthing-server.ts` + gdrive-download route + `prisma/` deleted, `UPLOADTHING_TOKEN`/`GOOGLE_OAUTH_*`/`GDRIVE_*` env vars stripped.
-
-**Files created:** `src/app/actions/record-asset.ts`, `src/lib/use-appwrite-upload.ts`.
-**Files rewritten:** `src/app/api/v1/assets/[assetId]/file/route.ts` (TablesDB + streaming), `src/app/api/sdk/v1/config/[projectId]/route.ts` + `src/app/api/sdk/v1/events/route.ts` + `src/app/embed/[projectId]/route.ts` (TablesDB), `src/app/actions/project.ts` + `src/server/services/project.service.ts` (grant/revoke moved into the service layer in Phase 5b), `src/app/actions/admin.ts` (archival; the legacy provider-split cleanup branch was removed in Phase 5), `src/lib/appwrite-config.ts` (bucket id, `buildFileUrl`, `bucketForAssetType`, mime defaults), `src/app/tasks/TasksClient.tsx` + `src/app/admin/tasks/AdminTasksClient.tsx` (hook swap, GDrive copy/link removal), `next.config.mjs` (remote patterns).
-**Files deleted:** `src/app/api/uploadthing/` (route + core), `src/lib/hooks/use-presigned-upload.ts`, `src/lib/uploadthing.ts`, `src/lib/storage/` (types, gdrive-adapter, gdrive-client, asset-delivery, naming, index). **Phase 5 deletions:** `src/lib/uploadthing-server.ts`, `src/app/api/admin/assets/[assetId]/gdrive-download/route.ts`, `prisma/`, `scripts/get-gdrive-refresh-token.ts`, `scripts/get-published-id.ts`. **Phase 5b moves:** `src/lib/appwrite.ts` → `src/server/appwrite.ts`, `src/lib/db.ts` → `src/server/db/client.ts`, `src/lib/notifications.ts` → `src/server/services/notification.service.ts`.
+1. **Asset status on publish:** rows stay `READY` after publish (files get read:any). The `PUBLISHED` row status is defined but unused — revisit if analytics need to distinguish.
+2. **Orphan cleanup:** removing an image from `uploadedAssets` in the New Task modal only clears client state — the storage file + `assets` row remain. Future task.
+3. **Archived-file retention:** kept forever per user decision; a TTL/cleanup job is a future task if the storage cap ever matters.
 
 ## References
 
-- `../WEBSITE.md` §10 File upload workflow · §5 API routes · §6 Model replacement lifecycle · §8 server actions
+- `../WEBSITE.md` §10 upload flow · §5 API routes · §8 server actions
 - `../pages/tasks.md` — New Task / Review / Published modals (upload consumers + thumbnails)
-- `../pages/admin.md` §3 — Admin modal: "Replace" copy, "Previous models" collapsible
-- `tasks/appwrite-migration.md` §0 Phase 4 — the migration record with SDK-level corrections
-- `deployment.md` — Appwrite Sites env var setup + hosting handbook
+- `../pages/admin.md` §3 — admin modal: "Replace" copy, "Previous models" collapsible
+- `../pages/embed.md` — embed viewer + SDK endpoints
+- `deployment.md` — Appwrite Sites env vars + hosting handbook

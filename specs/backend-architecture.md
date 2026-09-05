@@ -1,6 +1,6 @@
 # Backend Architecture
 
-> Parent: [`../WEBSITE.md`](../WEBSITE.md) — cross-cutting architecture spec for the server-side layering, error taxonomy, and rate limiting. Read `WEBSITE.md` first; this file is the deep reference for `src/server/`.
+> Parent: [`./WEBSITE.md`](./WEBSITE.md) — cross-cutting architecture spec for the server-side layering, error taxonomy, and rate limiting. Read `WEBSITE.md` first; this file is the deep reference for `src/server/`.
 
 ## 1. Layering model
 
@@ -38,8 +38,8 @@ Rules:
 
 `StaleSessionError extends UnauthenticatedError`: session cookie exists but no matching `users` row → `requirePrincipalOrRedirect` redirects to `/auth`.
 
-- **API routes** use `handleApiError(err)` (`src/server/http/handler.ts:…`) which maps `AppError` → JSON `{ code, message: userMessage }` + HTTP status; non-AppError → 500.
-- **Mutation server actions** use `toActionResult(fn)` (`src/server/http/result.ts:…`) → `ActionResult<T>`; unexpected errors log + map to `INTERNAL`.
+- **API routes** use `handleApiError(err)` (`src/server/http/handler.ts`) which maps `AppError` → JSON `{ code, message: userMessage }` + HTTP status; non-AppError → 500.
+- **Mutation server actions** use `toActionResult(fn)` (`src/server/http/result.ts`) → `ActionResult<T>`; unexpected errors log + map to `INTERNAL`.
 
 ## 3. ActionResult contract (`src/server/http/result.ts`)
 
@@ -126,7 +126,7 @@ Publish semantics (unchanged from prior behavior, now centralized):
 
 ## 11. Nightly maintenance cron
 
-**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 60` (raise if the reconcile sweep grows). **Trigger source (2026-09-01):** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
+**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 60` (raise if the reconcile sweep grows). **Trigger source:** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
 
 **Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match `Bearer ${env.CRON_SECRET}` → `401`. Any other failure goes through `handleApiError`.
 
