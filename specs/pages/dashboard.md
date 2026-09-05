@@ -2,6 +2,8 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) · Source: `src/app/dashboard/page.tsx:1` + `DashboardSkeleton.tsx` + `DashboardError.tsx`
 
+> **Visual styling (v3 as-built):** inline token/class notes below were written against v2 naming and may lag the code. Authoritative design reference: `WEBSITE.md` §12 + `design.md` + the token/component blocks in `globals.css` (Figtree 400/900, Inter body, sage/ink grounds, Peka Green `--accent`, `--ink-deep`; no mono outside code blocks, no Manrope/coral, light-only). When this file disagrees with the code or `WEBSITE.md` §12, code + §12 win.
+
 The dashboard is the authenticated landing page. It surfaces four metric cards, a 12-month interaction-trends bar chart, a recent-tasks list, and quick-link cards. All metrics are computed server-side from the TablesDB `analytics_events` table (`listAllRows<AnalyticsEventRow>`) scoped to the signed-in user's projects (Prisma-backed until migration Phase 5).
 
 ---
@@ -101,7 +103,7 @@ Note the `$createdAt` range comparison uses an **ISO string** (`toISOString()`),
 
 All four cards render `change: "--"` — period-over-period deltas are **not yet implemented** on this page (they live on `/analytics`). `formatCount` is from `src/lib/utils.ts` (compact number formatting).
 
-**Card markup** (`page.tsx:160`): each is a `Card` → `CardBody` with a circular icon chip (top-left), a trend pill (top-right, emerald for `up` / red for `down`), a mono uppercase label, and a 3xl serif italic value. Hover darkens the border.
+**Card markup** (`page.tsx:160`): each is a `Card` (`rounded-[24px]`) → `CardBody` with a circular icon chip (`bg-canvas-soft`, `border-default`) top-left, a trend pill (`positive-pale/copy` for `up`, `negative-pale/copy` for `down`) top-right, a `label-mono` label, and a `font-display 3xl bold` value. No hover border.
 
 ---
 
@@ -110,18 +112,18 @@ All four cards render `change: "--"` — period-over-period deltas are **not yet
 `page.tsx:152` wraps everything in `space-y-8 animate-in fade-in duration-500`.
 
 ### Header
-- `h2` "Welcome back." (serif italic 3xl) + subcopy "Here is what's happening with your 3D assets today."
+- `h2` "Welcome back." (`font-display 3xl bold`) + subcopy "Here is what's happening with your 3D assets today."
 
 ### Metric cards row (`page.tsx:160`)
-`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4` — the 4 cards above.
+`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4` — the 4 cards above, each `rounded-[24px]` (`--radius-xl`).
 
 ### Two-column body (`page.tsx:183`)
 `grid grid-cols-1 lg:grid-cols-3 gap-8`:
 - **Left (lg:col-span-2):**
-  - **Interaction Trends** card (`:186`) — the 12-month bar chart. 12 flex bars (`bg-[#EFEDEA]`, hover `bg-[#1A1A1A]`) with height `${(count / maxCount) * 100}%` capped at `calc(100% - 24px)`. Hover shows a dark tooltip `${count.toLocaleString()} Views`. Three dashed gridlines (top, middle, bottom — bottom is solid `#1A1A1A`). Month labels row underneath in mono micro caps.
+  - **Interaction Trends** card (`:186`) — the 12-month bar chart. 12 flex bars (`bg-accent`, hover `bg-accent-hover`) with height `${(count / maxCount) * 100}%` capped at `calc(100% - 24px)`. Hover shows a `surface` + `border-default` + `shadow-1` tooltip `${count.toLocaleString()} Views`. Three dashed gridlines (`border-default`). Month labels row underneath in `text-muted` mono micro caps. Axis labels `text-muted`, gridlines `border-default`, series `accent` single-accent.
   - **Recent Tasks** card (`:215`) — `CardHeader` with title + "View All" `LinkButton` → `/tasks`. Body is a divided list of `recentProjects = projects.slice(0, 3)`. Each row: a placeholder thumbnail square + name + `formatDistanceToNow(createdAt, { addSuffix: true })` + status `Badge` from `PROJECT_STATUS_META`. Empty state: "No recent tasks. Get started by deploying a new model!"
 - **Right (lg:col-span-1):**
-  - **Deploy New Model** card (`:250`, `Card variant="inverted"`) — dark inverted card, emerald `Box` icon, "Deploy New Model" serif italic heading, copy, and a "Start Generation" `LinkButton` → `/tasks`.
+  - **Deploy New Model** card (`:250`, `Card variant="inverted"`, `rounded-[24px]`) — dark inverted card (`--ink`), emerald `Box` icon, "Deploy New Model" `font-display xl semibold` heading, copy (`on-ink/70`), and a "Start Generation" `LinkButton` → `/tasks`.
   - **Quick Links** card (`:264`) — "SDK Documentation" → `/integrations`, "Full Analytics Report" → `/analytics` (both `LinkButton variant="secondary" size="sm"`).
 
 ---

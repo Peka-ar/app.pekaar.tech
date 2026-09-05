@@ -7,7 +7,6 @@ import { useAuth } from "@appwrite.io/react";
 import NotificationBell from './NotificationBell';
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Button } from '../ui/Button';
-import { ThemeToggle } from '../ThemeToggle';
 import { Wordmark } from '../Wordmark';
 import { logout } from '@/app/actions/auth';
 
@@ -51,7 +50,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
       <aside
         className="w-64 hidden md:flex flex-col sticky top-0 h-screen shrink-0"
         style={{
-          backgroundColor: 'var(--surface)',
+          backgroundColor: 'var(--canvas)',
           borderRight: '1px solid var(--border-default)',
         }}
       >
@@ -90,7 +89,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
                 className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{
                   backgroundColor: isActive ? 'var(--accent-pale)' : 'transparent',
-                  color: isActive ? 'var(--accent-copy)' : 'var(--text-secondary)',
+                  color: isActive ? 'var(--ink-deep)' : 'var(--text-secondary)',
                   outlineColor: 'var(--text-primary)',
                 }}
                 onMouseEnter={e => {
@@ -116,7 +115,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
         <div className="p-4" style={{ borderTop: '1px solid var(--border-default)' }}>
           <div className="flex items-center gap-3 px-3 py-2">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-mono"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-sans"
               style={{
                 backgroundColor: 'var(--canvas-soft)',
                 border: '1px solid var(--border-default)',
@@ -128,7 +127,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
               <span className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }} title={userName}>
                 {userName}
               </span>
-              <span className="text-[9px] font-mono truncate" style={{ color: 'var(--text-muted)' }} title={userEmail}>
+              <span className="text-[9px] font-sans truncate" style={{ color: 'var(--text-muted)' }} title={userEmail}>
                 {userEmail || "Brand workspace"}
               </span>
             </div>
@@ -136,7 +135,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
           <form action={logout}>
             <button
               type="submit"
-              className="w-full mt-1 px-3 py-1.5 text-xs font-mono uppercase tracking-widest text-left rounded-lg transition-colors"
+              className="w-full mt-1 px-3 py-1.5 text-xs font-sans uppercase tracking-widest text-left rounded-lg transition-colors"
               style={{ color: 'var(--text-muted)' }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.backgroundColor = 'var(--canvas-soft)'; }}
               onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
@@ -152,7 +151,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
         <header
           className="h-16 flex items-center justify-between gap-3 px-4 sm:px-6 sticky top-0 z-20"
           style={{
-            backgroundColor: 'var(--surface)',
+            backgroundColor: 'var(--canvas)',
             borderBottom: '1px solid var(--border-default)',
           }}
         >
@@ -165,13 +164,12 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
             >
               <Menu className="w-5 h-5" />
             </Button>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate" style={{ color: 'var(--text-primary)', fontFamily: 'var(--font-display)' }}>
+            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate text-[var(--color-text-primary)]">
               {title}
             </h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {action && <div className="hidden sm:block">{action}</div>}
-            <ThemeToggle />
             <NotificationBell />
           </div>
         </header>

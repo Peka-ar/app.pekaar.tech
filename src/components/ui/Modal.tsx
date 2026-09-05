@@ -116,7 +116,7 @@ export function Modal({
     <div
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-4',
-        variant === 'takeover' ? 'bg-black/80' : 'bg-[rgba(20,20,16,0.55)] dark:bg-[rgba(20,20,16,0.75)]'
+        variant === 'takeover' ? 'bg-black/80' : 'bg-[rgba(20,20,16,0.55)]'
       )}
       onClick={handleBackdropClick}
     >
@@ -127,7 +127,7 @@ export function Modal({
         aria-labelledby="modal-title"
         aria-describedby={description ? 'modal-description' : undefined}
         className={cn(
-          'bg-[var(--color-surface)] rounded-[24px] w-full',
+          'bg-[var(--color-canvas)] rounded-[24px] w-full',
           'shadow-[var(--shadow-2)]',
           sizeClasses[size],
           variant === 'takeover' && 'h-full flex flex-col'

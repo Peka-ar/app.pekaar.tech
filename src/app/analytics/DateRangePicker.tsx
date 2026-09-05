@@ -22,15 +22,15 @@ export function DateRangePicker({ currentRange }: DateRangePickerProps) {
   }, [router]);
 
   return (
-    <div className="flex items-center gap-2 bg-[var(--color-surface)] border border-[var(--color-border-default)] p-1 rounded-xl shadow-sm">
+    <div className="flex items-center gap-2 bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] p-1 rounded-xl shadow-sm">
       {(['7D', '30D', 'ALL'] as const).map((rangeOption) => (
         <button
           key={rangeOption}
           onClick={() => handleRangeChange(rangeOption)}
-          className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-mono rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] ${
+          className={`px-3 py-1.5 text-[10px] uppercase tracking-widest font-sans rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] ${
             currentRange === rangeOption
-              ? 'bg-[var(--color-text-primary)] text-[var(--color-canvas)] font-bold'
-              : 'text-[var(--color-text-muted)] hover:bg-[var(--color-canvas-secondary)] hover:text-[var(--color-text-primary)]'
+              ? 'bg-[var(--color-accent-pale)] text-[var(--ink-deep)] font-bold border border-[var(--color-accent)]/20'
+              : 'text-[var(--color-text-muted)] hover:bg-[var(--color-canvas)] hover:text-[var(--color-text-primary)]'
           }`}
           disabled={isPending}
         >

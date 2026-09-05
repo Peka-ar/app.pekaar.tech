@@ -2,6 +2,8 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) · Source: `src/app/auth/page.tsx:1`, `src/app/auth/verify/page.tsx:1`, `src/app/auth/reset-password/page.tsx:1` + components in `src/components/auth/`
 
+> **Visual styling (v3 as-built):** inline token/class notes below were written against v2 naming and may lag the code. Authoritative design reference: `WEBSITE.md` §12 + `design.md` + the token/component blocks in `globals.css` (Figtree 400/900, Inter body, sage/ink grounds, Peka Green `--accent`, `--ink-deep`; no mono outside code blocks, no Manrope/coral, light-only). When this file disagrees with the code or `WEBSITE.md` §12, code + §12 win.
+
 Peka AR uses **Appwrite Cloud** (region `fra`, project `6a8562a20037b62075e1`) end-to-end for auth: sessions, email verification (link-based), and password recovery. The `@appwrite.io/react` package owns the client-side session (cookies, sign-in/sign-out) via the SSR handler at `/api/appwrite/[...appwrite]`; `src/server/auth-guards.ts` resolves the canonical principal (session + `users` TableDB row) server-side. There is **no OTP flow and no magic-link/`Token` model** — Appwrite's native link-based verification (`updateVerification`) and recovery (`updateRecovery`) replace both (Phase 2 of `tasks/appwrite-migration.md`, DONE 2026-08-19).
 
 ---
@@ -34,10 +36,14 @@ redirect("/dashboard");
 ```
 Role-aware redirect for existing sessions: not onboarded → `/onboarding`; ADMIN → `/admin/dashboard`; BRAND → `/dashboard`; no session (or stale/suspended — `requirePrincipal` throws) → `AuthClient`.
 
-### `AuthClient.tsx` (`src/app/auth/AuthClient.tsx:1`) — client
-A two-column layout. Left half (lg+): dark `#1A1A1A` panel with the first demo product image (`PRODUCTS[0].thumbnail`) at 50% opacity, a gradient scrim, the Peka AR wordmark (`src/components/Wordmark.tsx` — Manrope + coral dot), and the "Elevate your catalog with stereoscopic realism." editorial copy. Right half: white panel with "Back to Home" `LinkButton`s (mobile + desktop variants) and a centered `max-w-md` container that swaps between the three forms based on local `view` state.
+### `AuthClient.tsx` (`src/app/auth/AuthClient.tsx:1`) — client (v3, Phase 5)
+Split-screen per `design.md` "Components" / `WEBSITE.md` §12 — **left brand panel is `var(--ink)` + `var(--on-ink)`** (component-level dark surface, legitimate in light-only v3), delineated from the right side by a `1px var(--border-default)` hairline (`AuthClient.tsx:33`). Right side is the white page ground; the form block sits at `max-w-[448px]` with `.input-base` white inputs (1px `--border-ink`, 12px radius).
 
-**State:** `type AuthView = 'signin' | 'signup' | 'forgot-password'` — `useState<AuthView>('signin')`. Navigation via `onNavigate={(v) => setView(v as AuthView)}` passed to each form. No `onSuccess` wiring — `SignUpForm` owns its post-submit state internally (inbox screen).
+- **Left (desktop, `hidden lg:flex`, `lg:w-[44%] xl:w-[42%]`):** `Wordmark` (Figtree 900 + Peka Green dot via `dotClassName="text-[var(--accent)]"`), Figtree-900 headline "Photos in. Showroom out." (`font-display` + `font-bold` — the v3 weight guardrail pins it to 900; `clamp(1.625rem,3vw,2.125rem)`), 3 proof bullets in `body-sm` (one-line embed / AR view-in-room / artist-finished) with `--accent` dot markers, quiet Inter-uppercase footer "Peka AR · Photo → 3D pipeline · Hours, not weeks" above a `rgba(232,235,230,0.14)` hairline (`AuthClient.tsx:58`).
+- **Left (mobile):** collapses to a compact ink header band (`flex lg:hidden`, `bg-[var(--ink)]`, Wordmark + "Back" `LinkButton ghost` on `var(--on-ink)`).
+- **Right:** segmented mode switch (`role="tablist"` with `Sign in` / `Sign up` pills; container `bg-[var(--canvas-soft)]` + `--border-default`, active pill = `bg-[var(--accent-pale)]` + `text-[var(--ink-deep)]` + `shadow-sm`, inactive = `var(--text-secondary)` on hover `--text-primary`) above the forms; form titles are `font-display` (Figtree 900 cut, `text-2xl`); body `body-md`; submit = `Button variant="primary"` (single Peka Green CTA per viewport), tertiary links (`Forgot password?`, `Sign Up`/`Sign In`) render as ink text via the ghost LinkButton (`--ink-deep` hover). Inputs are `Input`/`FormField` (`input-base`, 48px/12px, ink border). Alerts are semantic `Alert` (white banner + colored hairline + semantic-deep text).
+
+**State:** `type AuthView = 'signin' | 'signup' | 'forgot-password'` — `useState<AuthView>('signin')`. Navigation via `onNavigate={(v) => setView(v as AuthView)}` passed to each form; the tablist syncs `view` for signin/signup, while `forgot-password` is entered via the tertiary “Forgot password?” button inside `SignInForm` (no tab). No `onSuccess` wiring — `SignUpForm` owns its post-submit state internally (inbox screen).
 
 ```tsx
 {view === 'signin' && <SignInForm onNavigate={(v) => setView(v as AuthView)} />}
@@ -101,14 +107,14 @@ The redirect target is decided **after** Appwrite issues the session, using only
 ## 5. Reset Password — `/auth/reset-password` + `ResetPasswordForm`
 
 ### Server entry (`src/app/auth/reset-password/page.tsx:1`)
-Reads `userId` + `secret` from `searchParams` and passes them to the client: `<ResetPasswordForm userId={userId || ""} secret={secret || ""} />`. (If either is missing, the form shows an error up-front.)
+Reads `userId` + `secret` from `searchParams` and renders `<ResetPasswordForm>` on a `var(--canvas)` ground (`min-h-screen flex items-center justify-center px-6 py-12`). If either param is missing the form shows “Reset link is invalid or expired.” up-front.
 
-### `ResetPasswordForm` (`src/components/auth/ResetPasswordForm.tsx:1`) — client
-**Props:** `{ userId: string; secret: string }`. New-password form inside a `Card` → `CardBody`. Calls `resetPassword(userId, secret, password)` (`auth.ts:166`) on submit. Enforces password ≥ 8 chars (server side too). On success → success state with a "Sign In" link to `/auth`. Errors: "Password must be at least 8 characters", "Reset link is invalid or expired" (Appwrite enforces a 1-hr expiry server-side).
+### `ResetPasswordForm` (`src/components/auth/ResetPasswordForm.tsx:1`) — client (v3)
+**Props:** `{ userId: string; secret: string }`. Centered `card` (`max-w-md`, `p-8 sm:p-10`, `radius-24`) on the sage canvas; title `font-display text-2xl font-semibold tracking-[-0.01em]` (Figtree), body `body-md`. New-password `Input` via `FormField`; `Alert` for errors; submit = `Button variant="primary"` (`w-full`, `isLoading`, `disabled={!userId||!secret}`). Success state: `bg-[var(--accent-pale)]` circle with a `var(--positive)` dot + “Your password has been updated.” + `btn-primary` “Sign In” → `/auth`. Calls `resetPassword(userId, secret, password)` (`auth.ts:166`); ≥ 8 chars. Appwrite enforces 1-hr expiry.
 
 ---
 
-## 6. Email verify — `/auth/verify`
+## 6. Email verify — `/auth/verify` (v2 retheme)
 
 ### Server entry (`src/app/auth/verify/page.tsx:1`) — fully server-side, no client component
 ```tsx
@@ -119,7 +125,11 @@ else try { await new Account(createPublicClient()).updateVerification({ userId, 
      catch { error = "Verification link is invalid or expired."; }
 // centered card: "Email verified" or "Unable to verify" + Sign In link to /auth
 ```
+Visual: `var(--canvas)` ground, centered `card` (`max-w-md p-8 sm:p-10 text-center`); rounded icon circle `bg-[var(--accent-pale)] text-[var(--positive-deep)]` (success) / `bg-[var(--negative-bg)] text-[#fff]` (error) with a `var(--positive)`/`var(--negative)` dot; title `font-display text-2xl font-semibold tracking-[-0.01em]` (Figtree), body `text-sm` `var(--text-secondary)`; single `btn-primary` “Sign In” → `/auth`.
 The link comes from Appwrite's verification email: **Appwrite appends `userId` + `secret`** to the click URL (the `url` passed to `createVerification`). On success the user is verified; the page shows a success card linking to `/auth` — **no session is created** (verified: `updateVerification` returns no session token, deviation D2), so the user signs in manually and lands on onboarded-aware routing.
+
+### Loading states (`src/app/auth/loading.tsx:1`, `src/app/onboarding/loading.tsx:1`) — v2
+Both are `Skeleton` compositions on `var(--canvas)`/`var(--surface)` (no spinner): `AuthLoading` mirrors the split-screen shell (ink panel + card skeletons), `OnboardingLoading` mirrors the ink aside + card body + step dots. Verified in the Phase 4 build.
 
 ---
 
@@ -168,10 +178,10 @@ Exposes sign-in / sign-up / sign-out / OAuth-callback / token-refresh routes und
   projectId={APPWRITE_PROJECT_ID}
   ssr={{ session, basePath: "/api/appwrite" }}
 >
-  <ThemeProvider ...>{children}</ThemeProvider>
+  {children}
 </AppwriteProvider>
 ```
-Wrapped around the existing `ThemeProvider`. `session` comes from the async root layout (`src/app/layout.tsx`) via `createNextServerHelpers({ endpoint, projectId }).readSessionCookie()` so the client doesn't flash logged-out during hydration.
+No `ThemeProvider` wrapper — the app is light-only (v3, `ThemeProvider.tsx`/`ThemeToggle.tsx` deleted). `session` comes from the async root layout (`src/app/layout.tsx`) via `createNextServerHelpers({ endpoint, projectId }).readSessionCookie()` so the client doesn't flash logged-out during hydration.
 
 ### Server helpers — `src/server/appwrite.ts`
 - `createAdminClient()` (`:11`) — server-only, cached singleton (Admin SDK + API key; key read via `env.APPWRITE_API_KEY` from `src/server/env.ts`). Used by `requirePrincipal`, `registerUser`, `resendVerificationEmail`, `completeOnboarding`.
@@ -225,7 +235,7 @@ Email is sent by **Appwrite Cloud** (Gmail SMTP provider configured in the conso
 | `getSessionPrincipal` | `auth.ts:219` |
 | `logout` | `auth.ts:235` |
 | SSR auth handlers | `src/app/api/appwrite/[...appwrite]/route.ts:1` |
-| `AppwriteProvider` + `ThemeProvider` | `src/app/providers.tsx:7` |
+| `AppwriteProvider` | `src/app/providers.tsx:7` |
 | Root layout (reads session cookie) | `src/app/layout.tsx:1` |
 | Appwrite config constants | `src/lib/appwrite-config.ts:1` |
 | `createAdminClient` / `createSessionClient` / `createPublicClient` | `src/server/appwrite.ts:11` / `:21` / `:32` |

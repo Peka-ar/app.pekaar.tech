@@ -8,7 +8,7 @@ export interface TableProps {
 
 export function Table({ className, children }: TableProps) {
   return (
-    <div className={cn('w-full overflow-auto rounded-[16px] border border-[var(--color-border-default)] bg-[var(--color-surface)]', className)}>
+    <div className={cn('w-full overflow-auto rounded-[16px] border border-[var(--color-border-default)] bg-[var(--color-canvas)]', className)}>
       <table className="w-full border-collapse">{children}</table>
     </div>
   );
@@ -46,7 +46,7 @@ export function TableRow({ className, children, onClick }: TableRowProps) {
   return (
     <tr
       className={cn(
-        'bg-[var(--color-surface)] hover:bg-[var(--color-canvas)] transition-colors',
+        'bg-[var(--color-canvas)] hover:bg-[var(--color-canvas-soft)] transition-colors',
         onClick && 'cursor-pointer',
         className,
       )}

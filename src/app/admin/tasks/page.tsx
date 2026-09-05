@@ -12,7 +12,7 @@ export default async function AdminTasksPage() {
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-pulse flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-4 border-[var(--color-text-primary)] border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-xs font-mono text-[var(--color-text-muted)] uppercase tracking-widest">Loading Tasks...</p>
+          <p className="text-xs font-sans text-[var(--color-text-muted)] uppercase tracking-widest">Loading Tasks...</p>
         </div>
       </div>
     }>

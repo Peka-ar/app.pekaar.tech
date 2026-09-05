@@ -16,7 +16,7 @@ export function EmptyState({ icon, title, description, action, className }: Empt
       className={cn('flex flex-col items-center justify-center text-center py-12 px-6 rounded-3xl bg-[var(--color-canvas-soft)]', className)}
     >
       {icon && (
-        <div className="w-12 h-12 rounded-full bg-[var(--color-surface)] border border-[var(--color-border-default)] flex items-center justify-center mb-4 text-[var(--color-text-muted)]">
+        <div className="w-12 h-12 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border-default)] flex items-center justify-center mb-4 text-[var(--color-text-muted)]">
           {icon}
         </div>
       )}

@@ -35,18 +35,21 @@ export default function ResetPasswordForm({ userId, secret }: { userId: string; 
   };
 
   return (
-    <Card className="max-w-md w-full rounded-[2rem] bg-[var(--color-surface)] border border-[var(--color-border-default)] p-10 shadow-sm">
+    <Card className="w-full max-w-md p-8 sm:p-10">
       <CardBody className="p-0">
-        <h1 className="text-3xl font-serif mb-3">Reset password</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Reset password</h1>
         {success ? (
-          <div>
-            <p className="text-sm text-[var(--color-text-secondary)] mb-8">Your password has been updated.</p>
-            <Link href="/auth" className="inline-flex px-6 py-3 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[11px] uppercase tracking-widest font-bold">
+          <div className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-pale)]">
+              <span aria-hidden className="h-3 w-3 rounded-full bg-[var(--positive)]" />
+            </div>
+            <p className="text-sm leading-6 text-[var(--text-secondary)]">Your password has been updated. You can now sign in with your new password.</p>
+            <Link href="/auth" className="btn-primary mt-8 inline-flex">
               Sign In
             </Link>
           </div>
         ) : (
-          <form className="space-y-5" onSubmit={handleSubmit}>
+          <form className="mt-6 space-y-5" onSubmit={handleSubmit}>
             <FormField label="New Password" htmlFor="new-password">
               <Input
                 type="password"
@@ -64,6 +67,7 @@ export default function ResetPasswordForm({ userId, secret }: { userId: string; 
               size="lg"
               disabled={loading || !userId || !secret}
               isLoading={loading}
+              className="w-full"
             >
               {loading ? "Updating..." : "Update Password"}
             </Button>

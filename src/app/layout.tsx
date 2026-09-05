@@ -6,12 +6,10 @@ import { TopNav } from "@/components/TopNav";
 import { createNextServerHelpers } from "@appwrite.io/react/server/next";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "@/lib/appwrite-config";
 
-const manrope = localFont({
+const figtree = localFont({
   src: [
-    { path: "../assets/fonts/manrope-500.woff2", weight: "500", style: "normal" },
-    { path: "../assets/fonts/manrope-600.woff2", weight: "600", style: "normal" },
-    { path: "../assets/fonts/manrope-700.woff2", weight: "700", style: "normal" },
-    { path: "../assets/fonts/manrope-800.woff2", weight: "800", style: "normal" },
+    { path: "../assets/fonts/figtree-400.woff2", weight: "400", style: "normal" },
+    { path: "../assets/fonts/figtree-900.woff2", weight: "900", style: "normal" },
   ],
   variable: "--font-display-loaded",
   display: "swap",
@@ -26,17 +24,6 @@ const inter = localFont({
     { path: "../assets/fonts/inter-600.woff2", weight: "600", style: "normal" },
   ],
   variable: "--font-sans-loaded",
-  display: "swap",
-  preload: true,
-});
-
-const jetbrains = localFont({
-  src: [
-    { path: "../assets/fonts/jetbrains-300.woff2", weight: "300", style: "normal" },
-    { path: "../assets/fonts/jetbrains-400.woff2", weight: "400", style: "normal" },
-    { path: "../assets/fonts/jetbrains-500.woff2", weight: "500", style: "normal" },
-  ],
-  variable: "--font-mono-loaded",
   display: "swap",
   preload: true,
 });
@@ -68,7 +55,7 @@ export default async function RootLayout({
   const session = await helpers.readSessionCookie();
 
   return (
-    <html lang="en" className={`${manrope.variable} ${inter.variable} ${jetbrains.variable} antialiased h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${figtree.variable} ${inter.variable} antialiased h-full`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />

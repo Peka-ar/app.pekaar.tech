@@ -32,7 +32,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           {children}
         </select>
         {error && (
-          <p role="alert" className="mt-1.5 text-xs text-[var(--negative-copy)]">
+          <p role="alert" className="mt-1.5 text-xs text-[var(--negative-deep)]">
             {error}
           </p>
         )}

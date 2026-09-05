@@ -7,7 +7,7 @@ import { ArrowRight, Box } from "lucide-react";
 export function ScrollToSandboxButton() {
   return (
     <Link href="/auth" className="btn-primary">
-      Start your project <ArrowRight className="w-4 h-4" aria-hidden="true" />
+      Book a demo call <ArrowRight className="w-4 h-4" aria-hidden="true" />
     </Link>
   );
 }
@@ -15,7 +15,7 @@ export function ScrollToSandboxButton() {
 export function ARDemoButton() {
   return (
     <a href="#sandbox-anchor" className="btn-secondary">
-      <Box className="w-4 h-4" aria-hidden="true" /> Try the live demo
+      <Box className="w-4 h-4" aria-hidden="true" /> See live 3D
     </a>
   );
 }

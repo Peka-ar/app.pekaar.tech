@@ -20,14 +20,22 @@ export default async function VerifyEmailPage({
     }
   }
 
+  const isError = Boolean(error);
+
   return (
-    <main className="min-h-screen bg-[var(--color-canvas)] flex items-center justify-center px-6 text-[var(--color-text-primary)]">
-      <div className="max-w-md w-full rounded-[2rem] bg-[var(--color-surface)] border border-[var(--color-border-default)] p-10 text-center shadow-sm">
-        <h1 className="text-3xl font-serif mb-3">{error ? "Unable to verify" : "Email verified"}</h1>
-        <p className="text-sm text-[var(--color-text-secondary)] mb-8">
-          {error || "Your account is active. You can now sign in."}
-        </p>
-        <Link href="/auth" className="inline-flex px-6 py-3 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[11px] uppercase tracking-widest font-bold">
+    <main className="min-h-screen bg-[var(--canvas)] flex items-center justify-center px-6 py-12 text-[var(--text-primary)]">
+      <div className="card w-full max-w-md p-8 text-center sm:p-10">
+        <div
+          aria-hidden="true"
+          className={`mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full ${isError ? "bg-[var(--negative-bg)] text-[#fff]" : "bg-[var(--accent-pale)] text-[var(--positive-deep)]"}`}
+        >
+          <span className={`h-3 w-3 rounded-full ${isError ? "bg-[var(--negative)]" : "bg-[var(--positive)]"}`} />
+        </div>
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">
+          {isError ? "Unable to verify" : "Email verified"}
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{error || "Your account is active. You can now sign in."}</p>
+        <Link href="/auth" className="btn-primary mt-8 inline-flex">
           Sign In
         </Link>
       </div>

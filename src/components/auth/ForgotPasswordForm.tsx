@@ -37,16 +37,16 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
   if (submitted) {
     return (
       <div className="w-full text-center animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-16 h-16 bg-[var(--color-canvas-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+        <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-pale)]">
+          <CheckCircle2 className="h-6 w-6 text-[var(--positive-deep)]" />
         </div>
-        <h2 className="text-3xl font-serif text-[var(--color-text-primary)] mb-3">Check your inbox</h2>
-        <p className="text-[var(--color-text-secondary)] text-sm mb-8">
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Check your inbox</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
           We&apos;ve sent password reset instructions to your email.
         </p>
         <button
           onClick={() => onNavigate('signin')}
-          className="text-sm font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="mt-8 text-sm font-medium text-[var(--ink-deep)] underline underline-offset-4 hover:opacity-80 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
         >
           Back to Sign In
         </button>
@@ -56,15 +56,15 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
 
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
+      <div className="mb-6">
         <button
           onClick={() => onNavigate('signin')}
-          className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] transition-colors mb-6 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="mb-6 inline-flex items-center gap-1.5 font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--text-muted)] transition-colors hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
         </button>
-        <h1 className="text-4xl font-serif text-[var(--color-text-primary)] mb-2">Reset Password</h1>
-        <p className="text-[var(--color-text-secondary)] text-sm">Enter your email and we&apos;ll send you a link to reset your password.</p>
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Reset password</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">Enter your email and we&apos;ll send you a link to reset your password.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
@@ -88,6 +88,7 @@ export default function ForgotPasswordForm({ onNavigate }: ForgotPasswordFormPro
           variant="primary"
           size="lg"
           isLoading={loading}
+          className="w-full"
         >
           {loading ? "Sending..." : "Send Reset Link"}
         </Button>

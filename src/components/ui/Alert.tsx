@@ -10,10 +10,10 @@ export interface AlertProps {
 }
 
 const toneClasses: Record<AlertTone, string> = {
-  error: 'bg-[var(--negative-pale)] text-[var(--negative-copy)] border border-[var(--negative)]/20',
-  warning: 'bg-[var(--warning-pale)] text-[var(--warning-copy)] border border-[var(--warning)]/20',
-  success: 'bg-[var(--positive-pale)] text-[var(--positive-copy)] border border-[var(--positive)]/20',
-  info: 'bg-[var(--accent-pale)] text-[var(--accent-copy)] border border-[var(--accent)]/20',
+  error: 'bg-[var(--canvas)] text-[var(--negative-deep)] border border-[var(--negative)]/40',
+  warning: 'bg-[var(--canvas)] text-[var(--warning-content)] border border-[var(--warning-deep)]/40',
+  success: 'bg-[var(--canvas)] text-[var(--positive-deep)] border border-[var(--positive)]/40',
+  info: 'bg-[var(--canvas)] text-[var(--ink-deep)] border border-[var(--accent)]/40',
 };
 
 export function Alert({ tone, children, className }: AlertProps) {

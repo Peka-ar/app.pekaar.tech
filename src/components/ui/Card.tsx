@@ -11,7 +11,7 @@ export interface CardProps {
 }
 
 const variantClasses: Record<CardVariant, string> = {
-  default: 'bg-[var(--color-surface)]',
+  default: 'bg-[var(--color-canvas)]',
   inverted: 'bg-[var(--ink)] text-[var(--on-ink)]',
   muted: 'bg-[var(--color-canvas-soft)]',
 };

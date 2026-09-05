@@ -2,6 +2,8 @@
 
 > **Parent:** [`../WEBSITE.md`](../WEBSITE.md) — top-level reference. For admin-only concerns, see [`./admin.md`](./admin.md).
 
+> **Visual styling (v3 as-built):** inline token/class notes below were written against v2 naming and may lag the code. Authoritative design reference: `WEBSITE.md` §12 + `design.md` + the token/component blocks in `globals.css` (Figtree 400/900, Inter body, sage/ink grounds, Peka Green `--accent`, `--ink-deep`; no mono outside code blocks, no Manrope/coral, light-only). When this file disagrees with the code or `WEBSITE.md` §12, code + §12 win.
+
 `/tasks` is the brand's primary work surface. Admins also land here (the page is shared) but the modal flows are role-aware. This spec documents the **brand** experience; the admin board at `/admin/tasks` is documented in [`./admin.md`](./admin.md).
 
 The lifecycle is now a 4-state machine: `PENDING → COMPLETED → PUBLISHED`, with `REVISIONS` as a **non-re-entrant** branch off `COMPLETED` and `PUBLISHED` (a project already in `REVISIONS` must be resubmitted before another revision request — see `../backend-architecture.md` §3). Every status has its own modal.
@@ -35,7 +37,7 @@ type TaskJob = {
 
 ## Layout shell
 
-`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:306` — gated on `role !== "ADMIN"` at `:316`); it is hidden below `sm` in the sticky header so the mobile action bar stays uncluttered. The shell provides the fixed sidebar (≥768px), the user profile + `logout` form, the sticky header with `ThemeToggle` + `NotificationBell`, and `MobileNavDrawer`. The drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`).
+`TasksClient` renders inside `DashboardLayout` (`src/components/dashboard/DashboardLayout.tsx:1`) with `title="Tasks Pipeline"`. The "New Task" action button is **only shown for BRAND users** (`TasksClient.tsx:306` — gated on `role !== "ADMIN"` at `:316`); it is hidden below `sm` in the sticky header so the mobile action bar stays uncluttered. The shell provides the fixed sidebar (≥768px), the user profile + `logout` form, the sticky header with `NotificationBell`, and `MobileNavDrawer`. The drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` and `inert` so the underlying black 50%-opacity scrim does not intercept taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx:104`).
 
 Below the header, `TasksClient` renders a **toolbar** (`TasksClient.tsx:313`):
 - **Search input** (`Input` with `Search` icon) — filters by `name`, `sku`, or `id` (case-insensitive).
@@ -59,9 +61,9 @@ Filtering runs client-side over `initialJobs` — no server round-trip.
 | `COMPLETED` | Review | `Eye` |
 | `PUBLISHED` | Published | `CheckCircle2` (emerald) |
 
-Each column is a fixed-width (`w-80`) scrollable panel with a header (icon + label + count badge) and a list of job cards. Empty columns show a dashed "Empty" placeholder.
+Each column is a fixed-width (`w-80`) `bg-canvas-soft` well (`rounded-2xl`, `--radius-lg`, `border-transparent`) with a header (`label-mono` + `bg-surface` count pill) and a list of job cards. Empty columns show a dashed "Empty" placeholder.
 
-**Job card**: thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>` — proxy URL composed from `asset.id`, `unoptimized` because the proxy is cookie-gated), job id mono pill, status icon, product name, and (for ADMIN only) a `Category:` line. Footer: brand initials avatar + SKU + created date. `COMPLETED` cards append a full-width **"Review Model"** button that opens the Review modal.
+**Job card**: `card` (`bg-surface`, `rounded-2xl`, `border-default`) — thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>`), job id mono pill (`bg-canvas-soft`), `Badge` status pill from `PROJECT_STATUS_META` tones (`PENDING→neutral`, `REVISIONS→warning`, `COMPLETED/PUBLISHED→success`) with `BRAND_LABEL`, product name, and (for ADMIN only) a `Category:` line. Footer: brand initials avatar + mono SKU + `text-muted` created date. `COMPLETED` cards append a full-width **"Review Model"** button (ink pill — `bg-[var(--text-primary)] text-[var(--canvas)]`, 10px uppercase tracked, `rounded-xl`) that opens the Review modal.
 
 **Card click routing** (`handleCardClick`, `TasksClient.tsx:191`):
 - `PENDING` → `setProcessingJob(job)` → Processing modal (read-only, "Awaiting production")
@@ -73,7 +75,7 @@ Each column is a fixed-width (`w-80`) scrollable panel with a header (icon + lab
 
 ## List view (mobile / toggle)
 
-A `Card`-wrapped table with columns: Job ID, Product (thumbnail + name + SKU), Status (`Badge` whose label comes from `BRAND_LABEL[job.status]`), Created, Actions. The Actions cell routes by status: `COMPLETED` shows a "Review" pill, `PUBLISHED` shows "View 3D", others show "Details".
+A `Card` (`rounded-[24px]`) wrapped table with `th-mono` headers (`bg-canvas-soft`) and hairline rows (`divide-border-default`, `14px body-sm` data). Columns: Job ID (mono pill `bg-canvas-soft`), Product (thumbnail + name + SKU), Status (`Badge` tone from `PROJECT_STATUS_META` — `PENDING→neutral`, `REVISIONS→warning`, `COMPLETED/PUBLISHED→success` — label from `BRAND_LABEL`), Created (mono `text-muted`), Actions. The Actions cell routes by status: `COMPLETED` shows a "Review" pill (`bg-text-primary`), `PUBLISHED` shows "View 3D", others show "Details".
 
 ---
 

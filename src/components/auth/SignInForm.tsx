@@ -71,9 +71,9 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
 
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
-        <h1 className="text-4xl font-serif text-[var(--color-text-primary)] mb-2">Welcome back.</h1>
-        <p className="text-[var(--color-text-secondary)] text-sm">Sign in to manage your 3D assets and integrations.</p>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Welcome back.</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">Sign in to manage your 3D assets and integrations.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
@@ -108,9 +108,9 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
           <button
             type="button"
             onClick={() => onNavigate('forgot-password')}
-            className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] underline underline-offset-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+            className="text-sm font-medium text-[var(--ink-deep)] hover:underline underline-offset-4 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
           >
-            Forgot?
+            Forgot password?
           </button>
         </div>
 
@@ -121,16 +121,17 @@ export default function SignInForm({ onNavigate }: SignInFormProps) {
           variant="primary"
           size="lg"
           isLoading={loading}
+          className="w-full"
         >
           Sign In
         </Button>
       </form>
 
-      <div className="mt-8 text-center text-sm text-[var(--color-text-secondary)]">
+      <div className="mt-8 text-center text-sm text-[var(--text-secondary)]">
         Don&apos;t have an account?{' '}
         <button
           onClick={() => onNavigate('signup')}
-          className="font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="font-medium text-[var(--ink-deep)] underline underline-offset-4 hover:opacity-80 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
         >
           Sign Up
         </button>

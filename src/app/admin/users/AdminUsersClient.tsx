@@ -282,7 +282,7 @@ export function AdminUsersClient() {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600" role="alert">
+        <div className="text-sm text-[var(--negative-deep)]" role="alert">
           {error}
         </div>
       )}
@@ -291,12 +291,12 @@ export function AdminUsersClient() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Email</TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Name</TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Role</TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Status</TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Created</TableCell>
-              <TableCell className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] font-normal">Usage Limits</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Email</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Name</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Role</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Status</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Created</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Usage Limits</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -338,7 +338,7 @@ export function AdminUsersClient() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="font-mono text-sm text-[var(--color-text-secondary)]">
+                    <span className="font-sans text-sm text-[var(--color-text-secondary)]">
                       {user.usageLimits ?? '\u2014'}
                     </span>
                   </TableCell>
@@ -390,26 +390,26 @@ export function AdminUsersClient() {
               </div>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono">Name</span>
+                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-sans">Name</span>
                   <p className="text-[var(--color-text-primary)] font-medium">{selectedUser.name ?? '\u2014'}</p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono">Role</span>
+                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-sans">Role</span>
                   <p><Badge tone={roleTone(selectedUser.role)}>{selectedUser.role}</Badge></p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono">Created</span>
+                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-sans">Created</span>
                   <p className="text-[var(--color-text-primary)]">{formatDistanceToNow(new Date(selectedUser.createdAt), { addSuffix: true })}</p>
                 </div>
                 <div>
-                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-mono">Onboarded</span>
+                  <span className="text-[var(--color-text-muted)] text-[10px] uppercase tracking-widest font-sans">Onboarded</span>
                   <p className="text-[var(--color-text-primary)]">{selectedUser.onboarded ? 'Yes' : 'No'}</p>
                 </div>
               </div>
               {selectedUser.status === 'SUSPENDED' && selectedUser.statusReason && (
-                <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                  <span className="text-[10px] uppercase tracking-widest font-mono text-red-700">Suspension reason</span>
-                  <p className="text-sm text-red-700 mt-1">{selectedUser.statusReason}</p>
+                <div className="bg-[var(--negative)]/10 border border-[var(--negative)]/40 rounded-xl px-4 py-3">
+                  <span className="text-[10px] uppercase tracking-widest font-sans text-[var(--negative-deep)]">Suspension reason</span>
+                  <p className="text-sm text-[var(--negative-deep)] mt-1">{selectedUser.statusReason}</p>
                 </div>
               )}
             </div>
@@ -428,8 +428,8 @@ export function AdminUsersClient() {
                         <Icon className="w-4 h-4 text-[var(--color-text-muted)]" />
                       </div>
                       <div>
-                        <div className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)]">{stat.label}</div>
-                        <div className="text-lg font-serif italic text-[var(--color-text-primary)]">{stat.value}</div>
+                        <div className="label-mono text-[var(--color-text-muted)]">{stat.label}</div>
+                        <div className="font-display text-lg font-bold tracking-tight text-[var(--color-text-primary)]">{stat.value}</div>
                       </div>
                     </CardBody>
                   </Card>
@@ -438,11 +438,11 @@ export function AdminUsersClient() {
             </div>
 
             <div>
-              <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] mb-3">Recent Projects</h4>
+              <h4 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-3">Recent Projects</h4>
               {selectedUser.recentProjects.length > 0 ? (
                 <div className="space-y-2">
                   {selectedUser.recentProjects.map((project) => (
-                    <div key={project.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[var(--color-canvas-secondary)]">
+                    <div key={project.id} className="flex items-center justify-between py-2 px-3 rounded-lg bg-[var(--color-canvas-soft)]">
                       <span className="text-sm font-medium text-[var(--color-text-primary)]">{project.name}</span>
                       <div className="flex items-center gap-3">
                         <Badge tone="neutral">{project.status}</Badge>
@@ -459,19 +459,19 @@ export function AdminUsersClient() {
             </div>
 
             {actionError && (
-              <div className="text-sm text-red-600" role="alert">
+              <div className="text-sm text-[var(--negative-deep)]" role="alert">
                 {actionError}
               </div>
             )}
 
             <Card>
               <CardHeader>
-                <h4 className="text-sm uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)]">Actions</h4>
+                <h4 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)]">Actions</h4>
               </CardHeader>
               <CardBody className="space-y-4">
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
-                    <label className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] mb-1 block">Role</label>
+                    <label className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] mb-1 block">Role</label>
                     <Select
                       value={newRole}
                       onChange={(e) => setNewRole(e.target.value)}
@@ -485,7 +485,7 @@ export function AdminUsersClient() {
 
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
-                    <label className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] mb-1 block">Usage Limits</label>
+                    <label className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] mb-1 block">Usage Limits</label>
                     <Input
                       type="number"
                       value={newUsageLimits}
@@ -498,7 +498,7 @@ export function AdminUsersClient() {
 
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
-                    <label className="text-[10px] uppercase tracking-widest font-mono text-[var(--color-text-muted)] mb-1 block">Subscription Tier</label>
+                    <label className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] mb-1 block">Subscription Tier</label>
                     <Input
                       type="text"
                       value={newSubscriptionTier}

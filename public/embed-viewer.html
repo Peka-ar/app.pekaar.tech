@@ -8,19 +8,19 @@
   <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js"></script>
   <style>
     :root {
-      --bg: #F9F8F6;
-      --border: #E5E2DD;
-      --text-muted: #7A7670;
-      --text-primary: #1A1A1A;
-      --hover: #EFEDEA;
+      --bg: #f1f1ea;
+      --border: #d9dbd0;
+      --text-muted: #6f6d64;
+      --text-primary: #161510;
+      --hover: #e4e6dc;
     }
     html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
     .grid-floor {
       position: absolute; inset: 0; z-index: 0; pointer-events: none;
       background:
-        linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, #E5E2DD 100%),
-        repeating-linear-gradient(90deg, transparent 0 60px, rgba(26,26,26,0.08) 60px 61px),
-        repeating-linear-gradient(0deg, transparent 0 60px, rgba(26,26,26,0.08) 60px 61px);
+        linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, #d9dbd0 100%),
+        repeating-linear-gradient(90deg, transparent 0 60px, rgba(22,21,16,0.08) 60px 61px),
+        repeating-linear-gradient(0deg, transparent 0 60px, rgba(22,21,16,0.08) 60px 61px);
       transform: perspective(800px) rotateX(62deg);
       transform-origin: center 100%;
       mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 72%, transparent 100%);
@@ -99,7 +99,7 @@
       cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
       transition: background-color 200ms, color 200ms, border-color 200ms, transform 100ms;
     }
-    .ar-button:hover { background: #2A2825; }
+    .ar-button:hover { background: #2a2a24; }
     .ar-button:active { transform: scale(0.97); }
     .ar-button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .ar-button[hidden] { display: none; }

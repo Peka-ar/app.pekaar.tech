@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 export default function DashboardError() {
   const router = useRouter();
   return (
-    <Card>
+    <Card className="rounded-[24px]">
       <CardBody>
         <EmptyState
           icon={<AlertCircle className="w-6 h-6" />}
@@ -17,7 +17,7 @@ export default function DashboardError() {
           action={
             <button
               onClick={() => router.refresh()}
-              className="px-4 py-2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-bold hover:opacity-90 transition-opacity"
+              className="btn-secondary h-10 px-6 text-xs"
             >
               Retry
             </button>

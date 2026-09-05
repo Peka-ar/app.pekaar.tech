@@ -85,7 +85,7 @@ export default function NotificationBell() {
           outlineColor: 'var(--text-primary)',
         }}
         onMouseEnter={e => {
-          e.currentTarget.style.backgroundColor = 'var(--canvas-secondary)';
+          e.currentTarget.style.backgroundColor = 'var(--canvas-soft)';
         }}
         onMouseLeave={e => {
           e.currentTarget.style.backgroundColor = 'transparent';
@@ -100,7 +100,7 @@ export default function NotificationBell() {
         <div
           className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl shadow-lg z-50 overflow-hidden transform transition-all duration-300 origin-top-right animate-in fade-in slide-in-from-top-2"
           style={{
-            backgroundColor: 'var(--surface)',
+            backgroundColor: 'var(--canvas)',
             border: '1px solid var(--border-default)',
             backdropFilter: 'blur(12px)',
           }}
@@ -109,11 +109,11 @@ export default function NotificationBell() {
             className="flex items-center justify-between px-4 py-3"
             style={{
               borderBottom: '1px solid var(--border-default)',
-              backgroundColor: 'var(--surface)',
+              backgroundColor: 'var(--canvas)',
             }}
           >
             <h3
-              className="text-sm font-bold font-mono tracking-widest uppercase"
+              className="text-sm font-bold font-sans tracking-widest uppercase"
               style={{ color: 'var(--text-primary)' }}
             >
               Notifications
@@ -162,7 +162,7 @@ export default function NotificationBell() {
                             {notification.name}
                           </p>
                           <p
-                            className="text-[9px] font-mono mt-1.5"
+                            className="text-[9px] font-sans mt-1.5"
                             style={{ color: 'var(--text-muted)' }}
                           >
                             {timeAgo(notification.createdAt)}
@@ -186,10 +186,10 @@ export default function NotificationBell() {
             <Link
               href="/notifications"
               onClick={() => setIsOpen(false)}
-              className="block w-full text-center py-2 text-[10px] font-mono font-bold tracking-widest uppercase rounded-xl transition-colors"
+              className="block w-full text-center py-2 text-[10px] font-sans font-bold tracking-widest uppercase rounded-xl transition-colors"
               style={{ color: 'var(--text-primary)' }}
               onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'var(--canvas-secondary)';
+                e.currentTarget.style.backgroundColor = 'var(--canvas-soft)';
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.backgroundColor = 'transparent';

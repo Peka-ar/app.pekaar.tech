@@ -2,6 +2,8 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md)
 
+> **Visual styling (v3 as-built):** inline token/class notes below were written against v2 naming and may lag the code. Authoritative design reference: `WEBSITE.md` §12 + `design.md` + the token/component blocks in `globals.css` (Figtree 400/900, Inter body, sage/ink grounds, Peka Green `--accent`, `--ink-deep`; no mono outside code blocks, no Manrope/coral, light-only). When this file disagrees with the code or `WEBSITE.md` §12, code + §12 win.
+
 The admin panel provides platform-wide management tools for ADMIN users. Four pages share a common `AdminLayout`, enforce strict `Role.ADMIN` gating, and call dedicated server actions (`admin.ts`, `admin-users.ts`, `admin-analytics.ts`).
 
 ---
@@ -17,7 +19,7 @@ The admin panel provides platform-wide management tools for ADMIN users. Four pa
 
 **Proxy gating:** `/admin` → `["ADMIN"]` (`src/proxy.ts:8`). All four routes are protected by `requirePrincipalOrRedirect()` in the server entry, and each server action calls `requirePrincipal({ roles: [Role.ADMIN] })`.
 
-**Layout:** All four pages are wrapped in `AdminLayout` (`src/components/admin/AdminLayout.tsx:19`), which is split into an outer wrapper that mounts `<SessionProvider>` and an inner `AdminLayoutInner` that consumes the session. This mirrors the `DashboardLayout` pattern (`src/components/dashboard/DashboardLayout.tsx:19`) and is required because `AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`) re-uses the dashboard `MobileNavDrawer`, which calls `useSession()`. Without the provider, the admin pages would throw `TypeError: Cannot destructure property 'data' of useSession() as it is undefined` on every SSR. The layout provides a left sidebar navigation (Overview, Users, Tasks Management, Analytics), a sticky header with title + action slot + ThemeToggle + NotificationBell, and the mobile nav drawer.
+**Layout:** All four pages are wrapped in `AdminLayout` (`src/components/admin/AdminLayout.tsx:19`), which is split into an outer wrapper that mounts `<SessionProvider>` and an inner `AdminLayoutInner` that consumes the session. This mirrors the `DashboardLayout` pattern (`src/components/dashboard/DashboardLayout.tsx:19`) and is required because `AdminMobileNavDrawer` (`src/components/admin/AdminMobileNavDrawer.tsx:17`) re-uses the dashboard `MobileNavDrawer`, which calls `useSession()`. Without the provider, the admin pages would throw `TypeError: Cannot destructure property 'data' of useSession() as it is undefined` on every SSR. The layout provides a left sidebar navigation (Overview, Users, Tasks Management, Analytics), a sticky header with title + action slot + `NotificationBell` (no `ThemeToggle` — v3 is light-only) and the mobile nav drawer.
 
 ---
 
@@ -48,10 +50,10 @@ Segment `loading.tsx` (`src/app/admin/loading.tsx`) renders `AdminLayout` + `Adm
 
 ### Dashboard sections
 
-1. **KPI Cards** (`:96`) — 4-card grid: Total Users, Total Projects, Active Users (total − suspended), Events This Month. Each card renders a Lucide icon, mono label, and serif count via `formatCount()`.
-2. **Projects by Status** (`:122`) — `Card` > `Table` with rows for each `ProjectStatus` group from `projectsByStatus`. Uses `PROJECT_STATUS_META` for Badge tone/icon/label. Displays all 6 statuses.
-3. **Signups by Month** (`:168`) — 12-month bar chart built from `getSignupsSeries`. Horizonal stacked bars with hover tooltip. Month labels at the bottom.
-4. **Top Brands** (`:205`) — `Card` > `Table` with Brand Name (avatar + name), Email, Projects count, Status badge (ACTIVE/SUSPENDED).
+1. **KPI Cards** (`:96`) — 4-card grid (`rounded-[24px]`): Total Users, Total Projects, Active Users (total − suspended), Events This Month. Each card is `rounded-[24px]`, icon chip `bg-canvas-soft`, label `label-mono` (`text-muted`), and value `font-display 3xl bold` via `formatCount()`.
+2. **Projects by Status** (`:122`) — `Card` (`rounded-[24px] overflow-hidden`) > `Table` (`th-mono`, `divide-border-default`, `14px body-sm`) with rows for each `ProjectStatus` group from `projectsByStatus`. Uses `PROJECT_STATUS_META` tones (`PENDING→neutral`, `REVISIONS→warning`, `COMPLETED/PUBLISHED→success`) for Badge pill + icon/label. Displays all 6 statuses.
+3. **Signups by Month** (`:168`) — 12-month bar chart (`bg-accent` series, `border-default` gridlines, `surface+border+shadow-1` tooltip, `text-muted` axis labels) built from `getSignupsSeries`. Single-accent (`accent` + `text-secondary` for comparison would be second series if present). `label-mono` header.
+4. **Top Brands** (`:205`) — `Card` (`rounded-[24px] overflow-hidden`) > `Table` (`th-mono`, `divide-border-default`) with Brand Name (avatar `bg-canvas-soft` + name), Email, Projects count (`font-display lg bold`), Status badge — `ACTIVE→success` (`positive-pale/copy`), `SUSPENDED→danger` (`negative-pale/copy`).
 
 ### Loading & error states
 - **Skeleton:** `AdminDashboardSkeleton` (`src/app/admin/dashboard/AdminDashboardSkeleton.tsx:1`) — shapes matching the 4-card grid, status table, and 2-column chart layout.
@@ -170,7 +172,7 @@ Loads `getAllTasks()` (all projects, not just the caller's). `requirePrincipalOr
 
 `PUBLISHED` is not rendered as a board column but does show in the modal as a read-only "Live on storefront" banner. There is no separate queue for `IN_PROGRESS` — every PENDING project is implicitly any admin's.
 
-Each column is `w-72`, scrollable, with header (icon + label + count badge) and job cards. Card shows thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>`), job ID mono pill, product name, brand initials + SKU + created date. Empty columns show dashed "Empty" placeholder. The thumbnail `<Image>` carries the `unoptimized` prop because the asset proxy is cookie-gated (`file-storage-architecture.md` §4b).
+Each column is `w-72` `bg-canvas-soft` well (`rounded-2xl`, `border-transparent`) scrollable, with header (`label-mono` + `bg-surface` count pill) and `card` job cards (`bg-surface`, `rounded-2xl`, `border-default`). Card shows thumbnail (first REFERENCE_IMAGE via `<Image src={getThumbnail(job)} unoptimized>`), job ID mono pill (`bg-canvas-soft`), `Badge` status pill from `PROJECT_STATUS_META` (`PENDING→neutral`, `REVISIONS→warning`, `COMPLETED→success`) with `ADMIN_LABEL`, product name, brand initials + mono SKU + `text-muted` date. Empty columns show dashed "Empty" placeholder (`bg-surface/50`). The thumbnail `<Image>` carries the `unoptimized` prop because the asset proxy is cookie-gated (`file-storage-architecture.md` §4b).
 
 **Management modal** (`:295`): Dialog variant, sections (no footer; closed via header X / Escape / backdrop):
 
@@ -255,8 +257,8 @@ interface AdminLayoutProps {
 ```
 
 **Structure:**
-- Left sidebar (desktop only, `w-64`): Peka AR wordmark (`src/components/Wordmark.tsx` — Manrope + coral dot) + nav links (Overview → `/admin/dashboard`, Users → `/admin/users`, Tasks Management → `/admin/tasks`, Analytics → `/admin/analytics`), user profile (initials avatar + name/role) + Sign Out form.
-- Header (sticky): hamburger `Menu` button (mobile only, opens `AdminMobileNavDrawer`), title (`h1`, serif italic, `text-lg sm:text-2xl`), action slot (hidden below `sm`), `ThemeToggle`, `NotificationBell`.
+- Left sidebar (desktop only, `w-64`): Peka AR wordmark (`src/components/Wordmark.tsx` — Figtree `font-display` + `var(--accent)` dot) + nav links (Overview → `/admin/dashboard`, Users → `/admin/users`, Tasks Management → `/admin/tasks`, Analytics → `/admin/analytics`), user profile (initials avatar + name/role) + Sign Out form.
+- Header (sticky): hamburger `Menu` button (mobile only, opens `AdminMobileNavDrawer`), title (`h1`, `text-xl sm:text-2xl font-semibold tracking-tight truncate`), action slot (hidden below `sm`), `NotificationBell`.
 - `<main>` content area: `p-4 sm:p-6` (mobile-first padding to avoid cramped 360px viewports).
 
 **Nav items** (`:23`):

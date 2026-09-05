@@ -12,10 +12,10 @@ export interface BadgeProps {
 
 const toneClasses: Record<BadgeTone, string> = {
   neutral: 'bg-[var(--canvas-soft)] text-[var(--text-secondary)] border border-transparent',
-  success: 'bg-[var(--positive-pale)] text-[var(--positive-copy)] border border-transparent',
-  warning: 'bg-[var(--warning-pale)] text-[var(--warning-copy)] border border-transparent',
-  danger: 'bg-[var(--negative-pale)] text-[var(--negative-copy)] border border-transparent',
-  info: 'bg-[var(--accent-pale)] text-[var(--accent-copy)] border border-transparent',
+  success: 'bg-[var(--accent-pale)] text-[var(--positive-deep)] border border-transparent',
+  warning: 'bg-[var(--warning)] text-[var(--warning-content)] border border-transparent',
+  danger: 'bg-[var(--negative-bg)] text-white border border-transparent',
+  info: 'bg-[var(--canvas-soft)] text-[var(--ink-deep)] border border-[var(--accent-cyan)]/30',
   inverted: 'bg-[var(--ink)] text-[var(--on-ink)] border border-transparent',
 };
 

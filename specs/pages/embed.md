@@ -2,6 +2,8 @@
 
 > Parent: [`../WEBSITE.md`](../WEBSITE.md) §11
 
+> **Visual styling (v3 as-built):** inline token/class notes below were written against v2 naming and may lag the code. Authoritative design reference: `WEBSITE.md` §12 + `design.md` + the token/component blocks in `globals.css` (Figtree 400/900, Inter body, sage/ink grounds, Peka Green `--accent`, `--ink-deep`; no mono outside code blocks, no Manrope/coral, light-only). When this file disagrees with the code or `WEBSITE.md` §12, code + §12 win.
+
 The public embed is the storefront-facing 3D viewer. Brands paste an `<iframe>` into Shopify, custom HTML, Wix, Squarespace, etc. The iframe loads a tiny static HTML file, fetches the project's GLB/USDZ from the SDK config endpoint, and posts analytics events back to STUDIO.V.
 
 ---
@@ -23,7 +25,7 @@ Brand storefront
             └─ lazy-loads model-viewer.min.js from ajax.googleapis.com
 ```
 
-**No Next.js page render.** The embed never touches `app/layout.tsx`, never loads fonts, never hydrates `TopNav` or `ThemeProvider`. The whole embed is a route handler that streams a static HTML template + a vanilla JS module.
+**No Next.js page render.** The embed never touches `app/layout.tsx`, never loads fonts, never hydrates `TopNav` or any React provider. The whole embed is a route handler that streams a static HTML template + a vanilla JS module.
 
 ---
 
@@ -47,9 +49,9 @@ Brand storefront
 - **File:** `public/embed-viewer.html:1` (single static template, no bundler)
 - **Size:** ~12 KB (template). At request time the route handler replaces `{PROJECT_ID}`; the response is `~12 KB` and has no font preloads, no app shell, and zero layout chain.
 - **Contents:**
-  - `<style>` with STUDIO.V design tokens (`--bg #F9F8F6`, `--border #E5E2DD`, `--text-muted #7A7670`, `--text-primary #1A1A1A`, `--hover #EFEDEA`).
+  - `<style>` with v2 tokens aligned in Phase 6 (`--bg #f1f1ea`/`--canvas`, `--border #d9dbd0`/`--border-default`, `--text-muted #6f6d64`, `--text-primary #161510`/`--ink`, `--hover #e4e6dc`/`--canvas-soft`).
   - `<script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.2.0/model-viewer.min.js">` in `<head>` (matches landing page version).
-  - **3D grid floor** (`.grid-floor`): pure-CSS perspective floor behind the model. Two `repeating-linear-gradient` layers (horizontal and vertical 60px grid lines, `rgba(26,26,26,0.08)` color) transformed with `perspective(800px) rotateX(62deg)`, masked at top/bottom with a 4-stop linear-gradient so the grid fades to nothing at the horizon and at the camera. `pointer-events: none` so it never intercepts drag. `aria-hidden="true"`. Lives inside `#frame` at `z-index: 0;` so `#frame`'s `overflow: hidden;` clips the grid to the rounded card; `border-radius: 16px;` matches the frame.
+  - **3D grid floor** (`.grid-floor`): pure-CSS perspective floor behind the model. Two `repeating-linear-gradient` layers (horizontal and vertical 60px grid lines, `rgba(22,21,16,0.08)`/`--ink` at 8% — v2 ink, was `rgba(26,26,26,0.08)`) with `linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, #d9dbd0 100%)` sky-to-ground (v2 `--border-default`, was `#E5E2DD`), transformed with `perspective(800px) rotateX(62deg)`, masked at top/bottom with a 4-stop linear-gradient so the grid fades to nothing at the horizon and at the camera. `pointer-events: none` so it never intercepts drag. `aria-hidden="true"`. Lives inside `#frame` at `z-index: 0;` so `#frame`'s `overflow: hidden;` clips the grid to the rounded card; `border-radius: 16px;` matches the frame.
   - **Frame card** (`#frame`): the landing-style rounded container — `1px solid var(--border)`, `border-radius: 16px`, `overflow: hidden`, `position: absolute; inset: 0;`, `background: transparent;`. Houses the model-viewer, the grid, and the overlays.
   - **Stage** (`#stage`): the model-viewer mount point (`position: absolute; inset: 0; z-index: 1; background: transparent;`). The `<model-viewer>` is also set to `background-color="transparent"` (attribute + inline style) so its host element doesn't paint an opaque backing and the grid shows through wherever the model isn't drawn.
   - **Loader** (`.loader`): replicated from landing's `ThreeDConfigurator`. `RefreshCw` SVG (inline, 20×20, `animation: spin 1.2s linear infinite`) + monospace `LOADING 3D MODEL…` text (10px, `letter-spacing: 0.2em`, `text-transform: uppercase`). On `progress` events from model-viewer, text updates to `LOADING… NN%`.
@@ -126,7 +128,7 @@ Top-right corner, vertical button stack (`.controls` in `public/embed-viewer.htm
 | `#btn-rotate` | `RotateCcw` SVG, spins via `animation: spin 8s linear infinite` when `aria-pressed="true"` (matches landing's `animationDuration: '8s'`) | Toggles `mv.autoRotate`. Active state: `background: var(--text-primary); color: #fff; border-color: var(--text-primary)`. Inactive state: white with muted icon. |
 | `#btn-reset` | `Compass` SVG (lucide-style polygon inside circle) | Sets `mv.cameraOrbit = "0deg 75deg 105%"` and `mv.cameraTarget = "0m 0.4m 0m"` (identical to `ThreeDConfigurator.tsx:74-76`). |
 
-Both buttons have `aria-label`, `:focus-visible` ring per `design.md` §10.1 (`2px solid #1A1A1A`), and `cursor: pointer`. They are positioned `top: 16px; right: 16px; z-index: 20;` (over the model, but only after load — the loader uses `z-index: 10` so it never sits behind the controls).
+Both buttons have `aria-label`, `:focus-visible` ring per `design.md` "Components" (2px ink ring; the standalone HTML carries its own local `--ink` token — `2px solid #161510`, was `#1A1A1A`), and `cursor: pointer`. They are positioned `top: 16px; right: 16px; z-index: 20;` (over the model, but only after load — the loader uses `z-index: 10` so it never sits behind the controls).
 
 ## AR button
 
@@ -145,12 +147,12 @@ A third action, slotted into `<model-viewer>` via the standard `slot="ar-button"
 
 - `position: absolute; bottom: 16px; right: 16px;`
 - Pill: `border-radius: 9999px`, padding `10px 16px`
-- Background `--text-primary` (`#1A1A1A`), white text
+- Background `--text-primary` (`#161510`/`--ink`, was `#1A1A1A`), white text
 - Font: `ui-monospace`, `10px`, `letter-spacing: 0.18em`, uppercase
-- Hover darkens to `#2A2825`; `:active { transform: scale(0.97) }`
+- Hover `#2a2a24` (v2 ink hover, was `#2A2825`); `:active { transform: scale(0.97) }`
 - `box-shadow: 0 2px 8px rgba(0,0,0,0.12)`
 - `aria-label="View in your space"`; icon `aria-hidden="true"`
-- `:focus-visible` ring per `design.md` §10.1
+- `:focus-visible` ring per the embed's own `--ink` token (2px, focus ring guidance in `design.md` "Components")
 
 **Capability gating:** the button starts `hidden` and is revealed only on the `<model-viewer>` `load` event if `mv.canActivateAR` is truthy. On desktop browsers (and any other device without a usable AR mode) `canActivateAR` is `false` and the button never appears — no dead click target.
 
@@ -172,7 +174,7 @@ The visual backdrop is a pure-CSS perspective floor — no SVG, no extra DOM, no
 
 **Construction** (`.grid-floor` in `public/embed-viewer.html`):
 
-1. Two `repeating-linear-gradient` layers form a 60×60 px grid in `rgba(26,26,26,0.08)` on top of a vertical sky-to-ground gradient (`var(--bg)` → `#E5E2DD`).
+1. Two `repeating-linear-gradient` layers form a 60×60 px grid in `rgba(22,21,16,0.08)`/`--ink` at 8% (was `rgba(26,26,26,0.08)`) on top of a vertical sky-to-ground gradient (`var(--bg)` → `#d9dbd0`/`--border-default`, was `#E5E2DD`).
 2. The whole layer is `transform: perspective(800px) rotateX(62deg)`, `transform-origin: center 100%` — the grid tilts away from the camera like a floor.
 3. A 4-stop `mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 72%, transparent 100%)` fades the grid at the horizon (top) and the camera (bottom) so the floor blends smoothly into the off-white background.
 

@@ -2,13 +2,23 @@ import Link from "next/link";
 
 export default function PrivacyPage() {
   return (
-    <main className="min-h-screen" style={{ backgroundColor: 'var(--canvas)' }}>
+    <main className="min-h-screen font-sans" style={{ backgroundColor: 'var(--canvas)', color: 'var(--text-primary)' }}>
       <div className="max-w-3xl mx-auto px-6 py-16 lg:py-24">
-        <h1 className="font-serif text-4xl text-[var(--color-text-primary)] mb-8">Privacy Policy</h1>
+        <p className="label-mono mb-4 text-[var(--text-muted)]">Legal · Last updated September 2026</p>
+        <h1
+          className="font-display text-[clamp(2.125rem,4.5vw,3rem)] font-bold leading-[1.05] tracking-[-0.02em] text-[var(--text-primary)]"
+          style={{ textWrap: "balance" }}
+        >
+          Privacy Policy
+        </h1>
+        <div className="mt-3 h-px w-full" style={{ backgroundColor: 'var(--border-default)' }} aria-hidden="true" />
 
-        <div className="space-y-6 text-[var(--color-text-secondary)] leading-relaxed">
-          <p className="text-amber-600 p-4 bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-200 rounded-lg">
-            <strong>Placeholder Notice:</strong> This is a placeholder Privacy Policy. Replace with reviewed legal copy before launch.
+        <div className="mt-8 space-y-6 text-[16px] leading-[1.6] text-[var(--text-secondary)]">
+          <p
+            className="rounded-xl border p-4 text-[14px] leading-[1.5]"
+            style={{ backgroundColor: 'var(--warning)', color: 'var(--warning-content)', borderColor: 'var(--warning)' }}
+          >
+            <strong className="font-semibold">Placeholder Notice:</strong> This is a placeholder Privacy Policy. Replace with reviewed legal copy before launch.
           </p>
 
           <p>
@@ -19,7 +29,7 @@ export default function PrivacyPage() {
             When drafting your Privacy Policy, consider including information about:
           </p>
 
-          <ul className="list-disc pl-6 space-y-2">
+          <ul className="list-disc pl-6 space-y-2 marker:text-[var(--text-muted)]">
             <li>Information collection (personal, usage, device data)</li>
             <li>How information is used and shared</li>
             <li>Cookie and tracking technologies</li>
@@ -35,12 +45,10 @@ export default function PrivacyPage() {
           </p>
         </div>
 
-        <div className="mt-12 pt-8 border-t border-[var(--color-border-default)]">
+        <div className="mt-12 pt-8 border-t" style={{ borderColor: 'var(--border-default)' }}>
           <Link
             href="/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors"
+            className="text-sm font-semibold text-[var(--text-primary)] underline underline-offset-4 hover:text-[var(--ink-deep)] transition-colors"
           >
             Return to Home
           </Link>

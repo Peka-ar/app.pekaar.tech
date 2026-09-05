@@ -62,15 +62,15 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
   if (submittedEmail) {
     return (
       <div className="w-full text-center animate-in fade-in zoom-in-95 duration-500">
-        <div className="w-16 h-16 bg-[var(--color-canvas-secondary)] rounded-full flex items-center justify-center mx-auto mb-6">
-          <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+        <div className="mx-auto mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--accent-pale)]">
+          <CheckCircle2 className="h-6 w-6 text-[var(--positive-deep)]" />
         </div>
-        <h2 className="text-3xl font-serif text-[var(--color-text-primary)] mb-3">Check your inbox</h2>
-        <p className="text-[var(--color-text-secondary)] text-sm mb-8">
-          We sent a verification link to <strong>{submittedEmail}</strong>. Click it to activate your account, then sign in.
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Check your inbox</h2>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+          We sent a verification link to <strong className="font-semibold text-[var(--text-primary)]">{submittedEmail}</strong>. Click it to activate your account, then sign in.
         </p>
 
-        <Alert tone="info">
+        <Alert tone="info" className="mt-6 text-left">
           Didn&apos;t get the email? Check your <strong>spam</strong> or <strong>promotions</strong> folder, then try again.
         </Alert>
 
@@ -83,8 +83,8 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
         <Button
           type="button"
           variant="secondary"
-          size="lg"
-          className="mt-6"
+          size="md"
+          className="mt-6 w-full"
           isLoading={resendState === 'sending'}
           onClick={handleResend}
         >
@@ -93,7 +93,7 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
 
         <button
           onClick={() => onNavigate('signin')}
-          className="mt-6 block w-full text-sm font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="mt-6 block w-full text-sm font-medium text-[var(--ink-deep)] underline underline-offset-4 hover:opacity-80 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
         >
           Back to Sign In
         </button>
@@ -103,9 +103,9 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
 
   return (
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8">
-        <h1 className="text-4xl font-display font-semibold text-[var(--color-text-primary)] mb-2">Join Peka AR</h1>
-        <p className="text-[var(--color-text-secondary)] text-sm">Create your brand&apos;s interactive showroom today.</p>
+      <div className="mb-6">
+        <h1 className="font-display text-2xl font-semibold tracking-[-0.01em] text-[var(--text-primary)]">Join Peka AR</h1>
+        <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">Create your brand&apos;s interactive showroom today.</p>
       </div>
 
       <form className="space-y-5" onSubmit={handleSubmit}>
@@ -138,12 +138,12 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
 
         {password.length > 0 && (
           <div className="pt-1 flex items-center gap-2" aria-live="polite">
-            <div className="flex-1 flex gap-1 h-1">
-              <div className={`flex-1 rounded-full ${strength >= 1 ? 'bg-amber-500' : 'bg-[var(--color-border-default)]'}`}></div>
-              <div className={`flex-1 rounded-full ${strength >= 2 ? 'bg-amber-500' : 'bg-[var(--color-border-default)]'}`}></div>
-              <div className={`flex-1 rounded-full ${strength >= 3 ? 'bg-emerald-500' : 'bg-[var(--color-border-default)]'}`}></div>
+            <div className="flex h-1 flex-1 gap-1">
+              <div className={`flex-1 rounded-full ${strength >= 1 ? 'bg-[var(--warning)]' : 'bg-[var(--border-default)]'}`} />
+              <div className={`flex-1 rounded-full ${strength >= 2 ? 'bg-[var(--warning)]' : 'bg-[var(--border-default)]'}`} />
+              <div className={`flex-1 rounded-full ${strength >= 3 ? 'bg-[var(--positive)]' : 'bg-[var(--border-default)]'}`} />
             </div>
-            <span className="text-[10px] uppercase font-mono tracking-widest text-[var(--color-text-muted)]">
+            <span className="font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--text-muted)]">
               {strength === 1 && 'Weak'}
               {strength === 2 && 'Good'}
               {strength === 3 && 'Strong'}
@@ -158,20 +158,21 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
           variant="primary"
           size="lg"
           isLoading={loading}
+          className="w-full"
         >
           {loading ? 'Creating Account...' : 'Create Account'}
         </Button>
 
-        <p className="text-xs text-[var(--color-text-muted)] text-center mt-4">
-          By signing up, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text-primary)] focus-visible:outline-[var(--color-text-primary)]">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-[var(--color-text-primary)] focus-visible:outline-[var(--color-text-primary)]">Privacy Policy</a>.
+        <p className="mt-4 text-center text-xs leading-5 text-[var(--text-muted)]">
+          By signing up, you agree to our <a href="/terms" target="_blank" rel="noopener noreferrer" className="underline decoration-[var(--border-default)] underline-offset-4 hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded">Terms of Service</a> and <a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline decoration-[var(--border-default)] underline-offset-4 hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded">Privacy Policy</a>.
         </p>
       </form>
 
-      <div className="mt-8 text-center text-sm text-[var(--color-text-secondary)]">
+      <div className="mt-8 text-center text-sm text-[var(--text-secondary)]">
         Already have an account?{' '}
         <button
           onClick={() => onNavigate('signin')}
-          className="font-medium text-[var(--color-text-primary)] underline underline-offset-4 hover:text-[var(--color-text-secondary)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded"
+          className="font-medium text-[var(--ink-deep)] underline underline-offset-4 hover:opacity-80 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] rounded"
         >
           Sign In
         </button>

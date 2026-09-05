@@ -8,7 +8,8 @@ type WordmarkProps = {
 
 /**
  * Peka AR wordmark — text logo per design.md §8.4.
- * Manrope display face + coral dot. Single source of truth for the brand mark.
+ * Figtree 900 display face (applied by callers) + Peka Green dot.
+ * Single source of truth for the brand mark.
  * file: src/components/Wordmark.tsx
  */
 export function Wordmark({ className, dotClassName, as: Tag = "span" }: WordmarkProps) {

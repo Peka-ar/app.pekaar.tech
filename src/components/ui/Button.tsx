@@ -16,8 +16,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 const variantClasses: Record<ButtonVariant, string> = {
   primary: 'btn-primary',
   secondary: 'btn-secondary',
-  ghost: 'inline-flex items-center justify-center gap-2 font-semibold text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-canvas-soft)] rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]',
-  destructive: 'inline-flex items-center justify-center gap-2 font-semibold bg-[var(--negative)] text-white rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
+  ghost: 'inline-flex items-center justify-center gap-2 font-semibold text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-canvas-soft)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
+  destructive: 'inline-flex items-center justify-center gap-2 font-semibold bg-[var(--negative)] text-white rounded-[24px] hover:bg-[var(--negative-deep)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
 };
 
 const sizeClasses: Record<ButtonSize, string> = {
@@ -37,6 +37,8 @@ export function Button({
   className,
   ...props
 }: ButtonProps) {
+  const iconOnly = !children;
+  const isGhost = variant === 'ghost';
   return (
     <button
       {...props}
@@ -44,6 +46,7 @@ export function Button({
       aria-busy={isLoading}
       className={cn(
         variantClasses[variant],
+        isGhost && (iconOnly ? 'rounded-full' : 'rounded-[24px]'),
         sizeClasses[size],
         'inline-flex items-center justify-center gap-2 font-medium',
         isLoading && 'opacity-70',

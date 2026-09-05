@@ -83,7 +83,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
   };
 
   return (
-    <div className="rounded-[24px] overflow-hidden w-full border" style={{ background: "var(--canvas-soft)", borderColor: "var(--border-default)" }}>
+    <div className="rounded-[24px] overflow-hidden w-full" style={{ background: "var(--canvas)" }}>
       <Script
         src="https://cdn.jsdelivr.net/npm/@google/model-viewer@4.2.0/dist/model-viewer.min.js"
         type="module"
@@ -116,7 +116,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
               slot="poster"
             >
               <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6 text-[var(--text-muted)] animate-spin mb-3" aria-hidden="true" />
-              <span className="text-[12px] font-mono uppercase tracking-[0.08em] text-[var(--text-muted)]">
+              <span className="text-[12px] font-sans font-semibold uppercase tracking-[0.08em] text-[var(--text-muted)]">
                 {progress > 0 ? `Loading... ${progress}%` : "Loading 3D Model..."}
               </span>
             </div>
@@ -124,7 +124,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
 
           {error && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-6" style={{ background: "var(--canvas-soft)" }} slot="poster">
-              <span className="text-xs font-mono text-[var(--negative-copy)] text-center max-w-md">{error}</span>
+              <span className="text-xs font-sans font-medium text-[var(--negative-deep)] text-center max-w-md">{error}</span>
             </div>
           )}
 
@@ -133,7 +133,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
               type="button"
               slot="ar-button"
               aria-label="View in your space"
-              className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 flex items-center gap-1.5 sm:gap-2 rounded-full px-4 py-2.5 text-[11px] sm:text-xs font-mono uppercase tracking-[0.08em] font-medium border shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
+              className="absolute bottom-4 right-4 sm:bottom-6 sm:right-6 z-20 flex items-center gap-1.5 sm:gap-2 rounded-full px-4 py-2.5 text-[11px] sm:text-xs font-sans font-semibold uppercase tracking-[0.08em] border shadow-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
               style={{ background: "var(--ink)", color: "var(--on-ink)", borderColor: "var(--ink)" }}
             >
               <Smartphone className="w-3.5 h-3.5 sm:w-4 sm:h-4" aria-hidden="true" />
@@ -145,10 +145,10 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
         {/* Product info overlay */}
         <div className="absolute top-4 left-4 sm:top-6 sm:left-6 z-20 pointer-events-none">
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] font-medium text-[var(--text-muted)]">
+            <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--text-muted)]">
               {product.brand} · Demo
             </span>
-            <h3 className="font-display font-bold text-[18px] sm:text-[20px] tracking-[-0.01em] text-[var(--text-primary)]">{product.name}</h3>
+            <h3 className="font-sans font-semibold text-[18px] sm:text-[20px] tracking-[-0.01em] text-[var(--text-primary)]">{product.name}</h3>
           </div>
         </div>
 
@@ -160,7 +160,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
               aria-pressed={autoRotate}
               className="w-12 h-12 rounded-full border shadow-sm transition-colors flex items-center justify-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
               style={{
-                background: autoRotate ? "var(--ink)" : "var(--surface)",
+                background: autoRotate ? "var(--ink)" : "var(--canvas)",
                 color: autoRotate ? "var(--on-ink)" : "var(--text-muted)",
                 borderColor: autoRotate ? "var(--ink)" : "var(--border-default)",
               }}
@@ -171,7 +171,7 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
               onClick={handleResetCamera}
               aria-label="Reset camera"
               className="w-12 h-12 rounded-full border shadow-sm flex items-center justify-center transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
-              style={{ background: "var(--surface)", borderColor: "var(--border-default)", color: "var(--text-muted)" }}
+              style={{ background: "var(--canvas)", borderColor: "var(--border-default)", color: "var(--text-muted)" }}
             >
               <Compass className="w-4 h-4" aria-hidden="true" />
             </button>

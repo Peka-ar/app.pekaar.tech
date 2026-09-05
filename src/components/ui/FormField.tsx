@@ -22,7 +22,7 @@ export function FormField({ label, htmlFor, error, hint, required, children }: F
         <p className="text-xs text-[var(--color-text-muted)]">{hint}</p>
       )}
       {error && (
-        <p role="alert" className="text-xs text-[var(--negative-copy)]">
+        <p role="alert" className="text-xs text-[var(--negative-deep)]">
           {error}
         </p>
       )}

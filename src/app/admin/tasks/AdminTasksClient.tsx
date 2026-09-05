@@ -219,15 +219,15 @@ export default function AdminTasksClient({
             const columnJobs = filteredJobs.filter(j => j.status === col.id);
             const ColIcon = col.icon;
             return (
-              <div key={col.id} className="w-72 flex flex-col bg-[var(--color-canvas)] rounded-3xl p-4 border border-[var(--color-border-default)] shadow-sm max-h-full">
+              <div key={col.id} className="w-72 flex flex-col bg-[var(--color-canvas-soft)] rounded-2xl p-4 border border-transparent max-h-full">
                 <div className="flex items-center justify-between mb-4 px-2 border-b border-[var(--color-border-default)] pb-3">
                   <div className="flex items-center gap-2">
                     <ColIcon className={`w-4 h-4 text-[var(--color-text-primary)]`} />
-                    <h3 className="text-[11px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-primary)]">
+                    <h3 className="label-mono text-[var(--color-text-primary)]">
                       {col.label}
                     </h3>
                   </div>
-                  <span className="text-[10px] font-mono text-[var(--color-text-muted)] bg-[var(--color-canvas-secondary)] px-2 py-0.5 rounded-full border border-[var(--color-border-default)]">
+                  <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas)] px-2 py-0.5 rounded-full border border-[var(--color-border-default)]">
                     {columnJobs.length}
                   </span>
                 </div>
@@ -236,7 +236,7 @@ export default function AdminTasksClient({
                   {columnJobs.map(job => (
                     <div
                       key={job.id}
-                      className="bg-[var(--color-surface)] p-4 rounded-2xl border border-[var(--color-border-default)] shadow-sm hover:border-[var(--color-text-primary)] hover:shadow-md transition-all cursor-pointer group shrink-0"
+                      className="bg-[var(--color-canvas)] p-4 rounded-2xl border border-[var(--color-border-default)] shadow-sm hover:border-[var(--color-text-primary)] hover:shadow-md transition-all cursor-pointer group shrink-0"
                       onClick={() => openModal(job)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -253,35 +253,37 @@ export default function AdminTasksClient({
                         </div>
                       )}
                       <div className="flex justify-between items-start mb-2">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] bg-[var(--color-canvas-secondary)] px-2 py-0.5 rounded-md">{job.id}</span>
-                        <span className="shrink-0">
-                          {(() => {
-                            const meta = PROJECT_STATUS_META[job.status];
-                            const Icon = meta.icon;
-                            return <Icon className="w-3.5 h-3.5" style={{ color: meta.tone === 'success' ? 'var(--color-accent-3)' : meta.tone === 'warning' ? '#f59e0b' : meta.tone === 'danger' ? '#ef4444' : 'var(--color-text-muted)' }} />;
-                          })()}
-                        </span>
+                        <span className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] bg-[var(--color-canvas-soft)] px-2 py-0.5 rounded-md">{job.id}</span>
+                        {(() => {
+                          const meta = PROJECT_STATUS_META[job.status];
+                          const Icon = meta.icon;
+                          return (
+                            <Badge tone={meta.tone} icon={<Icon className="w-3 h-3" />}>
+                              {ADMIN_LABEL[job.status]}
+                            </Badge>
+                          );
+                        })()}
                       </div>
                       <h4 className="text-sm font-medium text-[var(--color-text-primary)] mb-1.5 leading-tight">{job.name}</h4>
-                      <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
+                      <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">
                         {job.brand?.name || 'Unknown Brand'}
                       </p>
 
                       <div className="flex justify-between items-center mt-4">
                         <div className="flex items-center gap-2">
-                          <div className="w-6 h-6 rounded-full bg-[var(--color-text-primary)] text-[var(--color-surface)] flex items-center justify-center text-[8px] font-bold tracking-widest">
+                          <div className="w-6 h-6 rounded-full bg-[var(--color-text-primary)] text-[var(--color-canvas)] flex items-center justify-center text-[8px] font-bold tracking-widest">
                             {getInitials(job.brand?.name || 'UB')}
                           </div>
-                          <span className="text-[10px] font-mono text-[var(--color-text-muted)]">{getSku(job)}</span>
+                          <span className="text-[10px] font-sans text-[var(--color-text-muted)]">{getSku(job)}</span>
                         </div>
                         <span className="text-[9px] text-[var(--color-text-muted)] uppercase">{getCreatedDate(job)}</span>
                       </div>
                     </div>
                   ))}
                   {columnJobs.length === 0 && (
-                    <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-[var(--color-surface)]/50">
+                    <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-[var(--color-canvas)]/50">
                       <Box className="w-6 h-6 text-[var(--color-border-default)] mb-2" />
-                      <span className="text-[11px] text-[var(--color-text-muted)] font-mono tracking-widest uppercase">Empty</span>
+                      <span className="text-[11px] text-[var(--color-text-muted)] font-sans tracking-widest uppercase">Empty</span>
                     </div>
                   )}
                 </div>
@@ -302,7 +304,7 @@ export default function AdminTasksClient({
         {selectedTask && (
           <div className="space-y-6 max-h-[65vh] overflow-y-auto pr-2">
             <section className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-4">
-              <h3 className="text-xs uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
+              <h3 className="text-xs uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
                 <Box className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Info
               </h3>
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -312,7 +314,7 @@ export default function AdminTasksClient({
                 </div>
                 <div>
                   <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">SKU</span>
-                  <p className="font-mono text-[var(--color-text-primary)]">{getSku(selectedTask)}</p>
+                  <p className="font-sans text-[var(--color-text-primary)]">{getSku(selectedTask)}</p>
                 </div>
                 <div>
                   <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Brand</span>
@@ -351,17 +353,17 @@ export default function AdminTasksClient({
                   <div>
                     <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Dimensions</span>
                     <div className="grid grid-cols-3 gap-3">
-                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
+                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
                         <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">W</span>
-                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.width ?? '-'}{unit}</p>
+                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.width ?? '-'}{unit}</p>
                       </div>
-                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
+                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
                         <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">H</span>
-                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.height ?? '-'}{unit}</p>
+                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.height ?? '-'}{unit}</p>
                       </div>
-                      <div className="bg-[var(--color-surface)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
+                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl text-center">
                         <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">D</span>
-                        <p className="text-sm font-mono text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'}{unit}</p>
+                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'}{unit}</p>
                       </div>
                     </div>
                   </div>
@@ -400,18 +402,18 @@ export default function AdminTasksClient({
             </section>
 
             {selectedTask.status === 'REVISIONS' && selectedTask.revisionRequests && selectedTask.revisionRequests.length > 0 && (
-              <section className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-4">
-                <h3 className="text-xs uppercase tracking-widest font-mono font-bold text-amber-900 flex items-center gap-2 pb-2 border-b border-amber-200">
+              <section className="bg-[var(--warning)]/15 border border-[var(--warning)]/40 rounded-2xl p-5 space-y-4">
+                <h3 className="text-xs uppercase tracking-widest font-sans font-bold text-[var(--warning-content)] flex items-center gap-2 pb-2 border-b border-[var(--warning)]/40">
                   <MessageSquareWarning className="w-4 h-4" /> Brand Revision Notes
                 </h3>
                 <div className="space-y-3">
                   {selectedTask.revisionRequests.map((req) => (
-                    <div key={req.id} className="bg-[var(--color-surface)] border border-amber-200 rounded-xl p-4">
+                    <div key={req.id} className="bg-[var(--color-canvas)] border border-[var(--warning)]/40 rounded-xl p-4">
                       <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-mono uppercase tracking-widest text-amber-900">
+                        <span className="text-[10px] font-sans uppercase tracking-widest text-[var(--warning-content)]">
                           {req.requester?.name || req.requester?.email || 'Brand'}
                         </span>
-                        <span className="text-[9px] text-amber-700 font-mono">
+                        <span className="text-[9px] text-[var(--warning-content)] font-sans">
                           {new Date(req.createdAt).toLocaleString()}
                         </span>
                       </div>
@@ -424,8 +426,8 @@ export default function AdminTasksClient({
 
             {isPublished && (
               <section className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-3">
-                <h3 className="text-xs uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
-                  <Check className="w-4 h-4 text-emerald-600" /> Published
+                <h3 className="text-xs uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
+                  <Check className="w-4 h-4 text-[var(--positive-deep)]" /> Published
                 </h3>
                 <p className="text-sm text-[var(--color-text-secondary)]">This project is live on the brand&apos;s storefront. Embed links are serving this model.</p>
               </section>
@@ -433,41 +435,41 @@ export default function AdminTasksClient({
 
             {canSubmit && (
               <section className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-5">
-                <h3 className="text-xs uppercase tracking-widest font-mono font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
+                <h3 className="text-xs uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] flex items-center gap-2 pb-2 border-b border-[var(--color-border-default)]">
                   <UploadCloud className="w-4 h-4 text-[var(--color-text-muted)]" /> 3D Model Assets
                 </h3>
 
                 <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-2">GLB Model <span className="text-red-500">*</span></label>
+                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-2">GLB Model <span className="text-[var(--negative-deep)]">*</span></label>
                   <input type="file" accept=".glb" onChange={handleGlbUpload} className="hidden" id="glb-upload" disabled={isUploadingGlb} ref={glbInputRef} />
                   {liveGlb && !glbAsset && (
-                    <div className="mb-2 flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                    <div className="mb-2 flex items-center justify-between bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <Box className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
+                          <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
                           <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{liveGlb.originalName}</p>
                           <p className="text-[10px] text-[var(--color-text-muted)]">{(liveGlb.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
                       </div>
-                      <a href={`/api/v1/assets/${liveGlb.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0">
+                      <a href={`/api/v1/assets/${liveGlb.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--ink-deep)] hover:underline inline-flex items-center gap-1 shrink-0">
                         View <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
                   )}
                   {glbAsset ? (
-                    <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                    <div className="flex items-center justify-between bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
+                        <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
                         <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{glbFileName || 'GLB Model'}</p>
                         <p className="text-[10px] text-[var(--color-text-muted)]">{glbAsset.size ? `${(glbAsset.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
                       </div>
-                      <button onClick={() => { setGlbAsset(null); setGlbFileName(null); }} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 shrink-0">
+                      <button onClick={() => { setGlbAsset(null); setGlbFileName(null); }} className="p-1.5 rounded-full bg-[var(--canvas-soft)] text-[var(--negative-deep)] hover:bg-[var(--negative)]/15 shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (
-                    <label htmlFor="glb-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-6 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-surface)]">
+                    <label htmlFor="glb-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-6 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-canvas)]">
                       {isUploadingGlb ? (
                         <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-muted)]" />
                       ) : liveGlb ? (
@@ -486,45 +488,45 @@ export default function AdminTasksClient({
                               style={{ width: `${Math.max(2, glbProgress)}%` }}
                             />
                           </div>
-                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] mt-1.5 text-center">{glbProgress}%</p>
+                          <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] mt-1.5 text-center">{glbProgress}%</p>
                         </div>
                       )}
                     </label>
                   )}
-                  {glbError && <p className="text-xs text-red-500 mt-1">{glbError}</p>}
+                  {glbError && <p className="text-xs text-[var(--negative-deep)] mt-1">{glbError}</p>}
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-2">USDZ Model <span className="text-[var(--color-text-muted)] text-[10px] font-normal">(Optional)</span></label>
                   <input type="file" accept=".usdz" onChange={handleUsdzUpload} className="hidden" id="usdz-upload" disabled={isUploadingUsdz} ref={usdzInputRef} />
                   {liveUsdz && !usdzAsset && (
-                    <div className="mb-2 flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                    <div className="mb-2 flex items-center justify-between bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3">
                       <div className="flex items-center gap-2 min-w-0">
                         <Box className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
+                          <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">Current</p>
                           <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{liveUsdz.originalName}</p>
                           <p className="text-[10px] text-[var(--color-text-muted)]">{(liveUsdz.size / 1024 / 1024).toFixed(1)} MB</p>
                         </div>
                       </div>
-                      <a href={`/api/v1/assets/${liveUsdz.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--color-primary)] hover:underline inline-flex items-center gap-1 shrink-0">
+                      <a href={`/api/v1/assets/${liveUsdz.id}/file`} target="_blank" rel="noopener noreferrer" className="text-[10px] text-[var(--ink-deep)] hover:underline inline-flex items-center gap-1 shrink-0">
                         View <ExternalLink className="w-3 h-3" />
                       </a>
                     </div>
                   )}
                   {usdzAsset ? (
-                    <div className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-xl p-3">
+                    <div className="flex items-center justify-between bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3">
                       <div className="min-w-0">
-                        <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
+                        <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">New</p>
                         <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{usdzFileName || 'USDZ Model'}</p>
                         <p className="text-[10px] text-[var(--color-text-muted)]">{usdzAsset.size ? `${(usdzAsset.size / 1024 / 1024).toFixed(1)} MB` : ''}</p>
                       </div>
-                      <button onClick={() => { setUsdzAsset(null); setUsdzFileName(null); }} className="p-1.5 rounded-full bg-red-50 text-red-500 hover:bg-red-100 shrink-0">
+                      <button onClick={() => { setUsdzAsset(null); setUsdzFileName(null); }} className="p-1.5 rounded-full bg-[var(--canvas-soft)] text-[var(--negative-deep)] hover:bg-[var(--negative)]/15 shrink-0">
                         <X className="w-4 h-4" />
                       </button>
                     </div>
                   ) : (
-                    <label htmlFor="usdz-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-4 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-surface)]">
+                    <label htmlFor="usdz-upload" className="flex flex-col items-center justify-center w-full border-2 border-dashed border-[var(--color-border-default)] rounded-xl py-4 cursor-pointer hover:border-[var(--color-text-primary)] transition-colors bg-[var(--color-canvas)]">
                       {isUploadingUsdz ? (
                         <Loader2 className="w-6 h-6 animate-spin text-[var(--color-text-muted)]" />
                       ) : liveUsdz ? (
@@ -543,22 +545,22 @@ export default function AdminTasksClient({
                               style={{ width: `${Math.max(2, usdzProgress)}%` }}
                             />
                           </div>
-                          <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)] mt-1.5 text-center">{usdzProgress}%</p>
+                          <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] mt-1.5 text-center">{usdzProgress}%</p>
                         </div>
                       )}
                     </label>
                   )}
-                  {usdzError && <p className="text-xs text-red-500 mt-1">{usdzError}</p>}
+                  {usdzError && <p className="text-xs text-[var(--negative-deep)] mt-1">{usdzError}</p>}
                 </div>
 
                 {hasArchivedModels && (
                   <details className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3 group">
                     <summary className="flex items-center justify-between cursor-pointer list-none">
-                      <span className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-widest font-bold text-[var(--color-text-secondary)]">
+                      <span className="flex items-center gap-2 text-[11px] font-sans uppercase tracking-widest font-bold text-[var(--color-text-secondary)]">
                         <History className="w-3.5 h-3.5" /> Previous models ({archivedGlbs.length + archivedUsdzs.length})
                       </span>
-                      <span className="text-[10px] font-mono text-[var(--color-text-muted)] group-open:hidden">Show</span>
-                      <span className="text-[10px] font-mono text-[var(--color-text-muted)] hidden group-open:inline">Hide</span>
+                      <span className="text-[10px] font-sans text-[var(--color-text-muted)] group-open:hidden">Show</span>
+                      <span className="text-[10px] font-sans text-[var(--color-text-muted)] hidden group-open:inline">Hide</span>
                     </summary>
                     <div className="mt-3 space-y-2">
                       <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
@@ -567,12 +569,12 @@ export default function AdminTasksClient({
                       {[...archivedGlbs, ...archivedUsdzs].map((m) => {
                         const isGlb = m.type === 'MODEL_GLB';
                         return (
-                          <div key={m.id} className="flex items-center justify-between bg-[var(--color-surface)] border border-[var(--color-border-default)] rounded-lg p-2.5">
+                          <div key={m.id} className="flex items-center justify-between bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-lg p-2.5">
                             <div className="flex items-center gap-2 min-w-0">
                               <Box className="w-3.5 h-3.5 text-[var(--color-text-muted)] shrink-0" />
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-[var(--color-text-primary)] truncate">{m.originalName}</p>
-                                <p className="text-[10px] font-mono uppercase tracking-widest text-[var(--color-text-muted)]">
+                                <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">
                                   {isGlb ? 'GLB' : 'USDZ'} · {(m.size / 1024 / 1024).toFixed(1)} MB · {new Date(m.updatedAt).toLocaleDateString()}
                                 </p>
                               </div>
@@ -585,7 +587,7 @@ export default function AdminTasksClient({
                 )}
 
                 {submitError && (
-                  <div role="alert" className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                  <div role="alert" className="bg-[var(--negative)]/10 border border-[var(--negative)]/40 text-[var(--negative-deep)] text-sm rounded-xl px-4 py-3">
                     {submitError}
                   </div>
                 )}
@@ -593,7 +595,7 @@ export default function AdminTasksClient({
                 <button
                   onClick={handleSubmit}
                   disabled={!glbAsset || isSubmitting}
-                  className="w-full py-3 bg-[var(--color-text-primary)] text-[var(--color-surface)] text-xs uppercase tracking-widest font-medium rounded-xl hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 flex items-center justify-center gap-2"
+                  className="w-full py-3 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-xs uppercase tracking-widest font-medium rounded-xl hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   Submit for Review
@@ -602,13 +604,13 @@ export default function AdminTasksClient({
             )}
 
             {selectedTask.status === 'COMPLETED' && (
-              <section className="bg-emerald-50 border border-emerald-200 rounded-2xl p-5 space-y-3">
-                <h3 className="text-xs uppercase tracking-widest font-mono font-bold text-emerald-900 flex items-center gap-2 pb-2 border-b border-emerald-200">
+              <section className="bg-[var(--positive)]/15 border border-[var(--positive)]/40 rounded-2xl p-5 space-y-3">
+                <h3 className="text-xs uppercase tracking-widest font-sans font-bold text-[var(--positive-deep)] flex items-center gap-2 pb-2 border-b border-[var(--positive)]/40">
                   <Check className="w-4 h-4" /> Submitted
                 </h3>
-                <p className="text-sm text-emerald-900">The brand has been notified. Awaiting their decision to publish or request revisions.</p>
+                <p className="text-sm text-[var(--positive-deep)]">The brand has been notified. Awaiting their decision to publish or request revisions.</p>
                 {selectedTask.assetUrls?.glb && (
-                  <a href={selectedTask.assetUrls.glb} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-emerald-700 hover:underline">
+                  <a href={selectedTask.assetUrls.glb} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-[var(--positive-deep)] hover:underline">
                     View GLB <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
