@@ -13,14 +13,10 @@ export default function CategoryStrip() {
     <section
       aria-label="Works on"
       className="relative overflow-hidden"
-      style={{
-        background: "var(--canvas)",
-        borderTop: "1px solid var(--border-default)",
-        borderBottom: "1px solid var(--border-default)",
-      }}
+      style={{ background: "var(--forest)" }}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-6 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
-        <span className="font-sans text-[11px] font-semibold tracking-[0.14em] uppercase text-[var(--text-muted)] shrink-0">
+        <span className="font-sans text-[11px] font-semibold tracking-[0.14em] uppercase text-[var(--on-forest)]/70 shrink-0">
           Works on
         </span>
 
@@ -28,7 +24,7 @@ export default function CategoryStrip() {
         <div className="hidden sm:flex items-center gap-4">
           {PLATFORMS.map((platform, i) => (
             <React.Fragment key={platform}>
-              <span className="font-sans font-semibold text-[18px] sm:text-[20px] tracking-[-0.01em] text-[var(--text-primary)]">
+              <span className="font-sans font-semibold text-[18px] sm:text-[20px] tracking-[-0.01em] text-[var(--on-forest)]">
                 {platform}
               </span>
               {i < PLATFORMS.length - 1 && (
@@ -36,7 +32,7 @@ export default function CategoryStrip() {
               )}
             </React.Fragment>
           ))}
-          <span className="font-sans text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--text-muted)] ml-1">one-line iframe</span>
+          <span className="font-sans text-[11px] font-semibold tracking-[0.08em] uppercase text-[var(--on-forest)]/60 ml-1">one-line iframe</span>
         </div>
 
         {/* Mobile: marquee (static wrapped list when reduced motion) */}
@@ -45,7 +41,7 @@ export default function CategoryStrip() {
             <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
               {PLATFORMS.map((platform, i) => (
                 <React.Fragment key={platform}>
-                  <span className="font-sans font-semibold text-[16px] tracking-[-0.01em] text-[var(--text-primary)] whitespace-nowrap">
+                  <span className="font-sans font-semibold text-[16px] tracking-[-0.01em] text-[var(--on-forest)] whitespace-nowrap">
                     {platform}
                   </span>
                   {i < PLATFORMS.length - 1 && (
@@ -53,7 +49,7 @@ export default function CategoryStrip() {
                   )}
                 </React.Fragment>
               ))}
-              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] whitespace-nowrap">one-line iframe</span>
+              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[var(--on-forest)]/60 whitespace-nowrap">one-line iframe</span>
             </div>
           ) : (
             <div className="flex w-max animate-[marquee_22s_linear_infinite] items-center gap-4">
@@ -61,14 +57,14 @@ export default function CategoryStrip() {
                 <React.Fragment key={`${platform}-${i}`}>
                   <span
                     aria-hidden={i >= PLATFORMS.length}
-                    className="font-sans font-semibold text-[16px] tracking-[-0.01em] text-[var(--text-primary)] whitespace-nowrap"
+                    className="font-sans font-semibold text-[16px] tracking-[-0.01em] text-[var(--on-forest)] whitespace-nowrap"
                   >
                     {platform}
                   </span>
                   <span className="w-1 h-1 rounded-full shrink-0 bg-[var(--accent)]" aria-hidden="true" />
                 </React.Fragment>
               ))}
-              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[var(--text-muted)] whitespace-nowrap">one-line iframe</span>
+              <span className="font-sans text-[10px] font-semibold uppercase tracking-widest text-[var(--on-forest)]/60 whitespace-nowrap">one-line iframe</span>
               <span className="w-1 h-1 rounded-full shrink-0 bg-[var(--accent)]" aria-hidden="true" />
             </div>
           )}

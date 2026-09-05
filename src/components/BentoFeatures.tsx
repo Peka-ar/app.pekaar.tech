@@ -58,11 +58,11 @@ export default function BentoFeatures() {
           </div>
           </Reveal>
 
-          {/* Dark card — Calibrated 1:1 scale */}
+          {/* Forest card — Calibrated 1:1 scale */}
           <Reveal delay={0.1} className="h-full">
           <div
             className="rounded-[24px] p-7 sm:p-8 flex flex-col gap-4 h-full"
-            style={{ background: "var(--ink)", border: "1px solid rgba(232,235,230,.12)" }}
+            style={{ background: "var(--forest)", border: "1px solid rgba(232,235,230,.12)" }}
           >
             <span
               className="w-11 h-11 rounded-full flex items-center justify-center shrink-0"
@@ -71,23 +71,23 @@ export default function BentoFeatures() {
             >
               <Maximize2 className="w-5 h-5" style={{ color: "var(--accent)" }} />
             </span>
-            <h3 className="font-sans font-semibold text-[18px] sm:text-[20px] leading-[1.25] tracking-[-0.015em] text-[var(--on-ink)]">
+            <h3 className="font-sans font-semibold text-[18px] sm:text-[20px] leading-[1.25] tracking-[-0.015em] text-[var(--on-forest)]">
               Calibrated 1:1 scale
             </h3>
-            <p className="font-sans text-[14px] leading-[1.5] text-[var(--on-ink)]/70">
+            <p className="font-sans text-[14px] leading-[1.5] text-[var(--on-forest)]/70">
               USDZ + GLB mapped to real-world units — customers see true size before they buy.
             </p>
           </div>
           </Reveal>
 
-          {/* Peach card — Adaptive embeds (tertiary warm surface) */}
+          {/* Butter card — Adaptive embeds (secondary warm surface) */}
           <Reveal delay={0.15} className="h-full">
           <div
             className="rounded-[24px] p-7 sm:p-8 flex flex-col gap-4 h-full"
-            style={{ background: "var(--surface-peach)" }}
+            style={{ background: "var(--surface-butter)" }}
           >
             <span className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--canvas)" }} aria-hidden="true">
-              <Puzzle className="w-5 h-5" style={{ color: "var(--surface-peach-deep)" }} />
+              <Puzzle className="w-5 h-5" style={{ color: "var(--surface-butter-deep)" }} />
             </span>
             <h3 className="font-sans font-semibold text-[18px] sm:text-[20px] leading-[1.25] tracking-[-0.015em] text-[var(--text-primary)]">
               Adaptive embeds
@@ -98,7 +98,7 @@ export default function BentoFeatures() {
           </div>
           </Reveal>
 
-          {/* Sky card — Optimized + CDN-served (tertiary cool surface) */}
+          {/* Sky card — Optimized + CDN-served (secondary cool surface) */}
           <Reveal delay={0.2} className="md:col-span-2 h-full">
           <div className="rounded-[24px] p-7 sm:p-8 flex flex-col gap-4 h-full" style={{ background: "var(--surface-sky)" }}>
             <span className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: "var(--canvas)" }} aria-hidden="true">

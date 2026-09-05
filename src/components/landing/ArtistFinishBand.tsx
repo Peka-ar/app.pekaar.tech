@@ -41,8 +41,7 @@ export default function ArtistFinishBand() {
                 </Link>
                 <a
                   href="#sandbox-anchor"
-                  className="inline-flex items-center justify-center h-12 px-6 rounded-[24px] border text-[14px] font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-ink)]"
-                  style={{ borderColor: "rgba(232,235,230,.22)", color: "var(--on-ink)" }}
+                  className="btn-support focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-ink)]"
                 >
                   See the demo
                 </a>

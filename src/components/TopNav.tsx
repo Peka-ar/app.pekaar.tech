@@ -54,7 +54,7 @@ export function TopNav() {
           </Link>
           <Link
             href="/auth"
-            className="inline-flex items-center justify-center h-9 sm:h-10 px-4 sm:px-5 text-sm font-semibold rounded-[24px] bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-active)] active:bg-[var(--accent-neutral)] active:scale-[0.98] transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
+            className="inline-flex items-center justify-center h-9 sm:h-10 px-4 sm:px-5 text-sm font-semibold rounded-[24px] bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-active)] active:scale-[0.98] transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
           >
             Book a demo call
           </Link>

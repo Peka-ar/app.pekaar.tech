@@ -4,12 +4,15 @@
   --font-display: var(--font-display-loaded), ui-sans-serif, system-ui, sans-serif;
   --font-sans:    var(--font-sans-loaded), ui-sans-serif, system-ui, sans-serif;
   --font-mono:    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-quote:   var(--font-quote-loaded), Georgia, "Times New Roman", serif;
 }
 
-/* ─── Semantic design tokens (v3 — Peka Green on sage/white, light-only) ─── */
-/* Source: design.md (v3 target). Peka Green #9fe870 accent, ink #0e0f0c,
-   sage canvas-soft #e8ebe6 bands, white page ground. Dark surfaces survive as
-   components (ink bands / footer / embed viewer), never as a theme. */
+/* ─── Semantic design tokens (v3.2 — Peka Forest primary, lime secondary, light-only) ─── */
+/* Source: design.md (v3.2). Primary #163300 (CTA fill on light grounds +
+   dark band ground), secondary lime #9fe870 (accents + dark-ground CTAs),
+   ink #0e0f0c, sage canvas-soft #e8ebe6 bands, white page ground. Dark
+   surfaces survive as components (forest/ink bands, footer, embed viewer),
+   never as a theme. */
 :root {
   /* surfaces */
   --canvas:          #ffffff;
@@ -24,22 +27,35 @@
   /* lines */
   --border-default:  #e8ebe6; /* soft separator / row hairline (canvas-soft) */
   --border-ink:      #0e0f0c; /* strong hairline: inputs, tertiary, pipeline card */
-  /* accent — Peka Green (brand, constant) */
+  /* primary — Peka Forest (v3.2): the CTA fill on light grounds (white label,
+     13.9:1) and, via the --forest alias, the dark band/card ground. */
+  --primary:          #163300;
+  --on-primary:       #ffffff;
+  --primary-hover:    #1f4d00;  /* lighter step — 9.9:1 w/ white */
+  --primary-active:   #0d2b00;  /* pressed — 15.4:1 w/ white */
+  /* secondary — Peka Green lime (v3.2): accent spans, dots, chips, the CTA
+     fill on dark grounds (ink label — never white on lime). The lime tint
+     steps below stay part of this family. */
   --accent:          #9fe870;
   --accent-active:   #cdffad; /* hover/active — LIGHTER than base */
   --accent-neutral:  #c5edab;
   --accent-pale:     #e2f6d5;
   --on-accent:       #0e0f0c; /* ink label on lime — never white on lime */
-  /* tertiary illustration accents (primitives) */
-  --accent-orange:   #ffc091;
-  --accent-cyan:     #38c8ff;
-  /* tinted surface roles — derived from the two tertiary hues, same visual
-     presence as accent-pale next to sage (see design.md tertiary accents).
-     Role tokens only: never on an interactive element (accent owns that). */
-  --surface-peach:      #fbe0cd;  /* warm tinted band / capability surface */
-  --surface-peach-deep: #432000;  /* glyph color on peach — parallel to ink-deep */
+  /* secondary palette (v3.1 — design.md "Secondary Palette") — support colors:
+     fill grounds, warm dark cards, carry secondary actions. Never on a primary
+     CTA or the logo (accent owns conversion). Forest shares its value with
+     ink-deep — one hex, two roles: ground vs deep text. */
+  --forest:           #163300;  /* dark-green band/card ground */
+  --on-forest:        #e8ebe6;  /* text on forest — sage, 11.6:1 */
+  /* tinted grounds — role tokens only: never on an interactive element
+     (accent owns that). Sky/butter tints sit at the same visual presence as
+     accent-pale next to sage; the *-deep tokens are their glyph/text colors. */
   --surface-sky:        #cdecfb;  /* cool tinted band / capability surface */
-  --surface-sky-deep:   #002f41;  /* glyph color on sky — parallel to ink-deep */
+  --surface-sky-deep:   #002f41;  /* glyph color on sky — 11.4:1 */
+  --surface-butter:     #fff2c2;  /* warm tinted band / capability surface */
+  --surface-butter-deep:#5b4500;  /* glyph/label on butter — 8.2:1, on white 9.2:1 */
+  --surface-butter-hover: #ffecad;  /* support-button hover step */
+  --surface-butter-active:#ffe999;  /* support-button active step */
   /* semantic */
   --positive:        #2ead4b;  --positive-deep: #054d28;
   --warning:         #ffd11a;  --warning-deep:  #b86700;  --warning-content: #4a3b1c;
@@ -55,8 +71,11 @@
   --color-text-muted: var(--text-muted);       --color-border-default: var(--border-default);
   --color-accent: var(--accent);               --color-accent-pale: var(--accent-pale);
   --color-accent-active: var(--accent-active); --color-accent-neutral: var(--accent-neutral);
-  --color-surface-peach: var(--surface-peach); --color-surface-peach-deep: var(--surface-peach-deep);
+  --color-primary: var(--primary);             --color-on-primary: var(--on-primary);
+  --color-primary-hover: var(--primary-hover); --color-primary-active: var(--primary-active);
+  --color-forest: var(--forest);  --color-on-forest: var(--on-forest);
   --color-surface-sky: var(--surface-sky);     --color-surface-sky-deep: var(--surface-sky-deep);
+  --color-surface-butter: var(--surface-butter); --color-surface-butter-deep: var(--surface-butter-deep);
   --color-on-accent: var(--on-accent);         --color-positive: var(--positive);
   --color-on-ink: var(--on-ink);               --color-positive-deep: var(--positive-deep);
   --color-warning: var(--warning);             --color-warning-deep: var(--warning-deep);
@@ -209,6 +228,24 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
+    background-color: var(--primary);
+    color: var(--on-primary);
+    border-radius: 24px;
+    height: 48px;
+    padding: 0 24px;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-primary:hover { background-color: var(--primary-hover); }
+  .btn-primary:active { background-color: var(--primary-active); transform: scale(0.98); }
+  .btn-primary:disabled { opacity: 0.45; cursor: default; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
     background-color: var(--accent);
     color: var(--on-accent);
     border-radius: 24px;
@@ -218,26 +255,8 @@
     font-weight: 600;
     transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .btn-primary:hover { background-color: var(--accent-active); }
-  .btn-primary:active { background-color: var(--accent-neutral); transform: scale(0.98); }
-  .btn-primary:disabled { opacity: 0.45; cursor: default; }
-
-  .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    background: var(--canvas-soft);
-    color: var(--text-primary);
-    border-radius: 24px;
-    height: 48px;
-    padding: 0 24px;
-    font-size: 16px;
-    font-weight: 600;
-    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), box-shadow 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .btn-secondary:hover { box-shadow: inset 0 0 0 1px var(--ink); }
-  .btn-secondary:active { background: var(--border-default); }
+  .btn-secondary:hover { background-color: var(--accent-active); }
+  .btn-secondary:active { background-color: var(--accent-neutral); transform: scale(0.98); }
 
   .btn-tertiary {
     display: inline-flex;
@@ -256,6 +275,26 @@
   }
   .btn-tertiary:hover { background: var(--canvas-soft); }
   .btn-tertiary:active { background: var(--border-default); }
+
+  /* v3.1 — support action on dark grounds (forest/ink cards): butter fill +
+     ink label. Secondary actions only; never replaces btn-primary. */
+  .btn-support {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    background-color: var(--surface-butter);
+    color: var(--ink);
+    border-radius: 24px;
+    height: 48px;
+    padding: 0 24px;
+    font-size: 16px;
+    font-weight: 600;
+    transition: background-color 150ms cubic-bezier(0.16, 1, 0.3, 1), transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .btn-support:hover { background-color: var(--surface-butter-hover); }
+  .btn-support:active { background-color: var(--surface-butter-active); transform: scale(0.98); }
+  .btn-support:disabled { opacity: 0.45; cursor: default; }
 
   /* micro-label chrome — uppercase + tracked survives as a style; the face is Inter (v3 has no mono) */
   .label-mono {

@@ -2,25 +2,17 @@
 
 import React, { useEffect, useRef } from "react";
 
-const WORDS = [
-  "AI",
-  "drafts",
-  "in",
-  "minutes.",
-  "Artists",
-  "finish",
-  "by",
-  "hand.",
-  "Shoppers",
-  "see",
-  "it",
-  "in",
-  "their",
-  "room.",
-] as const;
+const SENTENCES: readonly (readonly string[])[] = [
+  ["AI", "drafts", "in", "minutes."],
+  ["Artists", "finish", "by", "hand."],
+  ["Shoppers", "see", "it", "in", "their", "room."],
+];
 
-// Mandatory tagline-reveal moment: words fade from muted to full ink
-// one at a time via IntersectionObserver (never a scroll listener).
+// The pull-quote moment: the tagline in the quote serif (Instrument Serif
+// italic) as ONE centered line on desktop (nowrap at lg+), wrapping to two
+// lines on mobile — reads like a quotation, is not one, so no quotation
+// marks. Words still reveal one at a time via IntersectionObserver (never a
+// scroll listener). The middle sentence keeps the primary (forest) accent.
 export default function TaglineReveal() {
   const refs = useRef<(HTMLSpanElement | null)[]>([]);
 
@@ -46,16 +38,32 @@ export default function TaglineReveal() {
     return () => observer.disconnect();
   }, []);
 
+  let wordIndex = 0;
+
   return (
     <section
       aria-label="Why Peka AR is different"
-      className="py-14 sm:py-20"
-      style={{ background: "var(--surface-peach)" }}
+      className="py-16 sm:py-24"
+      style={{ background: "var(--canvas)" }}
     >
       <style>{`
+        .tagline-single {
+          font-size: clamp(1.25rem, 2.6vw, 2rem);
+          line-height: 1.35;
+          letter-spacing: -0.01em;
+        }
+        @media (min-width: 1024px) {
+          .tagline-single {
+            white-space: nowrap;
+          }
+        }
         .tagline-word {
-          opacity: 0.28;
+          opacity: 0.22;
           transition: opacity 700ms cubic-bezier(0.32, 0.72, 0, 1);
+          margin-right: 0.26em;
+        }
+        .tagline-word:last-child {
+          margin-right: 0;
         }
         .tagline-word.is-revealed {
           opacity: 1;
@@ -63,25 +71,28 @@ export default function TaglineReveal() {
       `}</style>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <p
-          className="font-display font-bold text-[var(--text-primary)] max-w-[680px]"
-          style={{
-            fontSize: "clamp(1.875rem, 5vw, 3.75rem)",
-            lineHeight: 1.05,
-            letterSpacing: "-0.02em",
-            textWrap: "balance",
-          }}
+          className="tagline-single font-quote italic text-center"
+          style={{ color: "var(--text-primary)" }}
         >
-          {WORDS.map((word, i) => (
-            <span
-              key={`${word}-${i}`}
-              ref={(el) => {
-                refs.current[i] = el;
-              }}
-              className="tagline-word"
-            >
-              {word}{" "}
-            </span>
-          ))}
+          {SENTENCES.map((words, sentence) =>
+            words.map((word) => {
+              const i = wordIndex++;
+              return (
+                <span
+                  key={`${sentence}-${word}`}
+                  ref={(el) => {
+                    refs.current[i] = el;
+                  }}
+                  className="tagline-word"
+                  style={
+                    sentence === 1 ? { color: "var(--primary)" } : undefined
+                  }
+                >
+                  {word}
+                </span>
+              );
+            })
+          )}
         </p>
       </div>
     </section>

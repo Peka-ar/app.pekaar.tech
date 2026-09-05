@@ -15,7 +15,7 @@ const toneClasses: Record<BadgeTone, string> = {
   success: 'bg-[var(--accent-pale)] text-[var(--positive-deep)] border border-transparent',
   warning: 'bg-[var(--warning)] text-[var(--warning-content)] border border-transparent',
   danger: 'bg-[var(--negative-bg)] text-white border border-transparent',
-  info: 'bg-[var(--canvas-soft)] text-[var(--ink-deep)] border border-[var(--accent-cyan)]/30',
+  info: 'bg-[var(--canvas-soft)] text-[var(--ink-deep)] border border-[var(--ink-deep)]/20',
   inverted: 'bg-[var(--ink)] text-[var(--on-ink)] border border-transparent',
 };
 

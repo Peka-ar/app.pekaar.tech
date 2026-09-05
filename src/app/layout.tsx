@@ -28,6 +28,13 @@ const inter = localFont({
   preload: true,
 });
 
+const instrumentSerif = localFont({
+  src: [{ path: "../assets/fonts/instrument-serif-400-italic.woff2", weight: "400", style: "italic" }],
+  variable: "--font-quote-loaded",
+  display: "swap",
+  preload: false,
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://pekaar.tech"),
   title: "Peka AR — Product photos to interactive 3D",
@@ -55,7 +62,7 @@ export default async function RootLayout({
   const session = await helpers.readSessionCookie();
 
   return (
-    <html lang="en" className={`${figtree.variable} ${inter.variable} antialiased h-full`} suppressHydrationWarning>
+    <html lang="en" className={`${figtree.variable} ${inter.variable} ${instrumentSerif.variable} antialiased h-full`} suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://cdn.jsdelivr.net" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />

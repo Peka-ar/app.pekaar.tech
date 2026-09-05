@@ -6,7 +6,7 @@ import Reveal from "./Reveal";
 // attributed third-party research with links — never Peka's own results.
 const WELL_TONES: ReadonlyArray<{ fill: string; glyph: string }> = [
   { fill: "var(--accent-pale)", glyph: "var(--ink-deep)" },
-  { fill: "var(--surface-peach)", glyph: "var(--surface-peach-deep)" },
+  { fill: "var(--surface-butter)", glyph: "var(--surface-butter-deep)" },
   { fill: "var(--surface-sky)", glyph: "var(--surface-sky-deep)" },
 ];
 const BENEFITS = [
