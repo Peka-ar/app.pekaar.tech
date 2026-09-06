@@ -5,6 +5,9 @@ import { Search, Filter } from 'lucide-react';
 import { PROJECT_STATUS_META } from "@/lib/status";
 import { Table, TableHead, TableBody, TableRow, TableCell, TableEmptyState } from "@/components/ui/Table";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import type { ProjectStatus } from "@/lib/enums";
 
 type Job = {
@@ -43,24 +46,22 @@ export default function NotificationsClient({ initialJobs }: { initialJobs: Job[
       <div className="space-y-6 animate-in fade-in duration-500">
 
         <div className="flex flex-col sm:flex-row justify-between gap-4">
-          <div className="relative max-w-md w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
-            <input
+          <div className="max-w-md w-full">
+            <Input
               type="text"
               placeholder="Search by Product Name or Job ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] text-sm focus:outline-none focus:border-[var(--color-text-primary)] transition-colors"
+              leftIcon={<Search className="w-4 h-4" />}
             />
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-muted)]" />
-              <select
+            <div className="w-full sm:w-52">
+              <Select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value as ProjectStatus | 'All')}
-                className="pl-10 pr-8 py-2.5 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] text-sm focus:outline-none focus:border-[var(--color-text-primary)] transition-colors appearance-none cursor-pointer"
+                icon={<Filter className="w-3.5 h-3.5" />}
               >
                 <option value="All">All Statuses</option>
                 {statusOptions.map(status => (
@@ -68,20 +69,16 @@ export default function NotificationsClient({ initialJobs }: { initialJobs: Job[
                     {PROJECT_STATUS_META[status].label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
-            <button
-              onClick={() => setIsAllRead(true)}
-              className="btn-secondary h-10 px-4 text-xs hidden sm:inline-flex"
-            >
+            <Button variant="tertiary" size="sm" onClick={() => setIsAllRead(true)} className="hidden sm:inline-flex">
               Mark all read
-            </button>
+            </Button>
           </div>
         </div>
 
-        <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl overflow-hidden shadow-sm">
-          <Table>
-            <TableHead>
+        <Table>
+          <TableHead>
               <TableRow>
                 <TableCell className="th-mono">Job ID</TableCell>
                 <TableCell className="th-mono">Product Name</TableCell>
@@ -116,7 +113,6 @@ export default function NotificationsClient({ initialJobs }: { initialJobs: Job[
               )}
             </TableBody>
           </Table>
-        </div>
       </div>
     </DashboardLayout>
   );

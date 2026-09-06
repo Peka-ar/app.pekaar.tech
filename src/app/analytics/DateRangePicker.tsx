@@ -22,7 +22,7 @@ export function DateRangePicker({ currentRange }: DateRangePickerProps) {
   }, [router]);
 
   return (
-    <div className="flex items-center gap-2 bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] p-1 rounded-xl shadow-sm">
+    <div className="flex items-center gap-2 bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] p-1 rounded-xl">
       {(['7D', '30D', 'ALL'] as const).map((rangeOption) => (
         <button
           key={rangeOption}

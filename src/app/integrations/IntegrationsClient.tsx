@@ -4,6 +4,7 @@ import type { ReactElement } from "react";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, ChevronDown, Copy } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import { Button } from "@/components/ui/Button";
 
 interface IntegrationProject {
   id: string;
@@ -170,7 +171,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
   return (
     <DashboardLayout title="Integration & SDK">
       <div className="space-y-8 animate-in fade-in duration-500">
-        <section className="bg-[var(--canvas)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
+        <section className="bg-[var(--canvas)] rounded-[24px] overflow-hidden">
           <div className="px-5 sm:px-8 py-7 sm:py-10 grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 items-center">
             <div>
               <span className="inline-block text-[10px] uppercase tracking-widest font-sans font-bold text-[var(--text-muted)] mb-3">
@@ -201,7 +202,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
         </section>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
-          <section className="bg-[var(--canvas)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
+          <section className="bg-[var(--canvas)] rounded-[24px] overflow-hidden">
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border-default)] flex items-center justify-between gap-4">
               <h2 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)]">Where it works</h2>
             </div>
@@ -218,7 +219,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
                       onClick={() => setSelectedPlatformKey(platform.key)}
                       aria-pressed={isSelected}
                       className={
-                        "relative text-left rounded-2xl px-4 py-4 transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] " +
+                        "relative text-left rounded-2xl px-4 py-4 transition-[border-color,background-color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] " +
                         (isSelected
                           ? isDetected
                             ? "border-2 border-[var(--color-text-primary)] bg-[var(--color-canvas)]"
@@ -267,7 +268,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
             </div>
           </section>
 
-          <section className="bg-[var(--color-canvas)] rounded-3xl border border-[var(--color-border-default)] shadow-sm overflow-hidden">
+          <section className="bg-[var(--color-canvas)] rounded-[24px] overflow-hidden">
             <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border-default)]">
               <h2 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)]">What you&apos;ll see</h2>
             </div>
@@ -292,8 +293,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
           </section>
         </div>
 
-        <section className="bg-[var(--ink)] text-[var(--on-ink)] rounded-3xl p-5 sm:p-6 md:p-8 relative shadow-md">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.04] to-transparent pointer-events-none rounded-3xl" />
+        <section className="bg-[var(--ink)] text-[var(--on-ink)] rounded-[24px] p-5 sm:p-6 md:p-8 relative shadow-[var(--shadow-2)]">
           <div className="relative z-10 space-y-6">
             <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
               <div>
@@ -305,7 +305,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
                 <div className="relative">
                   <button
                     onClick={() => projects.length > 0 && setIsDropdownOpen(!isDropdownOpen)}
-                    className="w-full flex items-center justify-between bg-[rgba(228,230,220,.06)] hover:bg-[rgba(228,230,220,.12)] border border-[rgba(228,230,220,.12)] text-[var(--on-ink)] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-[rgba(228,230,220,.3)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-ink)] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="w-full flex items-center justify-between bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-[var(--on-ink)] rounded-xl px-4 py-3 text-sm focus:outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-ink)] disabled:cursor-not-allowed disabled:opacity-60"
                     aria-haspopup="listbox"
                     aria-expanded={isDropdownOpen}
                     disabled={projects.length === 0}
@@ -314,7 +314,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
                     <ChevronDown className={`w-4 h-4 text-[var(--on-ink)]/60 transition-transform duration-300 ${isDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
                   {isDropdownOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--ink)] border border-[rgba(228,230,220,.12)] rounded-xl overflow-hidden z-20 shadow-xl animate-in fade-in slide-in-from-top-2">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-[var(--ink)] border border-white/10 rounded-xl overflow-hidden z-20 shadow-[var(--shadow-2)] animate-in fade-in slide-in-from-top-2">
                       {projects.map((project) => (
                         <button
                           key={project.id}
@@ -322,7 +322,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
                             setSelectedProjectId(project.id);
                             setIsDropdownOpen(false);
                           }}
-                          className="w-full text-left px-4 py-3 text-sm text-[var(--on-ink)] hover:bg-[rgba(228,230,220,.08)] transition-colors"
+                          className="w-full text-left px-4 py-3 text-sm text-[var(--on-ink)] hover:bg-white/[0.08] transition-colors"
                           role="option"
                           aria-selected={selectedProject?.id === project.id}
                         >
@@ -335,7 +335,7 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
               </div>
             </div>
 
-            <div className="bg-[rgba(228,230,220,.06)] rounded-xl border border-[rgba(228,230,220,.12)] p-4">
+            <div className="bg-white/[0.06] rounded-xl border border-white/10 p-4">
               <div className="flex justify-between items-center mb-3">
                 <span className="text-[10px] uppercase tracking-widest font-sans text-[var(--on-ink)]/60">Generated Iframe</span>
                 <button
@@ -354,13 +354,16 @@ export default function IntegrationsClient({ projects, storefrontPlatform }: Int
               <pre className="text-xs font-mono text-[var(--on-ink)] overflow-x-auto whitespace-pre-wrap hide-scrollbar">{embedCode}</pre>
             </div>
 
-            <button
+            <Button
+              variant="support"
+              size="md"
               onClick={() => selectedProject && handleCopy(embedCode, "snippet-gen-btn")}
-              className="w-full py-3 bg-transparent border border-[var(--on-ink)] text-[var(--on-ink)] rounded-full text-[10px] uppercase tracking-widest font-bold hover:bg-[rgba(228,230,220,.12)] active:scale-[0.98] transition-all disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-ink)] flex items-center justify-center gap-2"
+              className="w-full"
               disabled={!selectedProject}
+              leftIcon={copied === "snippet-gen-btn" ? <CheckCircle2 className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
             >
-              {copied === "snippet-gen-btn" ? <><CheckCircle2 className="w-4 h-4" /> Copied</> : <><Copy className="w-4 h-4" /> Copy to Clipboard</>}
-            </button>
+              {copied === "snippet-gen-btn" ? "Copied" : "Copy to Clipboard"}
+            </Button>
           </div>
         </section>
       </div>

@@ -212,10 +212,12 @@ export default async function AnalyticsPage({
                     <div className="w-8 h-8 rounded-full bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] flex items-center justify-center">
                       <Icon className="w-4 h-4 text-[var(--color-text-muted)]" aria-hidden="true" />
                     </div>
-                    <div className={`flex items-center gap-1 text-[10px] font-sans tracking-widest px-2 py-0.5 rounded-full border ${metric.trend === 'up' ? 'bg-[var(--accent-pale)] text-[var(--positive-deep)] border-transparent' : 'bg-[var(--canvas-soft)] text-[var(--negative-deep)] border-transparent'}`}>
-                      {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                      {metric.change}
-                    </div>
+                    {(metric.trend === 'up' || metric.trend === 'down') && (
+                      <div className={`flex items-center gap-1 label-mono px-2 py-0.5 rounded-full border ${metric.trend === 'up' ? 'bg-[var(--accent-pale)] text-[var(--positive-deep)] border-transparent' : 'bg-[var(--canvas-soft)] text-[var(--negative-deep)] border-transparent'}`}>
+                        {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                        {metric.change}
+                      </div>
+                    )}
                   </div>
                   <div className="label-mono text-[var(--color-text-muted)] mb-1">{metric.label}</div>
                   <div className="font-display text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">{metric.value}</div>
@@ -278,7 +280,7 @@ export default async function AnalyticsPage({
                         style={{ height: barHeight(arHeight) }}
                       />
 
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] text-[9px] font-sans px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 flex flex-col gap-1 shadow-lg">
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] text-[9px] font-sans px-3 py-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 flex flex-col gap-1 shadow-[var(--shadow-1)]">
                         <div className="flex justify-between gap-4">
                           <span className="text-[var(--color-text-muted)]">Views:</span>
                           <span className="font-bold">{period.counts.VIEW.toLocaleString()}</span>

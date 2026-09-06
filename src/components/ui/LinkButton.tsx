@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { cn } from './cn';
 
-export type LinkButtonVariant = 'primary' | 'secondary' | 'ghost' | 'destructive';
+export type LinkButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'support' | 'ghost' | 'destructive';
 export type LinkButtonSize = 'sm' | 'md' | 'lg';
 
 export interface LinkButtonProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
@@ -16,6 +16,8 @@ export interface LinkButtonProps extends Omit<React.AnchorHTMLAttributes<HTMLAnc
 const variantClasses: Record<LinkButtonVariant, string> = {
   primary: 'btn-primary',
   secondary: 'btn-secondary',
+  tertiary: 'btn-tertiary',
+  support: 'btn-support',
   ghost: 'inline-flex items-center justify-center gap-2 font-semibold text-[var(--color-text-primary)] bg-transparent hover:bg-[var(--color-canvas-soft)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
   destructive: 'inline-flex items-center justify-center gap-2 font-semibold bg-[var(--negative)] text-white rounded-[24px] hover:bg-[var(--negative-deep)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-[0.98]',
 };

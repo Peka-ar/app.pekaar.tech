@@ -116,7 +116,7 @@ export function Modal({
     <div
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-4',
-        variant === 'takeover' ? 'bg-black/80' : 'bg-[rgba(20,20,16,0.55)]'
+        variant === 'takeover' ? 'bg-black/80' : 'bg-black/55'
       )}
       onClick={handleBackdropClick}
     >

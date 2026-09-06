@@ -249,13 +249,19 @@ Full spec: `pages/embed.md`.
 
 ## 12. Design system
 
-**Primary reference:** `design.md` (repo root, local-only) — v3: lime `#9fe870` accent, Figtree 400+900 display, sage `#e8ebe6`, light-only, 24px rounded-rect buttons. Tokens + component classes in `globals.css`; no dark mode.
+**Primary reference:** `design.md` (repo root, local-only) — v3.2: forest `#163300` primary CTA, lime `#9fe870` accent (accents + CTA fill on dark grounds), butter support on dark grounds, Figtree 400/900 display, sage `#e8ebe6`, light-only, 24px rounded-rect buttons. Tokens + component classes in `globals.css`; no dark mode.
 
 Key invariants:
-- **Never white text on lime** — ink labels on accent (`--on-accent`).
-- Tinted surfaces (peach/sky) are for capability/story bands and card fills only — **never on interactive elements** (Peka Green owns interaction).
+- **Never white text on lime** — ink labels on accent (`--on-accent`); lime is never a button fill on a light ground.
+- Button vocabulary is 1:1 with `globals.css` classes: `primary` (forest fill), `secondary` (lime fill — **dark grounds only**), `tertiary` (white + ink hairline — the light-ground secondary), `support` (butter fill — dark-ground secondary), `ghost`, `destructive`. `Button.tsx` / `LinkButton.tsx` expose all six; do not hand-roll ink/lime pill CTAs — convert strays to the kit.
+- Tinted surfaces (sky/butter/accent-pale) are for capability/story bands and icon wells only — **never on interactive elements** (Peka Green owns interaction).
 - Status chips use fill tints of canonical tokens — `PROJECT_STATUS_META` in `src/lib/status.ts` maps status → tone/icon + role labels.
-- Figtree ships 400+900 only; every `.font-display` element is pinned to 900.
+- Figtree ships 400+900 only; every `.font-display` element is pinned to 900. App page headlines use the `.page-title` utility (`clamp(1.75rem,2.5vw,2rem)`).
+- `transition-all` is banned (use `transition-colors`, `transition-opacity`, or an explicit `transition-[property]`); gradients and hard-coded hex/rgba are banned in app markup (landing still carries sanctioned rgba scrims from the v3.2 landing pass).
+- Elevation shadows (`--shadow-1/2`) are reserved for floating layers (dropdowns, drawers, dark panels, hover lifts) — static white cards on sage are shadowless.
+- Radii: canonical card `24px` (`rounded-[24px]` = `rounded-3xl`); dense/mid-size cards may use `16px` (`rounded-2xl`).
+
+**v3.2 rollout state (all committed surfaces):** app shells (`DashboardLayout`/`AdminLayout` + mobile drawers) are white header/sidebar with a sage `<main>`; content cards are borderless white `24px` surfaces that pop on the sage canvas. Rolled-out pages: `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics`, `/onboarding`, `/admin/*`; `/auth*` keeps its sanctioned white + ink-split layout with lime reserved for the dark panel. Dark ink panels survive only as component-level surfaces (`card inverted`, integrations embed section, review/published takeover modals, auth/onboarding split panels). Skeletons: pass `tone="sage"` for page-level white shapes; default (`canvas-soft`) is for bars on white card interiors.
 
 Landing-specific contracts (band rhythm, one primary CTA per viewport, copy truth): `pages/landing.md`.
 

@@ -82,7 +82,7 @@ export default function SignUpForm({ onNavigate }: SignUpFormProps) {
 
         <Button
           type="button"
-          variant="secondary"
+          variant="primary"
           size="md"
           className="mt-6 w-full"
           isLoading={resendState === 'sending'}

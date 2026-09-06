@@ -135,25 +135,38 @@ async function DashboardContent() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
 
-      <div>
-        <h2 className="font-display text-3xl font-bold tracking-tight text-[var(--color-text-primary)] mb-2">Welcome back.</h2>
-        <p className="text-sm text-[var(--color-text-secondary)]">Here is what&apos;s happening with your 3D assets today.</p>
+      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="page-title text-[var(--color-text-primary)]">Welcome back.</h2>
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">Here is what&apos;s happening with your 3D assets today.</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {METRICS.map((metric, i) => {
           const Icon = metric.icon;
+          const wellTints = [
+            { bg: 'var(--accent-pale)', fg: 'var(--ink-deep)' },
+            { bg: 'var(--surface-sky)', fg: 'var(--surface-sky-deep)' },
+            { bg: 'var(--surface-butter)', fg: 'var(--surface-butter-deep)' },
+          ];
+          const tint = wellTints[i % wellTints.length];
           return (
             <Card key={i} className="rounded-[24px]">
               <CardBody className="flex flex-col">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="w-8 h-8 rounded-full bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-[var(--color-text-muted)]" aria-hidden="true" />
+                  <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ backgroundColor: tint.bg, color: tint.fg }}
+                  >
+                    <Icon className="w-4 h-4" aria-hidden="true" />
                   </div>
-                  <div className={`flex items-center gap-1 text-[10px] font-sans tracking-widest px-2 py-0.5 rounded-full border ${metric.trend === 'up' ? 'bg-[var(--accent-pale)] text-[var(--positive-deep)] border-transparent' : 'bg-[var(--canvas-soft)] text-[var(--negative-deep)] border-transparent'}`}>
-                    {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-                    {metric.change}
-                  </div>
+                  {metric.change !== '--' && (
+                    <div className={`flex items-center gap-1 label-mono px-2 py-0.5 rounded-full ${metric.trend === 'up' ? 'bg-[var(--accent-pale)] text-[var(--positive-deep)]' : 'bg-[var(--canvas-soft)] text-[var(--negative-deep)]'}`}>
+                      {metric.trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      {metric.change}
+                    </div>
+                  )}
                 </div>
                 <div className="label-mono text-[var(--color-text-muted)] mb-1">{metric.label}</div>
                 <div className="font-display text-3xl font-bold tracking-tight text-[var(--color-text-primary)]">{metric.value}</div>
@@ -232,9 +245,9 @@ async function DashboardContent() {
         <div className="space-y-6">
           <Card variant="inverted" className="rounded-[24px]">
             <CardBody className="relative overflow-hidden">
-              <Box className="w-6 h-6 text-[var(--positive)] mb-4" />
-              <h3 className="font-display text-xl font-semibold mb-2">Deploy New Model</h3>
-              <p className="text-xs text-[var(--on-ink)]/70 mb-6 leading-relaxed">
+              <Box className="w-6 h-6 text-[var(--accent)] mb-4" aria-hidden="true" />
+              <h3 className="font-display text-xl font-bold mb-2">Deploy New Model</h3>
+              <p className="text-sm text-[var(--on-ink)]/70 mb-6 leading-relaxed">
                 Transform standard product photography into an interactive AR experience.
               </p>
               <LinkButton href="/tasks" variant="secondary" size="sm" rightIcon={<ArrowUpRight className="w-3 h-3" />}>
@@ -247,11 +260,11 @@ async function DashboardContent() {
             <CardBody>
               <h3 className="label-mono text-[var(--color-text-primary)] mb-4">Quick Links</h3>
               <div className="space-y-2">
-                <LinkButton href="/integrations" variant="secondary" size="sm" className="w-full justify-between">
-                  SDK Documentation <ArrowUpRight className="w-4 h-4" />
+                <LinkButton href="/integrations" variant="tertiary" size="sm" className="w-full" rightIcon={<ArrowUpRight className="w-4 h-4" />}>
+                  SDK Documentation
                 </LinkButton>
-                <LinkButton href="/analytics" variant="secondary" size="sm" className="w-full justify-between">
-                  Full Analytics Report <ArrowUpRight className="w-4 h-4" />
+                <LinkButton href="/analytics" variant="tertiary" size="sm" className="w-full" rightIcon={<ArrowUpRight className="w-4 h-4" />}>
+                  Full Analytics Report
                 </LinkButton>
               </div>
             </CardBody>

@@ -119,7 +119,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
         aria-modal="true"
         aria-label="Navigation menu"
         className={cn(
-          'absolute top-0 left-0 h-full w-72 shadow-xl transform transition-transform duration-300 ease-out',
+          'absolute top-0 left-0 h-full w-72 shadow-[var(--shadow-2)] transform transition-transform duration-300 ease-out',
           isOpen ? 'translate-x-0' : '-translate-x-full'
         )}
         style={{ backgroundColor: 'var(--canvas)' }}
@@ -128,7 +128,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
           className="h-16 flex items-center justify-between px-6"
           style={{ borderBottom: '1px solid var(--border-default)' }}
         >
-          <Link href="/" className="flex items-center gap-2" aria-label="Go to Home" onClick={handleLinkClick}>
+          <Link href="/" className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]" aria-label="Go to Home" onClick={handleLinkClick}>
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
               style={{ border: '1px solid var(--text-primary)' }}
@@ -146,7 +146,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
               </svg>
             </div>
             <Wordmark
-              className="text-[12px] font-semibold tracking-[0.2em] uppercase font-display"
+              className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
               dotClassName="text-[var(--accent)]"
             />
           </Link>
@@ -175,7 +175,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
                 key={item.name}
                 href={item.path}
                 onClick={handleLinkClick}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{
                   backgroundColor: isActive ? 'var(--accent-pale)' : 'transparent',
                   color: isActive ? 'var(--ink-deep)' : 'var(--text-secondary)',
@@ -194,7 +194,13 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
                   }
                 }}
               >
-                <Icon className="w-4 h-4" aria-hidden={true} />
+                <Icon
+                  className={cn(
+                    'w-4 h-4',
+                    isActive ? 'text-[var(--ink-deep)]' : 'text-[var(--text-muted)]'
+                  )}
+                  aria-hidden={true}
+                />
                 {item.name}
               </Link>
             );
@@ -207,24 +213,24 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
         >
             <div className="flex items-center gap-3 px-3 py-2">
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-sans"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold font-sans"
                 style={{
                   backgroundColor: 'var(--canvas-soft)',
-                  border: '1px solid var(--border-default)',
+                  color: 'var(--text-primary)',
                 }}
               >
                 {initials}
               </div>
               <div className="flex flex-col min-w-0">
                 <span
-                  className="text-xs font-medium truncate"
+                  className="text-sm font-semibold truncate"
                   style={{ color: 'var(--text-primary)' }}
                   title={userName}
                 >
                   {userName}
                 </span>
                 <span
-                  className="text-[9px] font-sans truncate"
+                  className="text-xs truncate"
                   style={{ color: 'var(--text-muted)' }}
                   title={userEmail}
                 >
@@ -235,12 +241,12 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
             <form action={logout}>
               <button
                 type="submit"
-                className="w-full mt-1 px-3 py-1.5 text-xs font-sans uppercase tracking-widest text-left rounded-lg transition-colors"
-                style={{ color: 'var(--text-muted)' }}
+                className="w-full mt-1 px-3 py-2 text-sm font-semibold text-left rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                style={{ color: 'var(--text-secondary)', outlineColor: 'var(--text-primary)' }}
                 onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.backgroundColor = 'var(--canvas-soft)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
-                Sign Out
+                Sign out
               </button>
             </form>
         </div>

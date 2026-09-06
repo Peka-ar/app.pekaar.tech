@@ -82,7 +82,7 @@ export default function OnboardingClient() {
             {["Upload reference photography", "Review production status", "Embed published 3D viewers"].map((item) => (
               <div
                 key={item}
-                className="rounded-xl border border-[rgba(232,235,230,0.14)] bg-[rgba(232,235,230,0.06)] px-4 py-3 font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink)]/70"
+                className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink)]/70"
               >
                 {item}
               </div>
@@ -218,7 +218,7 @@ export default function OnboardingClient() {
           <div className="mt-8 flex items-center justify-between gap-4 border-t border-[var(--border-default)] pt-6">
             <Button
               type="button"
-              variant="secondary"
+              variant="tertiary"
               size="md"
               leftIcon={<ArrowLeft className="h-4 w-4" />}
               onClick={() => setStep((current) => Math.max(1, current - 1))}

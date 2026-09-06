@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 import { Card, CardBody } from '@/components/ui/Card';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { Button } from '@/components/ui/Button';
 
 export default function DashboardError() {
   const router = useRouter();
@@ -15,12 +16,12 @@ export default function DashboardError() {
           title="Something went wrong loading your dashboard"
           description="We couldn't fetch your dashboard data. Please try again."
           action={
-            <button
+            <Button
+              variant="primary"
               onClick={() => router.refresh()}
-              className="btn-secondary h-10 px-6 text-xs"
             >
               Retry
-            </button>
+            </Button>
           }
         />
       </CardBody>

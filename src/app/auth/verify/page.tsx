@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { Account } from "node-appwrite";
 import { createPublicClient } from "@/server/appwrite";
+import { LinkButton } from "@/components/ui/LinkButton";
 
 export default async function VerifyEmailPage({
   searchParams,
@@ -27,7 +27,7 @@ export default async function VerifyEmailPage({
       <div className="card w-full max-w-md p-8 text-center sm:p-10">
         <div
           aria-hidden="true"
-          className={`mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full ${isError ? "bg-[var(--negative-bg)] text-[#fff]" : "bg-[var(--accent-pale)] text-[var(--positive-deep)]"}`}
+          className={`mx-auto mb-5 flex h-12 w-12 items-center justify-center rounded-full ${isError ? "bg-[var(--negative-bg)] text-white" : "bg-[var(--accent-pale)] text-[var(--positive-deep)]"}`}
         >
           <span className={`h-3 w-3 rounded-full ${isError ? "bg-[var(--negative)]" : "bg-[var(--positive)]"}`} />
         </div>
@@ -35,9 +35,9 @@ export default async function VerifyEmailPage({
           {isError ? "Unable to verify" : "Email verified"}
         </h1>
         <p className="mt-3 text-sm leading-6 text-[var(--text-secondary)]">{error || "Your account is active. You can now sign in."}</p>
-        <Link href="/auth" className="btn-primary mt-8 inline-flex">
+        <LinkButton href="/auth" variant="primary" size="md" className="mt-8">
           Sign In
-        </Link>
+        </LinkButton>
       </div>
     </main>
   );

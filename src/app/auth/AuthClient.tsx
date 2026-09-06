@@ -23,7 +23,7 @@ export default function AuthClient() {
           variant="ghost"
           size="sm"
           leftIcon={<ArrowLeft className="h-4 w-4" />}
-          className="text-[var(--on-ink)] hover:bg-[rgba(232,235,230,0.12)] hover:text-[var(--on-ink)] hover:no-underline"
+          className="text-[var(--on-ink)] hover:bg-white/10 hover:text-[var(--on-ink)] hover:no-underline"
         >
           Back
         </LinkButton>
@@ -55,7 +55,7 @@ export default function AuthClient() {
               </li>
             </ul>
           </div>
-          <p className="border-t border-[rgba(232,235,230,0.14)] pt-6 font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink)]/50">
+          <p className="border-t border-white/10 pt-6 font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--on-ink)]/50">
             Peka AR · Photo → 3D pipeline · Hours, not weeks
           </p>
         </div>
@@ -81,7 +81,7 @@ export default function AuthClient() {
               role="tab"
               aria-selected={view === "signin"}
               onClick={() => setView("signin")}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] ${view === "signin" ? "bg-[var(--accent-pale)] text-[var(--ink-deep)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] ${view === "signin" ? "bg-[var(--accent-pale)] text-[var(--ink-deep)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
             >
               Sign in
             </button>
@@ -90,7 +90,7 @@ export default function AuthClient() {
               role="tab"
               aria-selected={view === "signup"}
               onClick={() => setView("signup")}
-              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] ${view === "signup" ? "bg-[var(--accent-pale)] text-[var(--ink-deep)] shadow-sm" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
+              className={`rounded-full px-5 py-2 text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)] ${view === "signup" ? "bg-[var(--accent-pale)] text-[var(--ink-deep)]" : "text-[var(--text-secondary)] hover:text-[var(--text-primary)]"}`}
             >
               Sign up
             </button>

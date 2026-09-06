@@ -43,14 +43,13 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
         className="w-64 hidden md:flex flex-col sticky top-0 h-screen shrink-0"
         style={{
           backgroundColor: 'var(--canvas)',
-          borderRight: '1px solid var(--border-default)',
         }}
       >
         <div
           className="h-16 flex items-center px-6"
           style={{ borderBottom: '1px solid var(--border-default)' }}
         >
-          <Link href="/" className="flex items-center gap-2" aria-label="Go to Home">
+          <Link href="/" className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]" aria-label="Go to Home">
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
               style={{ border: '1px solid var(--text-primary)' }}
@@ -58,13 +57,13 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
               <Box className="w-4 h-4" style={{ color: 'var(--text-primary)' }} aria-hidden="true" />
             </div>
             <Wordmark
-              className="text-[12px] font-semibold tracking-[0.2em] uppercase font-display"
+              className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
               dotClassName="text-[var(--accent)]"
             />
           </Link>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <div
             className="label-mono mb-4 px-3 pt-2"
             style={{ color: 'var(--text-muted)' }}
@@ -78,7 +77,7 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
               <Link
                 key={item.name}
                 href={item.path}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
                 style={{
                   backgroundColor: isActive ? 'var(--accent-pale)' : 'transparent',
                   color: isActive ? 'var(--ink-deep)' : 'var(--text-secondary)',
@@ -97,7 +96,11 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
                   }
                 }}
               >
-                <Icon className="w-4 h-4" aria-hidden="true" />
+                <Icon
+                  className="w-4 h-4"
+                  aria-hidden="true"
+                  style={{ color: isActive ? 'var(--ink-deep)' : 'var(--text-muted)' }}
+                />
                 {item.name}
               </Link>
             );
@@ -107,19 +110,19 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
         <div className="p-4" style={{ borderTop: '1px solid var(--border-default)' }}>
           <div className="flex items-center gap-3 px-3 py-2">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[10px] font-bold font-sans"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold font-sans"
               style={{
                 backgroundColor: 'var(--canvas-soft)',
-                border: '1px solid var(--border-default)',
+                color: 'var(--text-primary)',
               }}
             >
               {initials}
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+            <div className="flex flex-col min-w-0">
+              <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)' }}>
                 {displayName}
               </span>
-              <span className="text-[9px] font-sans" style={{ color: 'var(--text-muted)' }}>
+              <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
                 {user?.role ?? 'Admin'}
               </span>
             </div>
@@ -127,12 +130,12 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
           <form action={logout}>
             <button
               type="submit"
-              className="w-full mt-1 px-3 py-1.5 text-xs font-sans uppercase tracking-widest text-left rounded-lg transition-colors"
-              style={{ color: 'var(--text-muted)' }}
+              className="w-full mt-1 px-3 py-2 text-sm font-semibold text-left rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2"
+              style={{ color: 'var(--text-secondary)', outlineColor: 'var(--text-primary)' }}
               onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.backgroundColor = 'var(--canvas-soft)'; }}
-              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.backgroundColor = 'transparent'; }}
             >
-              Sign Out
+              Sign out
             </button>
           </form>
         </div>
@@ -156,16 +159,14 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
             >
               <Menu className="w-5 h-5" />
             </Button>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate text-[var(--color-text-primary)]">
-              {title}
-            </h1>
+            <h1 className="page-title truncate text-[var(--color-text-primary)]">{title}</h1>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {action && <div className="hidden sm:block">{action}</div>}
             <NotificationBell />
           </div>
         </header>
-        <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">{children}</main>
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[var(--canvas-soft)] overflow-x-hidden">{children}</main>
       </div>
 
       <AdminMobileNavDrawer

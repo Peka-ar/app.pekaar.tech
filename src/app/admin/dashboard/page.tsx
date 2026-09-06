@@ -92,7 +92,7 @@ async function AdminDashboardContent() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <h2 className="font-display text-3xl font-bold tracking-tight text-[var(--color-text-primary)] mb-2">
+        <h2 className="page-title text-[var(--color-text-primary)] mb-2">
           Welcome to your Dashboard
         </h2>
         <p className="text-sm text-[var(--color-text-secondary)]">
@@ -148,7 +148,7 @@ async function AdminDashboardContent() {
                       maxHeight: "calc(100% - 24px)",
                     }}
                   >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-1 text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-[var(--shadow-1)] text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                       {count.toLocaleString()} Projects
                     </div>
                   </div>
@@ -184,7 +184,7 @@ async function AdminDashboardContent() {
                       maxHeight: "calc(100% - 24px)",
                     }}
                   >
-                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-1 text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                    <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-[var(--shadow-1)] text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                       {count.toLocaleString()} Signups
                     </div>
                   </div>

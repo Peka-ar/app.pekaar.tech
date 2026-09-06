@@ -9,11 +9,11 @@ function UserSkeleton() {
   return (
     <div className="space-y-4 animate-in fade-in duration-500">
       <div className="flex items-center gap-4">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-10 w-40" />
-        <Skeleton className="h-10 w-40" />
+        <Skeleton tone="sage" className="h-10 w-64" />
+        <Skeleton tone="sage" className="h-10 w-40" />
+        <Skeleton tone="sage" className="h-10 w-40" />
       </div>
-      <Skeleton className="h-96 w-full rounded-3xl" />
+      <Skeleton tone="sage" className="h-96 w-full rounded-3xl" />
     </div>
   );
 }

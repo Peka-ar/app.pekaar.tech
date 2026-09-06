@@ -1,6 +1,13 @@
 import React from 'react';
 import { cn } from './cn';
 
-export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('animate-pulse rounded-lg bg-[var(--color-canvas-soft)]', className)} aria-hidden="true" />;
+type SkeletonTone = 'default' | 'sage';
+
+const toneClasses: Record<SkeletonTone, string> = {
+  default: 'bg-[var(--color-canvas-soft)]',
+  sage: 'bg-[var(--canvas)]',
+};
+
+export function Skeleton({ className, tone = 'default' }: { className?: string; tone?: SkeletonTone }) {
+  return <div className={cn('animate-pulse rounded-lg', toneClasses[tone], className)} aria-hidden="true" />;
 }

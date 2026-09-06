@@ -480,7 +480,7 @@ export function AdminUsersClient() {
                       <option value="ADMIN">ADMIN</option>
                     </Select>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={handleUpdateRole}>Update</Button>
+                  <Button variant="tertiary" size="sm" onClick={handleUpdateRole}>Update</Button>
                 </div>
 
                 <div className="flex items-end gap-3">
@@ -493,7 +493,7 @@ export function AdminUsersClient() {
                       placeholder="Unlimited"
                     />
                   </div>
-                  <Button variant="secondary" size="sm" onClick={handleUpdateUsageLimits}>Update</Button>
+                  <Button variant="tertiary" size="sm" onClick={handleUpdateUsageLimits}>Update</Button>
                 </div>
 
                 <div className="flex items-end gap-3">
@@ -506,7 +506,7 @@ export function AdminUsersClient() {
                       placeholder="e.g. pro"
                     />
                   </div>
-                  <Button variant="secondary" size="sm" onClick={handleUpdateSubscriptionTier}>Update</Button>
+                  <Button variant="tertiary" size="sm" onClick={handleUpdateSubscriptionTier}>Update</Button>
                 </div>
               </CardBody>
               <CardFooter className="flex items-center gap-3">

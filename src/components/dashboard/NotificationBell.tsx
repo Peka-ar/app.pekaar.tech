@@ -98,7 +98,7 @@ export default function NotificationBell() {
 
       {isOpen && (
         <div
-          className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl shadow-lg z-50 overflow-hidden transform transition-all duration-300 origin-top-right animate-in fade-in slide-in-from-top-2"
+          className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl shadow-[var(--shadow-2)] z-50 overflow-hidden transform transition-[transform,opacity] duration-300 origin-top-right animate-in fade-in slide-in-from-top-2"
           style={{
             backgroundColor: 'var(--canvas)',
             border: '1px solid var(--border-default)',

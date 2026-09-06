@@ -304,13 +304,13 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   };
 
   const actionButton = (
-    <button
+    <Button
       onClick={() => setIsWizardOpen(true)}
-      className="btn-primary h-10 px-6 text-xs gap-1.5"
+      size="sm"
+      leftIcon={<Plus className="w-4 h-4" aria-hidden="true" />}
     >
-      <Plus className="w-4 h-4" aria-hidden="true" />
       New Task
-    </button>
+    </Button>
   );
 
   return (
@@ -341,16 +341,16 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           </div>
         </div>
 
-        <div className="flex items-center p-1 bg-[var(--color-canvas-soft)] rounded-full border border-[var(--color-border-default)] shrink-0 self-end sm:self-auto">
+        <div className="flex items-center p-1 bg-[var(--color-canvas)] rounded-full border border-[var(--color-border-default)] shrink-0 self-end sm:self-auto">
           <button
             onClick={() => setViewMode('list')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-all duration-200 ${viewMode === 'list' ? 'bg-[var(--color-canvas)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-colors ${viewMode === 'list' ? 'bg-[var(--color-canvas-soft)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
           >
             <ListIcon className="w-3.5 h-3.5" /> List
           </button>
           <button
             onClick={() => setViewMode('board')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-all duration-200 ${viewMode === 'board' ? 'bg-[var(--color-canvas)] text-[var(--color-text-primary)] shadow-sm' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-colors ${viewMode === 'board' ? 'bg-[var(--color-canvas-soft)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
           >
             <LayoutGrid className="w-3.5 h-3.5" /> Board
           </button>
@@ -364,7 +364,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               const columnJobs = filteredJobs.filter(j => j.status === col.id);
               const ColIcon = col.icon;
               return (
-                <div key={col.id} className="w-80 flex flex-col bg-[var(--color-canvas-soft)] rounded-2xl p-4 border border-transparent max-h-full">
+                <div key={col.id} className="w-80 flex flex-col bg-[var(--color-canvas)] rounded-[24px] p-4 max-h-full">
                   <div className="flex items-center justify-between mb-4 px-2 border-b border-[var(--color-border-default)] pb-3">
                     <div className="flex items-center gap-2">
                       <ColIcon className={`w-4 h-4 ${col.id === 'PENDING' ? 'text-[var(--text-muted)]' : col.id === 'REVISIONS' ? 'text-[var(--warning-content)]' : col.id === 'COMPLETED' ? 'text-[var(--color-text-primary)]' : 'text-[var(--positive-deep)]'}`} />
@@ -372,7 +372,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         {col.label}
                       </h3>
                     </div>
-                    <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas)] px-2 py-0.5 rounded-full border border-[var(--color-border-default)]">
+                    <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas-soft)] px-2 py-0.5 rounded-full">
                       {columnJobs.length}
                     </span>
                   </div>
@@ -381,7 +381,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                     {columnJobs.map(job => (
                       <div
                         key={job.id}
-                        className="bg-[var(--color-canvas)] p-4 rounded-2xl border border-[var(--color-border-default)] shadow-sm hover:border-[var(--color-text-primary)] hover:shadow-md transition-all cursor-pointer group shrink-0"
+                        className="bg-[var(--color-canvas)] p-4 rounded-[24px] border border-[var(--color-border-default)] hover:border-[var(--color-text-primary)] hover:shadow-[var(--shadow-1)] transition-[border-color,box-shadow] cursor-pointer group shrink-0"
                         onClick={() => handleCardClick(job)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -393,7 +393,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         tabIndex={0}
                       >
                         {getThumbnail(job) && (
-                          <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
+                          <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-2xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
                             <Image src={getThumbnail(job)} alt="" fill sizes="320px" unoptimized className="object-cover group-hover:scale-105 transition-transform duration-700" />
                           </div>
                         )}
@@ -428,22 +428,25 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
                         {(job.status === 'COMPLETED') && (
                           <div className="mt-4 pt-3 border-t border-[var(--color-border-default)]">
-                            <button
+                            <Button
+                              variant="primary"
+                              size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setReviewJob(job);
                               }}
-                              className="w-full py-2 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-[10px] uppercase tracking-widest rounded-xl font-medium hover:opacity-90 active:scale-95 transition-all duration-200 shadow-sm flex items-center justify-center gap-2"
+                              leftIcon={<Eye className="w-3.5 h-3.5" />}
+                              className="w-full"
                             >
-                              <Eye className="w-3.5 h-3.5" /> Review Model
-                            </button>
+                              Review Model
+                            </Button>
                           </div>
                         )}
                       </div>
                     ))}
                     {columnJobs.length === 0 && (
-                      <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-white/50">
-                        <BoxIcon className="w-6 h-6 text-[var(--color-border-default)] mb-2" />
+                      <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px]">
+                        <BoxIcon className="w-6 h-6 text-[var(--color-text-muted)] mb-2" />
                         <span className="text-[11px] text-[var(--color-text-muted)] font-sans tracking-widest uppercase">Empty</span>
                       </div>
                     )}
@@ -454,10 +457,10 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           </div>
         </div>
       ) : (
-        <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-3xl shadow-sm overflow-hidden animate-in fade-in duration-300">
+        <div className="bg-[var(--color-canvas)] rounded-[24px] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="th-mono bg-[var(--color-canvas-soft)]">
+              <thead className="bg-[var(--color-canvas-soft)]">
                 <tr className="border-b border-[var(--color-border-default)]">
                   <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Job ID</th>
                   <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Product</th>
@@ -514,26 +517,29 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                       </td>
                       <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
                         {job.status === 'COMPLETED' ? (
-                          <button
+                          <Button
+                            variant="primary"
+                            size="sm"
                             onClick={() => setReviewJob(job)}
-                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-text-primary)] text-[var(--color-canvas)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:opacity-90 active:scale-95 transition-all duration-200"
                           >
                             Review
-                          </button>
+                          </Button>
                         ) : job.status === 'PUBLISHED' ? (
-                          <button
+                          <Button
+                            variant="tertiary"
+                            size="sm"
                             onClick={() => setPublishedJob(job)}
-                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-canvas)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             View 3D
-                          </button>
+                          </Button>
                         ) : (
-                          <button
+                          <Button
+                            variant="tertiary"
+                            size="sm"
                             onClick={() => handleCardClick(job)}
-                            className="px-3 sm:px-4 py-1.5 bg-[var(--color-canvas)] border border-[var(--color-border-default)] text-[var(--color-text-secondary)] rounded-full text-[10px] uppercase tracking-widest font-medium hover:border-[var(--color-text-primary)] transition-all duration-200 opacity-40 group-hover:opacity-100 focus:opacity-100"
                           >
                             Details
-                          </button>
+                          </Button>
                         )}
                       </td>
                     </tr>
@@ -731,7 +737,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   {uploadedAssets.map((asset, i) => (
                     <div
                       key={asset.id}
-                      className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-canvas)] shadow-sm cursor-pointer hover:border-[var(--color-text-primary)] transition-colors"
+                      className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-canvas)] cursor-pointer hover:border-[var(--color-text-primary)] transition-colors"
                       onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
                       title="Click to enlarge"
                     >
@@ -913,7 +919,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
           role !== "ADMIN" ? (
             <div className="flex items-center gap-2">
               <Button
-                variant="secondary"
+                variant="tertiary"
                 onClick={() => setShowRequestChangesForm((v) => !v)}
                 leftIcon={<Edit3 className="w-4 h-4" />}
               >
@@ -1043,7 +1049,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                   <div className="flex justify-end gap-2">
                     <Button
-                      variant="secondary"
+                      variant="ghost"
                       onClick={() => {
                         setShowRequestChangesForm(false);
                         setRequestChangesNote('');
@@ -1100,7 +1106,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         headerAction={
           role !== "ADMIN" ? (
             <Button
-              variant="secondary"
+              variant="tertiary"
               onClick={() => setShowRequestChangesForm((v) => !v)}
               leftIcon={<Edit3 className="w-4 h-4" />}
             >
@@ -1222,7 +1228,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   />
                   <div className="flex justify-end gap-2">
                     <Button
-                      variant="secondary"
+                      variant="ghost"
                       onClick={() => {
                         setShowRequestChangesForm(false);
                         setRequestChangesNote('');

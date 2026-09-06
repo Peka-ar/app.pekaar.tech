@@ -14,6 +14,7 @@ import { APPWRITE_MODELS_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { ADMIN_LABEL, PROJECT_STATUS_META } from "@/lib/status";
@@ -219,7 +220,7 @@ export default function AdminTasksClient({
             const columnJobs = filteredJobs.filter(j => j.status === col.id);
             const ColIcon = col.icon;
             return (
-              <div key={col.id} className="w-72 flex flex-col bg-[var(--color-canvas-soft)] rounded-2xl p-4 border border-transparent max-h-full">
+              <div key={col.id} className="w-72 flex flex-col bg-[var(--color-canvas)] rounded-[24px] p-4 max-h-full">
                 <div className="flex items-center justify-between mb-4 px-2 border-b border-[var(--color-border-default)] pb-3">
                   <div className="flex items-center gap-2">
                     <ColIcon className={`w-4 h-4 text-[var(--color-text-primary)]`} />
@@ -227,7 +228,7 @@ export default function AdminTasksClient({
                       {col.label}
                     </h3>
                   </div>
-                  <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas)] px-2 py-0.5 rounded-full border border-[var(--color-border-default)]">
+                  <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas-soft)] px-2 py-0.5 rounded-full">
                     {columnJobs.length}
                   </span>
                 </div>
@@ -236,7 +237,7 @@ export default function AdminTasksClient({
                   {columnJobs.map(job => (
                     <div
                       key={job.id}
-                      className="bg-[var(--color-canvas)] p-4 rounded-2xl border border-[var(--color-border-default)] shadow-sm hover:border-[var(--color-text-primary)] hover:shadow-md transition-all cursor-pointer group shrink-0"
+                      className="bg-[var(--color-canvas)] p-4 rounded-[24px] border border-[var(--color-border-default)] hover:border-[var(--color-text-primary)] hover:shadow-[var(--shadow-1)] transition-[border-color,box-shadow] cursor-pointer group shrink-0"
                       onClick={() => openModal(job)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -281,8 +282,8 @@ export default function AdminTasksClient({
                     </div>
                   ))}
                   {columnJobs.length === 0 && (
-                    <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px] bg-[var(--color-canvas)]/50">
-                      <Box className="w-6 h-6 text-[var(--color-border-default)] mb-2" />
+                    <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px]">
+                      <Box className="w-6 h-6 text-[var(--color-text-muted)] mb-2" />
                       <span className="text-[11px] text-[var(--color-text-muted)] font-sans tracking-widest uppercase">Empty</span>
                     </div>
                   )}
@@ -484,7 +485,7 @@ export default function AdminTasksClient({
                         <div className="w-full px-8 mt-3">
                           <div className="h-1.5 w-full bg-[var(--color-border-default)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-[var(--color-text-primary)] transition-all duration-150 ease-out"
+                              className="h-full bg-[var(--color-text-primary)] transition-[width] duration-150 ease-out"
                               style={{ width: `${Math.max(2, glbProgress)}%` }}
                             />
                           </div>
@@ -541,7 +542,7 @@ export default function AdminTasksClient({
                         <div className="w-full px-8 mt-3">
                           <div className="h-1.5 w-full bg-[var(--color-border-default)] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-[var(--color-text-primary)] transition-all duration-150 ease-out"
+                              className="h-full bg-[var(--color-text-primary)] transition-[width] duration-150 ease-out"
                               style={{ width: `${Math.max(2, usdzProgress)}%` }}
                             />
                           </div>
@@ -592,14 +593,17 @@ export default function AdminTasksClient({
                   </div>
                 )}
 
-                <button
+                <Button
                   onClick={handleSubmit}
                   disabled={!glbAsset || isSubmitting}
-                  className="w-full py-3 bg-[var(--color-text-primary)] text-[var(--color-canvas)] text-xs uppercase tracking-widest font-medium rounded-xl hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95 flex items-center justify-center gap-2"
+                  isLoading={isSubmitting}
+                  variant="primary"
+                  size="sm"
+                  className="w-full"
+                  leftIcon={<Check className="w-4 h-4" />}
                 >
-                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   Submit for Review
-                </button>
+                </Button>
               </section>
             )}
 

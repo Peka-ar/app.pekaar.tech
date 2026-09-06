@@ -1,9 +1,9 @@
 "use client";
 
 import { resetPassword } from "@/app/actions/auth";
-import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { LinkButton } from "@/components/ui/LinkButton";
 import { Card, CardBody } from "@/components/ui/Card";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/Input";
@@ -44,9 +44,9 @@ export default function ResetPasswordForm({ userId, secret }: { userId: string; 
               <span aria-hidden className="h-3 w-3 rounded-full bg-[var(--positive)]" />
             </div>
             <p className="text-sm leading-6 text-[var(--text-secondary)]">Your password has been updated. You can now sign in with your new password.</p>
-            <Link href="/auth" className="btn-primary mt-8 inline-flex">
+            <LinkButton href="/auth" variant="primary" className="mt-8">
               Sign In
-            </Link>
+            </LinkButton>
           </div>
         ) : (
           <form className="mt-6 space-y-5" onSubmit={handleSubmit}>

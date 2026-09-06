@@ -107,7 +107,7 @@ export function Drawer({
 
   const drawerContent = (
     <div
-      className="fixed inset-0 z-50 flex justify-end bg-[rgba(20,20,16,0.55)]"
+      className="fixed inset-0 z-50 flex justify-end bg-black/55"
       onClick={handleBackdropClick}
     >
         <div

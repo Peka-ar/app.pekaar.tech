@@ -41,7 +41,7 @@ The dashboard is the authenticated landing page: four metric cards, a 12-month i
 | 3 | Interaction Rate | `round(totalInteractions / totalViews * 100)%` (or `--` if no views) | `Activity` |
 | 4 | Est. Conversion Lift | `+(totalInteractions / totalViews * 100).toFixed(1)%` (or `--`) | `Box` |
 
-All four cards show `change: "--"` — period-over-period deltas are **not implemented here**; they live on `/analytics` (`?range=7D|30D|ALL`). If adding deltas, reuse `formatChange` (`src/lib/utils.ts`) and the analytics page's period math.
+All four cards report `change: "--"` — period-over-period deltas are **not implemented here**; they live on `/analytics` (`?range=7D|30D|ALL`). The metric card component hides the trend chip entirely when `change === "--"`, so these cards render no chip. If adding deltas, reuse `formatChange` (`src/lib/utils.ts`) and the analytics page's period math; chips render only for real `up`/`down` values.
 
 ---
 
@@ -49,7 +49,7 @@ All four cards show `change: "--"` — period-over-period deltas are **not imple
 
 `space-y-8` wrapper; header "Welcome back." + subcopy.
 
-- **Metric cards row** — `grid md:grid-cols-2 lg:grid-cols-4`; each card: circular icon chip, trend pill, `label-mono` label, display value.
+- **Metric cards row** — `grid md:grid-cols-2 lg:grid-cols-4`; each card is a white borderless `24px` surface: circular icon chip on a tinted well (accent-pale / surface-sky / surface-butter / accent), optional trend chip (hidden when `--`, see above), `label-mono` label, display value.
 - **Two-column body** (`lg:grid-cols-3`):
   - Left (×2): **Interaction Trends** card — 12 flex bars (heights `% of maxCount`, capped `calc(100% - 24px)`) with hover tooltips and dashed gridlines; **Recent Tasks** card — `projects.slice(0, 3)` with relative dates (`formatDistanceToNow`) + status badges + "View All" → `/tasks`.
   - Right: **Deploy New Model** card (inverted `--ink` card, "Start Generation" → `/tasks`); **Quick Links** card (→ `/integrations`, `/analytics`).

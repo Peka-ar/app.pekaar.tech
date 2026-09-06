@@ -87,7 +87,7 @@ export default async function AdminAnalyticsPage() {
                       className="w-full bg-[var(--color-accent)] rounded-t-sm group-hover:bg-[var(--color-accent-active)] transition-colors relative"
                       style={{ height: `${(count / maxCount) * 100}%`, maxHeight: 'calc(100% - 24px)' }}
                     >
-                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-1 text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
+                      <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-[var(--color-canvas)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] shadow-[var(--shadow-1)] text-[9px] font-sans px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">
                         {count.toLocaleString()} signups
                       </div>
                     </div>
@@ -188,7 +188,7 @@ export default async function AdminAnalyticsPage() {
               <h3 className="label-mono text-[var(--color-text-primary)] mb-1">Admin Analytics</h3>
               <p className="text-xs text-[var(--color-text-muted)]">These analytics reflect platform-wide data. For per-project analytics, visit the existing Analytics page.</p>
             </div>
-            <LinkButton href="/analytics" variant="secondary" size="sm" rightIcon={<ArrowRight className="w-3 h-3" />}>
+            <LinkButton href="/analytics" variant="tertiary" size="sm" rightIcon={<ArrowRight className="w-3 h-3" />}>
               Per-Project Analytics
             </LinkButton>
           </CardBody>
