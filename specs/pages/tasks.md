@@ -4,13 +4,13 @@
 
 `/tasks` is the brand's primary work surface. Admins also land here (the page is shared) but the modal flows are role-aware. This spec documents the **brand** experience; the admin board at `/admin/tasks` is documented in [`./admin.md`](./admin.md).
 
-The lifecycle is a 4-state machine: `PENDING → COMPLETED → PUBLISHED`, with `REVISIONS` as a **non-re-entrant** branch off `COMPLETED` and `PUBLISHED` (see `../backend-architecture.md` §5). Every status has its own modal.
+The lifecycle is a 4-state machine: `PENDING → COMPLETED → PUBLISHED`, with `REVISIONS` as a **non-re-entrant** branch off `COMPLETED` and `PUBLISHED` (see `../backend-architecture.md` §5). Every status has its own drawer.
 
 ---
 
 ## Data model
 
-`TaskJob` (the shape `TasksClient` receives from the server) is defined in `src/app/tasks/TasksClient.tsx`:
+`TaskJob` (the shape `TasksClient` receives from the server) is defined in `src/components/tasks/types.ts` (shared with `/admin/tasks`):
 
 ```ts
 type TaskJob = {
@@ -26,10 +26,22 @@ type TaskJob = {
   referenceUrls: string[];              // derived: REFERENCE_IMAGE asset urls
   assetUrls: { glb: string; usdz?: string } | null;  // derived: proxy URL /api/v1/assets/{id}/file for live MODEL_GLB / MODEL_USDZ
   revisionRequests?: { id, note, createdAt }[];
+  // Generation fields (Fast/AI Draft)
+  generationMode?: "PREMIUM" | "FAST" | null;
+  generationStatus?: string | null;
+  generationError?: string | null;
+  generationStartedAt?: string | null;
+  generationCompletedAt?: string | null;
+  generationViews?: string | null;     // JSON map of view → assetId
+  generationJobId?: string | null;
+  generationRunId?: string | null;
+  generationAssetId?: string | null;
 };
 ```
 
-Helper selectors live alongside the type (`getThumbnail`, `getAssets`, `getDimensions`, `getViewerProduct`, …). `getViewerProduct` builds a `Product` for `ThreeDConfigurator`; `product.src` is the proxy GLB URL and `product.usdz` (when present) is the proxy USDZ URL passed as `<model-viewer ios-src>` for iOS Quick Look fidelity.
+Shared board primitives live in `src/components/tasks/` and are used by both `/tasks` and `/admin/tasks`: `TaskDrawer` (right slide-over detail panel), `TaskCard` + `TaskColumn` (board), `TaskToolbar` (search + status filter + count + List↔Board toggle), `StatusBanner` (per-status banners), `TaskDetailParts` (`ReferenceGrid`, `RevisionTimeline`, `Lightbox`, `MetaGrid`/`MetaItem`, `DimensionTiles`), and `types.ts` (`TaskJob` + selectors — `getThumbnail`, `getSku`, `getDimensions`, `formatRelativeShort`, `getLatestModelUpdatedAt` — moved out of the clients so both share them).
+
+`TaskDrawer` replaces the old centered `Modal` for every task-detail view: sticky header (title + status `Badge` + close), single scroll body, sticky footer for contextual actions. Full-screen sheet on mobile, `sm:max-w-xl` slide-over with `sm:m-3` rounding on desktop. Same focus contract as `Modal` (focus close on open, Esc, Tab trap, restore trigger focus, body scroll lock).
 
 **Every `<Image>` that points at the asset proxy carries `unoptimized`** (proxy is cookie-gated — see `../file-storage-architecture.md` §5). This applies to thumbnails, reference grids, and the lightbox.
 
@@ -37,17 +49,17 @@ Helper selectors live alongside the type (`getThumbnail`, `getAssets`, `getDimen
 
 ## Layout shell
 
-`TasksClient` renders inside `DashboardLayout` with `title="Tasks Pipeline"`. The "New Task" action button is **BRAND-only** and hidden below `sm` in the sticky header. The shell provides the fixed sidebar (≥768px), sticky header with `NotificationBell`, and `MobileNavDrawer`.
+`TasksClient` renders inside `DashboardLayout` with `title="Tasks Pipeline"`. The shell provides the fixed sidebar (≥768px), a mobile-only top bar below `md` (hamburger + wordmark), and `MobileNavDrawer` — there is no top header on desktop. The "New Task" action button is **BRAND-only** and passed as the shell's `action` prop, which renders it right-aligned above the toolbar at the top of `<main>`, hidden below `sm`.
 
 **Drawer gotcha:** the drawer is mounted once per page via `createPortal` so its slide-out transition can play; when closed, the wrapper carries `pointer-events-none opacity-0` **and `inert`** so the scrim never intercepts taps on mobile (`src/components/dashboard/MobileNavDrawer.tsx`).
 
-Toolbar (client-side filtering over `initialJobs`, no server round-trip): search (name/sku/id), status filter labeled via `BRAND_LABEL`, List↔Board toggle (defaults: board on desktop, list on mobile).
+Toolbar (`TaskToolbar`, shared with `/admin/tasks` minus the view toggle): search (name/sku/id), status filter labeled via `BRAND_LABEL` (or `ADMIN_LABEL` when an admin views `/tasks`), task-count pill, List↔Board toggle (defaults: board on desktop, list on mobile). Client-side filtering over `initialJobs`, no server round-trip.
 
 ---
 
 ## Board view (desktop)
 
-Four columns (`COLUMNS`), fixed-width `w-80` wells:
+Four columns (`COLUMNS`), responsive grid (`sm:2`, `xl:4`) that fills the page width — normal-flow page scroll, no fixed `100vh` clip. Shared `TaskColumn` (tinted icon well + mono label + tabular-nums count, dashed empty tile) + `TaskCard` (16px thumbnail with `oklch` ring, `flex-1 truncate` id chip with the status badge in a `shrink-0` slot so long ids clip the id never the badge, one-line title, brand · SKU · relative-date meta row).
 
 | `ProjectStatus` | Brand label | Icon |
 |---|---|---|
@@ -56,19 +68,47 @@ Four columns (`COLUMNS`), fixed-width `w-80` wells:
 | `COMPLETED` | Review | `Eye` |
 | `PUBLISHED` | Published | `CheckCircle2` |
 
-**Job card:** thumbnail (first REFERENCE_IMAGE, `unoptimized`), job id pill, status `Badge` from `PROJECT_STATUS_META` + `BRAND_LABEL`, product name, footer with brand initials + SKU + created date. `COMPLETED` cards append a "Review Model" button opening the Review modal.
+**Job card** (`TaskCard`): thumbnail (first REFERENCE_IMAGE, `unoptimized` with `onError` fallback to sage placeholder), product name, status `Badge` from `PROJECT_STATUS_META`, one meta line (`brandName · productCategory · date`). Cards are clickable buttons with `active:scale-[0.98]`, hover shadow+ring. Entrance stagger via `enterDelay` (capped at 8×30ms) using `task-card-enter` animation. Reduced motion kills the animation globally.
 
-**Card click routing** (`handleCardClick`): each status opens its own modal — PENDING → Processing (read-only), REVISIONS → Revisions (read-only, revision notes), COMPLETED → Review (viewer + approve/request-changes), PUBLISHED → Published (viewer + send-for-revisions).
+**Card click routing** (`handleCardClick`): each status opens its own drawer — PENDING → Processing (read-only), REVISIONS → Revisions (read-only, revision notes), COMPLETED → Review (viewer + approve/request-changes), PUBLISHED → Published (viewer + send-for-revisions).
+
+## Board view
+
+Fluid CSS Grid: `grid-cols-1 sm:grid-cols-2 xl:grid-cols-4` with `minmax(0, 1fr)` tracks (no fixed column widths). At `xl+`, columns get internal scroll via `.task-column-scroll` with `max-h-[var(--board-h)]` (`--board-h: calc(100dvh - 250px)` with `min-h-28` floor). Thin custom scrollbar (`--scrollbar-w: 5px`). Below `xl`, columns stack vertically with normal page scroll.
+
+Each column has a contextual empty state with icon + description (e.g. "Projects you send back for changes appear here."). Columns have `shadow-[var(--shadow-1)]` elevation on sage ground.
 
 ## List view (mobile / toggle)
 
-Card-wrapped table (`th-mono` headers, hairline rows): Job ID, Product, Status badge, Created, Actions. The Actions cell routes by status: COMPLETED → "Review", PUBLISHED → "View 3D", others → "Details".
+Card-wrapped table (`th-mono` headers, hairline rows): Job ID (truncated with `tabular-nums`), Product (thumbnail + name + subtitle), Status badge, Created (`hidden sm:table-cell`), Actions (`hidden sm:table-cell`). Actions routes by status: COMPLETED → "Review", PUBLISHED → "View 3D", others → "Details". On mobile (< `sm`), CREATED and ACTIONS columns are hidden.
 
 ---
 
-## Modal 1 — New Task (BRAND creates a project)
+## Drawer system — design contract
 
-Opened by the "New Task" button (BRAND only). `Modal` size `xl`.
+All drawers use `TaskDrawer` (`src/components/tasks/TaskDrawer.tsx`): panel slides from the right (`sm:max-w-[640px]`, `sm:m-4 sm:rounded-[24px]`), full-bleed sheet on mobile with `env(safe-area-inset-bottom)`. Backdrop blur, frosted sticky header/footer. Exit animation: `cubic-bezier(0.32, 0.72, 0, 1)` 360ms with deferred unmount. Body scroll locked, focus trapped, Esc closes.
+
+Drawer body renders on soft sage ground (`--color-canvas-soft`). Content uses white grouped `SectionCard` sections with `SectionHeading` (icon + label). Content settles with `drawer-content` animation (320ms, 120ms delay).
+
+Shared detail primitives (`src/components/tasks/TaskDetailParts.tsx`): `SectionCard`, `SectionHeading`, `MetaGrid`, `MetaItem`, `DimensionTiles` (compact 3-cell row), `ReferenceGrid` (labeled empty states, per-tile unavailable state), `RevisionNotesCard`, `Lightbox` (z-[100], `lightbox-enter`/`lightbox-zoom` animations), `StatusBanner` (inline styles, per-role subtexts).
+
+---
+
+## Drawer — New Task (BRAND creates a project)
+
+Opened by the "New Task" button (BRAND only). `TaskDrawer` with a 3-step wizard flow (Details → Dimensions → Photos, progress dots in the footer, Back/Continue, Create on the last step).
+
+1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional).
+2. **Physical Dimensions (CM)** — width/height/depth (required, `min="1"`).
+3. **Reference Images + Generation Mode** — dashed dropzone, max **5 images**. Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `useAppwriteUpload({ bucketId: "reference-images", maxSizeMB: 16 })`. Thumbnails (`unoptimized`) with remove buttons + click-to-enlarge lightbox.
+
+**Generation mode selector** (on the Photos step): radio-style toggle between "Premium" and "AI Draft". Premium = artist-finished (10 credits); AI Draft = fast generation (~5-10 min, 2 credits). Default is Premium.
+
+**FAST mode view tagging**: when AI Draft is selected, show 4 view slots (Front required, Left/Back/Right optional). Each slot has a dropdown to assign one of the uploaded images. Views are sent to the server as a JSON map.
+
+**Submit** validates `uploadedAssets.length > 0` + all dimensions > 0, then `createProject(name, assetIds, sku, instructions, dimensions, mode, views)`. For FAST mode, the server also checks credits (2) and kicks off the Modal API job. Success → clear state + `router.refresh()` inside `startTransition`; failure → error banner.
+
+Opened by the "New Task" button (BRAND only). `Modal` size `xl` with a 3-step flow (Details → Dimensions → Photos, progress dots in the footer, Back/Continue, Create on the last step) — stepped because the `xl` width never reaches the old 2-column breakpoint.
 
 1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional).
 2. **Physical Dimensions (CM)** — width/height/depth (required, `min="1"`).
@@ -82,43 +122,41 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 ---
 
-## Modal 2 — Processing (PENDING, read-only)
+## Drawer — Processing (PENDING, read-only)
 
-Product info, dimensions, reference images grid, amber banner: "Your project is in the production queue."
+`StatusBanner` (inline styles, "In the production queue" subtext) + `SectionCard` with Project Details (`SectionHeading` + `MetaGrid`: name, SKU, brand, created) + `DimensionTiles` (compact row) + `SectionCard` with Reference Images (`SectionHeading` + `ReferenceGrid`).
 
-## Modal 3 — Revisions (REVISIONS, read-only)
+**AI Draft mode**: when `generationMode === "FAST"`, the Processing drawer shows a generation status banner with current status (SUBMITTED/RUNNING/FINALIZING), elapsed time, and a "Check Status" button that polls the generation endpoint. On SUCCEEDED, the drawer auto-refreshes. On FAILED, shows error message + "Regenerate" button (1 credit).
 
-Amber banner + the brand's full revision notes history — each `RevisionRequest` as a card with author, timestamp, note. Newest first.
+**Server side**: `pollGeneration` action calls `pollAndFinalize` from `generation.service.ts`. `regenerateGeneration` action calls `regenerateFastGeneration`.
 
----
+## Drawer — Revisions (REVISIONS, read-only)
 
-## Modal 4 — Review (COMPLETED — Approve or Request Changes)
-
-`Modal` size `full`, variant `takeover`. Header actions (BRAND only): **Request Changes** (toggles sub-form) and **Approve & Publish** → `brandPublishProject(jobId)`.
-
-**Side-by-side layout:** 420px left rail (own scroll) + 3D viewer (right, independent scroll); stacks below `lg`.
-
-- **Left rail:** metadata grid, instructions, dimensions, reference images (clickable → lightbox; `failedRefImages` Set tracks `<Image onError>` and renders a placeholder for broken assets), and the Request Changes sub-form — textarea + "Send Request" → `brandSendForRevisions(reviewJob.id, note)`, disabled until note has content.
-- **Right pane:** `<ThreeDConfigurator product={reviewViewerProduct} />` where the product is a `useMemo` of `getViewerProduct(reviewJob)` (memoized so a new object literal doesn't remount per render).
-  - **The viewer is always mounted** while the modal is open — it is never paused/unmounted when the textarea is focused. (An earlier pause-on-focus workaround is gone; the real fix was the `Modal` focus-effect split — see `../WEBSITE.md` §15.)
-  - Camera state is preserved across re-renders once the user has interacted; the configurator only resets on a fresh `product.src` if the user hasn't interacted.
-  - **"View in your space"** AR button appears when `canActivateAR` is truthy (Android Chrome → WebXR; other Android → Scene Viewer; iOS → Quick Look using `ios-src` when present); hidden on desktop.
-  - "Model last updated \<relative\>" caption under the viewer when the project has any READY model — tells the brand whether they're looking at the latest resubmission.
-  - No GLB → "No GLB asset is available for review."
-
-ADMIN sees the rail + viewer but not the sub-form.
+`StatusBanner` (amber, "Brand has requested changes") + `RevisionNotesCard` (newest-first notes with timestamps) + `SectionCard` with Reference Images.
 
 ---
 
-## Modal 5 — Published (PUBLISHED — View 3D or Send for Revisions)
+## Drawer — Review (COMPLETED — Approve or Request Changes)
 
-Same takeover layout as Review (rail + always-mounted viewer + AR button + last-updated caption). Header action (BRAND only): **Send for Revisions** — sub-form copy warns "This will remove the model from your live embed." `brandSendForRevisions` on a PUBLISHED project revokes the storage `read:any` grants and revalidates `/embed/[id]`, so the embed stops serving immediately.
+`TaskDrawer` with sticky footer actions (BRAND only): **Request Changes** (toggles sub-form) and **Approve & Publish** → `brandPublishProject(jobId)`.
+
+**Stacked layout**: `StatusBanner` → 3D viewer (`<ThreeDConfigurator product={reviewViewerProduct} heightClassName="relative w-full h-[340px] min-h-0 sm:h-[420px]" />`, always mounted, memoized product) + "Model last updated" caption → `SectionCard` with Project Details + `DimensionTiles` + `SectionCard` with Reference Images (2-col) → Request Changes sub-form (`SectionCard` with textarea + "Send Request" → `brandSendForRevisions`).
+
+- AR button appears when `canActivateAR` is truthy; hidden on desktop.
+- No GLB → "No GLB asset is available for review." in a `SectionCard`.
+- ADMIN sees the rail + viewer but not the sub-form.
+
+---
+
+## Drawer — Published (PUBLISHED — View 3D or Send for Revisions)
+
+Same layout as Review: `StatusBanner` → viewer + "Model last updated" caption → `SectionCard` with Project Details + `DimensionTiles` + `SectionCard` with Reference Images. Sticky footer (BRAND only): **Send for Revisions** — sub-form warns "This will remove the model from your live embed." `brandSendForRevisions` revokes storage grants + revalidates embed.
 
 ---
 
 ## Lightbox
 
-Click on any reference image thumbnail → fixed `z-[100]` black overlay, image at `max-w-4xl max-h-[90vh]`, click anywhere to close. The lightbox `<Image>` carries `unoptimized` (proxy URL).
+Click on any reference image thumbnail → shared `Lightbox` in `TaskDetailParts`: fixed `z-[100]` black overlay, image at `max-w-4xl max-h-[90vh]`, close button + Esc + click-outside to close. The lightbox `<Image>` carries `unoptimized` (proxy URL).
 
 ---
 
@@ -126,16 +164,18 @@ Click on any reference image thumbnail → fixed `z-[100]` black overlay, image 
 
 All in `src/app/actions/project.ts` / `admin.ts`, thin adapters over `project.service.ts`. Full reference: `../WEBSITE.md` §8. Page-relevant invariants:
 
-- **`createProject`** — BRAND; tx with atomic quota decrement + asset checks; returns plain object only.
+- **`createProject`** — BRAND; tx with atomic quota decrement + asset checks; for FAST mode, kicks off Modal API job after transaction. Returns plain object only.
 - **`brandPublishProject`** — BRAND owner; **fail-closed publish**: `read:any` on every READY GLB/USDZ storage file *before* the status flip; any grant failure revokes and aborts.
 - **`brandSendForRevisions`** — BRAND owner; in-tx precondition (ownership + status ∈ {COMPLETED, PUBLISHED} — not re-entrant from REVISIONS); if was PUBLISHED, revoke grants + revalidate embed.
 - **`getUserProjects`** — caller's projects, derived `referenceUrls`/`assetUrls` (proxy-rewritten in `src/lib/project-augment.ts`).
+- **`pollGeneration`** — BRAND/ADMIN; polls and finalizes a FAST generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`.
+- **`regenerateGeneration`** — BRAND/ADMIN; re-submits a FAILED/SUCCEEDED FAST generation (1 credit).
 - **`adminSubmitProject`** — ADMIN; tx with in-tx status precondition + per-asset link verification; archives prior READY models (kept in storage, no quota impact). See `./admin.md` §3.
 
 ---
 
 ## See also
 
-- [`./admin.md`](./admin.md) — admin board and modal flows.
+- [`./admin.md`](./admin.md) — admin board and drawer flows.
 - [`../file-storage-architecture.md`](../file-storage-architecture.md) — Appwrite Storage + `useAppwriteUpload`.
 - [`../backend-architecture.md`](../backend-architecture.md) §5 — state machine rules.

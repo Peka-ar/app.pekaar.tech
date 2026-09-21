@@ -14,6 +14,12 @@ export function DashboardSkeleton() {
         ))}
       </div>
 
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} tone="sage" className="h-14 rounded-3xl" />
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
           <Skeleton tone="sage" className="h-72 rounded-3xl" />

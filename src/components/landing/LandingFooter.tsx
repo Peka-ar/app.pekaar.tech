@@ -48,7 +48,7 @@ export default function LandingFooter() {
             <p className="font-sans text-[13px] leading-relaxed text-[var(--on-ink)]/60 max-w-xs" style={{ textWrap: "pretty" }}>
               Product photos → interactive 3D. Artist-finished models, live on your storefront in hours.
             </p>
-            <p className="font-sans text-[11px] tracking-wide text-[var(--on-ink)]/35">GLB + USDZ · one-line iframe · AR view-in-room</p>
+            <p className="font-sans text-[11px] tracking-wide text-[var(--on-ink)]/55">GLB + USDZ · one-line iframe · AR view-in-room</p>
           </div>
 
           {COLUMNS.map((col) => (
@@ -76,10 +76,10 @@ export default function LandingFooter() {
           className="mt-8 pt-6 flex flex-col sm:flex-row items-center justify-between gap-3"
           style={{ borderTop: "1px solid rgba(232,235,230,.12)" }}
         >
-          <p className="font-sans text-[12px] text-[var(--on-ink)]/45 text-center sm:text-left">
+          <p className="font-sans text-[12px] text-[var(--on-ink)]/55 text-center sm:text-left">
             © {new Date().getFullYear()} Peka AR · pekar.tech · Demo models labeled; no fabricated claims.
           </p>
-          <p className="font-sans text-[11px] tracking-wide text-[var(--on-ink)]/35 text-center sm:text-right" style={{ textWrap: "pretty" }}>
+          <p className="font-sans text-[11px] tracking-wide text-[var(--on-ink)]/55 text-center sm:text-right" style={{ textWrap: "pretty" }}>
             Third-party stats cited belong to their publishers and are linked beside each claim.
           </p>
         </div>

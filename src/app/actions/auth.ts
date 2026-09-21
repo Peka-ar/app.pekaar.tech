@@ -104,7 +104,7 @@ export async function registerUser(formData: FormData) {
       userId,
       email: parsed.data.email,
       role: "BRAND",
-      usageLimits: 10,
+      usageLimits: 8,
       onboarded: false,
       status: "ACTIVE",
     },

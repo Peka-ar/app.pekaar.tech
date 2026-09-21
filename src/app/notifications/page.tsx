@@ -1,4 +1,4 @@
-import { requirePrincipalOrRedirect } from "@/server/auth-guards";
+import { Role, requirePrincipalOrRedirect } from "@/server/auth-guards";
 import { Query } from "node-appwrite";
 import { DB, listAllRows, ProjectStatus, ProjectsRow } from "@/server/db/client";
 import NotificationsClient from "./NotificationsClient";
@@ -8,10 +8,11 @@ export default async function NotificationsPage() {
   let jobs: { id: string; product: string; date: string; completed: string; status: ProjectStatus }[] = [];
 
   try {
-    const projects = await listAllRows<ProjectsRow>(DB.projects, [
-      Query.equal("brandId", principal.userId),
-      Query.orderDesc("$createdAt"),
-    ]);
+    const queries = [Query.orderDesc("$createdAt")];
+    if (principal.role !== Role.ADMIN) {
+      queries.push(Query.equal("brandId", principal.userId));
+    }
+    const projects = await listAllRows<ProjectsRow>(DB.projects, queries);
 
     jobs = projects.map((p) => {
       const createdDate = new Date(p.$createdAt).toLocaleString("en-US", {

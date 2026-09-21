@@ -6,7 +6,13 @@ import { Product } from "@/lib/types";
 
 const MV = "model-viewer" as unknown as React.ElementType;
 
-export default function ThreeDConfigurator({ product }: { product: Product }) {
+export default function ThreeDConfigurator({
+  product,
+  heightClassName,
+}: {
+  product: Product;
+  heightClassName?: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mvRef = useRef<any>(null);
@@ -89,7 +95,10 @@ export default function ThreeDConfigurator({ product }: { product: Product }) {
         type="module"
         strategy="lazyOnload"
       />
-      <div ref={containerRef} className="relative w-full min-h-[400px] sm:min-h-[500px] lg:min-h-[600px]">
+      <div
+        ref={containerRef}
+        className={heightClassName ?? "relative w-full min-h-[400px] sm:min-h-[500px] lg:min-h-[600px]"}
+      >
         <MV
           ref={mvRef}
           src={pageLoaded ? product.src : undefined}

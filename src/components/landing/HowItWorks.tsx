@@ -85,8 +85,8 @@ export default function HowItWorks() {
             {STEPS.map((s, i) => {
               const reached = reduce || i <= activeStep;
               return (
-                <Reveal key={s.n} delay={i * 0.1} className="h-full">
-                  <li
+                <Reveal key={s.n} delay={i * 0.1} className="h-full" as="li">
+                  <div
                     className="relative rounded-[24px] p-6 sm:p-7 flex flex-col gap-3 h-full transition-opacity duration-500"
                     style={{ background: "var(--canvas)", opacity: reached ? 1 : 0.5 }}
                   >
@@ -110,7 +110,7 @@ export default function HowItWorks() {
                       {s.title}
                     </h3>
                     <p className="font-sans text-[14px] leading-[1.5] text-[var(--text-secondary)]">{s.body}</p>
-                  </li>
+                  </div>
                 </Reveal>
               );
             })}

@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     password: BRAND_PASSWORD,
     name: BRAND_NAME,
     role: "BRAND",
-    usageLimits: 10,
+    usageLimits: 8,
   });
 
   await seedProject(tablesDB, brandId, {

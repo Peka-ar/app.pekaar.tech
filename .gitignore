@@ -34,7 +34,7 @@ perf-server.log
 AGENTS.md
 design.md
 skills-lock.json
-tasks/
+/tasks/
 
 # debug
 npm-debug.log*

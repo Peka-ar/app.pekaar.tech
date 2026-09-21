@@ -9,6 +9,11 @@ const EnvSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).optional(),
   ADMIN_NAME: z.string().optional(),
   CRON_SECRET: z.string().min(16).optional(),
+  // Fast (AI draft) generation — Hunyuan3D Modal HTTP API. Optional so local
+  // dev / tests run without them; Fast mode surfaces a clear error when unset.
+  HY3D_API_URL: z.string().url().optional(),
+  HY3D_API_URL_2: z.string().url().optional(),
+  HY3D_API_TOKEN: z.string().min(1).optional(),
 });
 
 function loadEnv() {
@@ -21,6 +26,9 @@ function loadEnv() {
     ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
     ADMIN_NAME: process.env.ADMIN_NAME,
     CRON_SECRET: process.env.CRON_SECRET,
+    HY3D_API_URL: process.env.HY3D_API_URL,
+    HY3D_API_URL_2: process.env.HY3D_API_URL_2,
+    HY3D_API_TOKEN: process.env.HY3D_API_TOKEN,
   });
 
   if (!parsed.success) {

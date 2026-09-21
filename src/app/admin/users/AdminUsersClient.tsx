@@ -321,7 +321,17 @@ export function AdminUsersClient() {
                   onClick={() => openUserDetail(user.id)}
                 >
                   <TableCell>
-                    <span className="font-medium text-[var(--color-text-primary)]">{user.email}</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openUserDetail(user.id);
+                      }}
+                      aria-label={`View details for ${user.email}`}
+                      className="font-medium text-[var(--color-text-primary)] text-left hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 rounded-sm"
+                    >
+                      {user.email}
+                    </button>
                   </TableCell>
                   <TableCell>
                     <span className="text-[var(--color-text-secondary)]">{user.name ?? '\u2014'}</span>

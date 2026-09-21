@@ -11,7 +11,7 @@ The dashboard is the authenticated landing page: four metric cards, a 12-month i
 | | |
 |---|---|
 | **Route** | `/dashboard` — server component, proxy-gated `["BRAND","ADMIN"]` + onboarded |
-| **Shell** | `DashboardLayout` with `title="Overview"` (sidebar ≥768px, sticky header, `NotificationBell`, mobile drawer) |
+| **Shell** | `DashboardLayout` with `title="Overview"` — fixed sidebar ≥768px, mobile-only top bar below `md` (hamburger + wordmark opens the drawer), no top header on desktop. The title is rendered as an `sr-only` h1 — the sidebar's active item communicates location, page content owns its own visible headings. No `NotificationBell` |
 | **Loading** | `<DashboardSkeleton />` via `<Suspense>` around the async `DashboardContent`; segment `loading.tsx` covers RSC navigation |
 | **Error** | `<DashboardError />` (EmptyState with recovery action) — DB failures only; auth failures redirect via `requirePrincipalOrRedirect()` |
 
@@ -47,18 +47,19 @@ All four cards report `change: "--"` — period-over-period deltas are **not imp
 
 ## Layout grid
 
-`space-y-8` wrapper; header "Welcome back." + subcopy.
+`space-y-8` wrapper; header is an eyebrow (`label-mono` "Brand overview") + "Welcome back." + subcopy, with a right-side `Deploy New Model` primary CTA → `/tasks`.
 
-- **Metric cards row** — `grid md:grid-cols-2 lg:grid-cols-4`; each card is a white borderless `24px` surface: circular icon chip on a tinted well (accent-pale / surface-sky / surface-butter / accent), optional trend chip (hidden when `--`, see above), `label-mono` label, display value.
+- **Metric cards row** — `grid md:grid-cols-2 lg:grid-cols-4`; each card is a white borderless `24px` surface with a **fixed well per slot** (Views → accent-pale/ink-deep, AR → surface-sky/sky-deep, Interaction Rate → surface-butter/butter-deep, Conversion Lift → forest/on-forest dark anchor), optional trend chip (hidden when `--`, see above), `label-mono` label, display value. Cards stagger their `animate-in fade-in` entrance ~100ms apart (wrapper div carries the delay; `Card` takes no `style` prop) and lift with `hover:shadow-[var(--shadow-1)]` (`transition-[box-shadow]`). Well icons use `strokeWidth={2}` to match the semibold label weight.
+- **Status strip** — `grid grid-cols-2 lg:grid-cols-4`: one white `24px` tile per status (PENDING/REVISIONS/COMPLETED/PUBLISHED) with the `PROJECT_STATUS_META` badge + tabular-nums count. Static tiles (no links — no filtered-tasks URL contract exists).
 - **Two-column body** (`lg:grid-cols-3`):
-  - Left (×2): **Interaction Trends** card — 12 flex bars (heights `% of maxCount`, capped `calc(100% - 24px)`) with hover tooltips and dashed gridlines; **Recent Tasks** card — `projects.slice(0, 3)` with relative dates (`formatDistanceToNow`) + status badges + "View All" → `/tasks`.
-  - Right: **Deploy New Model** card (inverted `--ink` card, "Start Generation" → `/tasks`); **Quick Links** card (→ `/integrations`, `/analytics`).
+  - Left (×2): **Interaction Trends** card — 12-month bars via the shared `ChartBars` (`src/components/charts/ChartBars.tsx`): dashed gridlines, hover tooltips (`aria-hidden`, never hover-only — every bar also carries `role="img"` + `aria-label`), header total rendered as an accent-pale `pill` (`x views · 12 mo`), per-bar `role="img"` values, and a compact zero-state panel when the 12-month series is all zeros. Display values use `tabular-nums`. **Recent Tasks** card — `projects.slice(0, 3)` with reference-image thumbnails (`job.referenceUrls[0]` via `next/image`, `unoptimized`, `40px` + `rounded-xl` + `1px oklch(0 0 0 / 0.1)` ring outline; Box-icon well fallback), relative dates (`formatDistanceToNow`, tabular-nums) + status badges in a `shrink-0` slot + "View All" → `/tasks`.
+  - Right: **Deploy New Model** card (inverted `--ink` card, lime icon, "Start Generation" secondary → `/tasks`); **Quick Links** card (ghost full-width rows with dividers → `/integrations`, `/analytics`).
 
 ---
 
 ## Loading & error states
 
-- `DashboardSkeleton` — `Skeleton` placeholders mirroring the cards + chart + lists (rendered by the Suspense fallback).
+- `DashboardSkeleton` — `Skeleton` placeholders mirroring the page cards (KPI row + status strip + chart + lists; rendered by the Suspense fallback).
 - `DashboardError` — `EmptyState`-based recovery card, shown when `fetchDashboardData()` returns `{ error: true }` so a transient DB failure never crashes the page.
 
 ---

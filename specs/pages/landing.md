@@ -51,7 +51,7 @@ Section components live in `src/components/landing/`; `LandingPageClient`, `Prod
 - Right column: `<PipelineCard />` (below CTAs on mobile).
 
 ### Scroll motion (`landing/Reveal.tsx`)
-framer-motion, landing-only dependency, transform/opacity exclusively. `<Reveal>` = `whileInView` fade-rise (`once: true`), returns the plain static tree under `useReducedMotion()` — content is never gated behind animation, no-JS renders everything. Applied to most section headers/cards. **The one scrub:** HowItWorks (`useScroll` accent `scaleX` draw + sequential step brightening on `lg`); not rendered under reduced motion.
+framer-motion, landing-only dependency, transform/opacity exclusively. `<Reveal>` = `whileInView` fade-rise (`once: true`), returns the plain static tree under `useReducedMotion()` — content is never gated behind animation, no-JS renders everything. Applied to most section headers/cards. **`as?: "div" | "li"` prop** lets list children (e.g. HowItWorks) render as `<li>` or `<motion.li>` so `ol > li` semantics are preserved for screen readers; defaults to `"div"`. The one scrub: HowItWorks (`useScroll` accent `scaleX` draw + sequential step brightening on `lg`); not rendered under reduced motion.
 
 ### CategoryStrip (`landing/CategoryStrip.tsx`)
 Integration-fact strip: `WORKS ON` + `Shopify · WooCommerce · Webflow · Custom` + `one-line iframe` micro-label; categories only as an `sr-only` line. Mobile: marquee that swaps to a **static wrapped list** under reduced motion (client-side branch — CSS-only `motion-reduce:` was rejected: Tailwind emitted `.hidden` after the media block, so it would have won the cascade).
@@ -63,13 +63,13 @@ Two-card grid: Problem (sage fill, "Flat product photos leave shoppers guessing.
 Sage band, server component, no motion, **no CTA** (one-primary-CTA rule). Lead `You run the storefront. We run the 3D.` + four offer-fact chips (Free pilot model / Artist-finished / GLB + USDZ formats / You keep the files).
 
 ### TaglineReveal (`landing/TaglineReveal.tsx`)
-Peach ground, Figtree-900 word-reveal: `AI drafts in minutes. Artists finish by hand. Shoppers see it in their room.` Per-word **IntersectionObserver** (`threshold 0.9`, unobserve on reveal) — never a scroll listener. No-JS fallback reveals all words.
+Peach ground, Instrument-Serif italic word-reveal: `AI drafts in minutes. Artists finish by hand. Shoppers see it in their room.` Per-word **IntersectionObserver** (`threshold 0.9`, unobserve on reveal) — never a scroll listener. No-JS fallback reveals all words. **Resting opacity 0.55** with a **1.5rem (24px) minimum size** ensures every word (including the primary-accent middle sentence) meets the WCAG large-text AA threshold (≥3:1) against white. On desktop (lg+) the tagline is a single `nowrap` line; on mobile it wraps via `overflow-wrap: break-word`.
 
 ### Benefits (`landing/Benefits.tsx`)
 `id="benefits"`, white ground. Three sage cards with per-card tinted icon wells (accent-pale / peach / sky): Live in hours not weeks · Artist-finished not raw AI (S1 proof footer) · One line zero hassle (S2 proof footer). **Proof footers sit beside the claim they support.**
 
 ### HowItWorks (`landing/HowItWorks.tsx`)
-`id="how-it-works"`, sky ground. Three steps (01 SEND / 02 FINISH / 03 EMBED — draft is internal, not a customer step) as white cards + the scrub connector. Eyebrow uses `--text-secondary` (muted is illegible on sky).
+`id="how-it-works"`, sky ground. Three steps (01 SEND / 02 FINISH / 03 EMBED — draft is internal, not a customer step) as white cards + the scrub connector. Eyebrow uses `--text-secondary` (muted is illegible on sky). Each card is a `<Reveal as="li">` wrapping a `<div>` — direct `ol > li` children preserve list semantics for screen readers.
 
 ### Sandbox (`src/components/LandingPageClient.tsx`)
 Full-bleed sage band wrapping the constrained content. A live `model-viewer` demo IS the proof — kept, with honest copy: `Demo model — labeled. Real projects are artist-finished in hours.`
@@ -101,7 +101,7 @@ The hero's right column: a scripted photo → 3D transformation that makes the p
 - **Transformation pane (fixed 300px, no layout shift):** four cross-fading layers — Photo (local model-matched `public/velvet_sheen_armchair.jpg`) → AI draft (scanline + viewfinder) → Artist finish (scrim + three staggered checks: geometry refined / materials baked / scale checked 1:1) → Serve (GLB + USDZ pills + iframe snippet) → Live 3D (the real `<model-viewer>` fades in). The viewer **mounts when the run starts** so the GLB streams during the scripted stages.
 - **Narration panel:** fixed min-height under the pane (no layout shift); running copy shows `Step n of 4 · STAGE` + a plain-language sentence.
 - **Autoplay:** `useInView(cardRef, { once: true, margin: "-16%" })` — **disabled under reduced motion**; manual `Run demo` always available. Timers: CAPTURE 2.6s → MODEL 3.2s → FINISH 4s → SERVE 3s (~13s total).
-- **Pipeline strip:** `role="status" aria-live="polite"` stage dots mirroring the pane. Pane is `aria-hidden` until done.
+- **Pipeline strip:** `role="status" aria-live="polite"` stage dots mirroring the pane. Transformation pane carries both `aria-hidden` and `inert` until the demo finishes — focusable viewer controls stay out of the tab order during the scripted run; `Replay` re-applies both.
 - **Footer:** iframe snippet + `Book a demo call` → `/auth`; `Replay` resets when done. Microcopy: demo uses a bundled model, no upload required; real projects artist-finished in hours; first model free.
 
 ---
@@ -162,9 +162,9 @@ Removal or rename of any id with inbound links is a breaking change.
 
 ## Verification gates (definition of "done" for landing changes)
 
-1. **Static:** `npm run lint` (0) · `npm run build` (pass, all static) · `npm run test` (untouched, server-only).
+1. **Static:** `npm run lint` (0) · `npm run build` (pass, all static) · `npm run test` (untouched, server-only). **Lighthouse a11y ≥95** on both desktop and mobile.
 2. **Copy-truth:** grep `src/` for the banned names/numbers above → 0 real matches (ignore the `xl:w-[42%]` Tailwind class in `AuthClient.tsx`).
 3. **Design contract:** one primary CTA per viewport (`Book a demo call`); band rhythm — no run of more than two whites; peach/sky only on non-interactive surfaces; no gradients/mesh/glow; Figtree-900 display clamped; eyebrows are the only tracked-uppercase text; v3 tokens only.
-4. **A11y:** single `h1`; pipeline strip `role="status" aria-live="polite"`; transformation pane `aria-hidden` until interactive; FAQ `aria-expanded`/`aria-controls`; keyboard-reachable controls with visible rings; `prefers-reduced-motion` disables choreography + autoplay + reveals + scrub + marquee.
+4. **A11y:** single `h1`; pipeline strip `role="status" aria-live="polite"`; transformation pane `aria-hidden` + `inert` until interactive; `ol > li` semantics in HowItWorks (Reveal `as="li"`); FAQ `aria-expanded`/`aria-controls`; keyboard-reachable controls with visible rings; `prefers-reduced-motion` disables choreography + autoplay + reveals + scrub + marquee; brand header link carries `aria-label="Peka AR home"`; `--text-muted` meets AA on both canvas and canvas-soft (≥4.5:1); TaglineReveal resting opacity ≥3:1 at ≥24px (large-text AA).
 5. **Functional:** all 7 anchors navigate; demo autoplays once on hero-in-view and runs end-to-end (rotatable + `View in your space` when supported); `Replay` resets; every primary CTA hits `/auth`; category pills always resolve; outbound stat links open `target=_blank rel=noopener`.
 6. **Performance:** `model-viewer` script `lazyOnload` + `pageLoaded` guard — GLB streams only once the hero run starts; the local pipeline photo is eager/priority (LCP); framer-motion consumed by landing client leaves only.

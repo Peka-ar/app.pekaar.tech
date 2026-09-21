@@ -19,7 +19,16 @@ export {
   APPWRITE_USERS_TABLE_ID,
 } from "@/lib/appwrite-config";
 
-export { AssetStatus, AssetType, EventType, ProjectStatus, UserStatus } from "@/lib/enums";
+export {
+  AssetStatus,
+  AssetType,
+  EventType,
+  GenerationMode,
+  GenerationStatus,
+  ProjectStatus,
+  ReferenceView,
+  UserStatus,
+} from "@/lib/enums";
 
 export type UsersRow = Models.Row & {
   userId: string;
@@ -45,6 +54,15 @@ export type ProjectsRow = Models.Row & {
   status: string;
   sdkConfig: string | null;
   brandId: string;
+  generationMode: string | null;
+  generationStatus: string | null;
+  generationJobId: string | null;
+  generationRunId: string | null;
+  generationAssetId: string | null;
+  generationError: string | null;
+  generationViews: string | null;
+  generationStartedAt: string | null;
+  generationCompletedAt: string | null;
 };
 
 export type AssetsRow = Models.Row & {

@@ -6,6 +6,8 @@ export const appwriteId = z
   .max(36, "Invalid id")
   .regex(/^[a-zA-Z0-9._-]+$/, "Invalid id");
 
+const REFERENCE_VIEW_TAGS = ["front", "left", "back", "right"] as const;
+
 export const projectIdSchema = appwriteId;
 export const assetIdSchema = appwriteId;
 export const userIdSchema = appwriteId;
@@ -38,7 +40,34 @@ export const createProjectSchema = z.object({
     .nullable(),
   dimensions: z.record(z.string(), z.unknown()).optional().nullable(),
   assetIds: z.array(appwriteId).max(50, "Too many assets"),
-});
+  generationMode: z.enum(["PREMIUM", "FAST"]).default("PREMIUM"),
+  generationViews: z
+    .record(z.enum(REFERENCE_VIEW_TAGS), appwriteId)
+    .optional()
+    .nullable(),
+}).refine(
+  (data) => {
+    if (data.generationMode === "FAST") {
+      return data.generationViews !== null && data.generationViews !== undefined && Object.keys(data.generationViews).length > 0;
+    }
+    return true;
+  },
+  {
+    message: "At least one view (front, left, back, or right) is required for AI Draft mode",
+    path: ["generationViews"],
+  },
+).refine(
+  (data) => {
+    if (data.generationMode === "FAST" && data.generationViews) {
+      return "front" in data.generationViews;
+    }
+    return true;
+  },
+  {
+    message: "Front view is required for AI Draft mode",
+    path: ["generationViews"],
+  },
+);
 
 export const sendForRevisionsSchema = z.object({
   projectId: appwriteId,
@@ -73,7 +102,7 @@ export const adminUserUpdateSchema = z.object({
   id: appwriteId,
   data: z.object({
     role: z.enum(["BRAND", "ADMIN"]).optional(),
-    usageLimits: z.number().int().min(0).max(1_000_000).optional(),
+    usageLimits: z.number().min(0).max(1_000_000).optional(),
     subscriptionTier: z.string().trim().max(50).optional(),
   }),
 });

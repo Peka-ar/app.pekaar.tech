@@ -4,12 +4,13 @@ import {
   canTransition,
   allowedNextStatuses,
   describeTransition,
+  SYSTEM_ACTOR,
 } from "./project-state-machine";
 import { ProjectStatus, Role } from "@/lib/enums";
 
 describe("project-state-machine", () => {
-  it("declares the four canonical transitions", () => {
-    expect(PROJECT_TRANSITIONS).toHaveLength(3);
+  it("declares the canonical transitions", () => {
+    expect(PROJECT_TRANSITIONS).toHaveLength(4);
     expect(
       PROJECT_TRANSITIONS.some((t) => t.from.includes(ProjectStatus.PENDING) && t.to === ProjectStatus.COMPLETED && t.by === Role.ADMIN),
     ).toBe(true);
@@ -29,6 +30,16 @@ describe("project-state-machine", () => {
 
   it("allows brand to send a published project back to revisions", () => {
     expect(canTransition(ProjectStatus.PUBLISHED, ProjectStatus.REVISIONS, Role.BRAND)).toBe(true);
+  });
+
+  it("lets the SYSTEM actor complete a project from PENDING or REVISIONS", () => {
+    expect(canTransition(ProjectStatus.PENDING, ProjectStatus.COMPLETED, SYSTEM_ACTOR)).toBe(true);
+    expect(canTransition(ProjectStatus.REVISIONS, ProjectStatus.COMPLETED, SYSTEM_ACTOR)).toBe(true);
+  });
+
+  it("does not let the SYSTEM actor publish or request revisions", () => {
+    expect(canTransition(ProjectStatus.COMPLETED, ProjectStatus.PUBLISHED, SYSTEM_ACTOR)).toBe(false);
+    expect(canTransition(ProjectStatus.COMPLETED, ProjectStatus.REVISIONS, SYSTEM_ACTOR)).toBe(false);
   });
 
   it("does not allow admin to publish directly", () => {

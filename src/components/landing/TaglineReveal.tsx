@@ -13,6 +13,8 @@ const SENTENCES: readonly (readonly string[])[] = [
 // lines on mobile — reads like a quotation, is not one, so no quotation
 // marks. Words still reveal one at a time via IntersectionObserver (never a
 // scroll listener). The middle sentence keeps the primary (forest) accent.
+// Resting opacity is 0.55 with a 1.5rem (24px) minimum size so the muted
+// state stays ≥3:1 (WCAG large-text AA) — including the forest-accent words.
 export default function TaglineReveal() {
   const refs = useRef<(HTMLSpanElement | null)[]>([]);
 
@@ -48,9 +50,10 @@ export default function TaglineReveal() {
     >
       <style>{`
         .tagline-single {
-          font-size: clamp(1.25rem, 2.6vw, 2rem);
+          font-size: clamp(1.5rem, 2.6vw, 2rem);
           line-height: 1.35;
           letter-spacing: -0.01em;
+          overflow-wrap: break-word;
         }
         @media (min-width: 1024px) {
           .tagline-single {
@@ -58,7 +61,7 @@ export default function TaglineReveal() {
           }
         }
         .tagline-word {
-          opacity: 0.22;
+          opacity: 0.55;
           transition: opacity 700ms cubic-bezier(0.32, 0.72, 0, 1);
           margin-right: 0.26em;
         }

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { env } from "@/server/env";
 import { runMaintenance } from "@/server/services/maintenance.service";
+import { finalizeStaleGenerations } from "@/server/services/generation.service";
 import { handleApiError } from "@/server/http/handler";
 import { logger } from "@/server/logging";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 /**
  * Nightly maintenance entrypoint, invoked by Vercel Cron (see vercel.json).
@@ -25,9 +26,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
 
-    const report = await runMaintenance();
-    logger.info("[cron] maintenance complete", { ...report });
-    return NextResponse.json({ ok: true, ...report });
+    const [maintenanceReport, generationReport] = await Promise.all([
+      runMaintenance(),
+      finalizeStaleGenerations(),
+    ]);
+    logger.info("[cron] maintenance complete", {
+      ...maintenanceReport,
+      generation: generationReport,
+    });
+    return NextResponse.json({ ok: true, ...maintenanceReport, generation: generationReport });
   } catch (err) {
     return handleApiError(err, { route: "/api/cron/maintenance" });
   }

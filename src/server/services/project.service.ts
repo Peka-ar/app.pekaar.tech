@@ -10,6 +10,7 @@ import {
   ProjectStatus,
   AssetStatus,
   AssetType,
+  GenerationMode,
   AssetsRow,
   ProjectsRow,
   RevisionRequestRow,
@@ -26,6 +27,7 @@ import { setFilePublic } from "@/server/storage";
 import { createProjectSchema, adminSubmitSchema, projectIdSchema, sendForRevisionsSchema } from "@/server/http/schemas";
 import { AppError, NotFoundError, ConflictError, QuotaExceededError } from "@/server/http/errors";
 import { logger } from "@/server/logging";
+import { startFastGeneration, GENERATION_COSTS, refundCredits } from "@/server/services/generation.service";
 
 export interface CreateProjectResult {
   projectId: string;
@@ -38,20 +40,41 @@ export async function createProjectService(
   sku?: string,
   instructions?: string,
   dimensions?: Record<string, unknown> | null,
+  generationMode?: "PREMIUM" | "FAST",
+  generationViews?: Record<string, string> | null,
 ): Promise<CreateProjectResult> {
-  const parsed = createProjectSchema.safeParse({ name, assetIds, sku, instructions, dimensions });
+  const parsed = createProjectSchema.safeParse({
+    name,
+    assetIds,
+    sku,
+    instructions,
+    dimensions,
+    generationMode: generationMode ?? "PREMIUM",
+    generationViews: generationViews ?? null,
+  });
   if (!parsed.success) {
     throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid project data");
   }
 
   const principal = await requirePrincipal({ roles: [Role.BRAND] });
 
+  const cost = GENERATION_COSTS[parsed.data.generationMode] ?? GENERATION_COSTS[GenerationMode.PREMIUM];
   const user = await getRowSafe<UsersRow>(DB.users, principal.userId);
-  if (!user || !user.usageLimits || user.usageLimits <= 0) {
-    throw new QuotaExceededError("Usage limit exceeded. Please upgrade your plan.");
+  if (!user || !user.usageLimits || user.usageLimits < cost) {
+    throw new QuotaExceededError(
+      `Not enough credits. ${parsed.data.generationMode === "FAST" ? "AI Draft" : "Premium"} requires ${cost} credits.`,
+    );
   }
 
-  const { name: cleanName, assetIds: cleanAssetIds, sku: cleanSku, instructions: cleanInstructions, dimensions: cleanDimensions } = parsed.data;
+  const {
+    name: cleanName,
+    assetIds: cleanAssetIds,
+    sku: cleanSku,
+    instructions: cleanInstructions,
+    dimensions: cleanDimensions,
+    generationMode: cleanMode,
+    generationViews: cleanViews,
+  } = parsed.data;
 
   const project = await runTransaction(async (db, txId) => {
     let remaining: number;
@@ -61,7 +84,7 @@ export async function createProjectService(
         tableId: DB.users,
         rowId: principal.userId,
         column: "usageLimits",
-        value: 1,
+        value: cost,
         min: 0,
         transactionId: txId,
       });
@@ -79,8 +102,6 @@ export async function createProjectService(
           Query.equal("$id", cleanAssetIds),
           Query.equal("ownerId", principal.userId),
           Query.equal("status", AssetStatus.READY),
-          // Prevent re-using assets already attached to another project —
-          // otherwise this link would silently steal them from that project.
           Query.isNull("projectId"),
         ],
         transactionId: txId,
@@ -104,6 +125,15 @@ export async function createProjectService(
         status: ProjectStatus.PENDING,
         sdkConfig: null,
         brandId: principal.userId,
+        generationMode: cleanMode,
+        generationStatus: null,
+        generationJobId: null,
+        generationRunId: null,
+        generationAssetId: null,
+        generationError: null,
+        generationViews: cleanViews ? JSON.stringify(cleanViews) : null,
+        generationStartedAt: null,
+        generationCompletedAt: null,
       },
       transactionId: txId,
     });
@@ -120,6 +150,24 @@ export async function createProjectService(
 
     return { remaining, projectId };
   });
+
+  // For FAST mode, immediately kick off generation outside the transaction
+  if (cleanMode === GenerationMode.FAST && cleanViews) {
+    try {
+      await startFastGeneration({
+        projectId: project.projectId,
+        brandId: principal.userId,
+        viewTagToAssetId: cleanViews,
+      });
+    } catch (e) {
+      // Generation failed to start — refund credits so brand isn't charged for a failed job
+      await refundCredits(principal.userId, cost);
+      logger.error("fast generation failed to start, credits refunded", {
+        projectId: project.projectId,
+        error: (e as Error).message,
+      });
+    }
+  }
 
   return { projectId: project.projectId, remaining: project.remaining };
 }

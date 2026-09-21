@@ -7,6 +7,10 @@ import {
   getAllTasksService,
   adminSubmitProjectService,
 } from "@/server/services/project.service";
+import {
+  regenerateFastGeneration,
+} from "@/server/services/generation.service";
+import { requirePrincipal, Role } from "@/server/auth-guards";
 
 export async function getAllTasks(): Promise<TaskJob[]> {
   return getAllTasksService();
@@ -23,4 +27,20 @@ export async function adminSubmitProject(
     revalidatePath("/admin/tasks");
   }
   return result;
+}
+
+export async function adminRegenerateGeneration(
+  projectId: string,
+): Promise<ActionResult<{ success: true }>> {
+  return toActionResult(async () => {
+    const principal = await requirePrincipal({ roles: [Role.ADMIN] });
+    await regenerateFastGeneration({
+      projectId,
+      brandId: principal.userId,
+      skipOwnershipCheck: true,
+    });
+    revalidatePath("/tasks");
+    revalidatePath("/admin/tasks");
+    return { success: true } as const;
+  });
 }

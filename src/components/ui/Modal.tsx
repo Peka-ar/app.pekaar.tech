@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Button } from './Button';
@@ -37,6 +37,36 @@ const sizeStyles: Record<ModalSize, React.CSSProperties> = {
 
 const firstFocusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
+const overlayContainers = new Set<HTMLElement>();
+const previousInert = new Map<Element, boolean>();
+
+function syncBackgroundInert() {
+  for (const child of Array.from(document.body.children)) {
+    const el = child as HTMLElement;
+    if (overlayContainers.has(el)) {
+      el.inert = false;
+      previousInert.delete(el);
+      continue;
+    }
+    if (!previousInert.has(el)) previousInert.set(el, el.inert);
+    el.inert = true;
+  }
+}
+
+function restoreBackgroundInert() {
+  for (const child of Array.from(document.body.children)) {
+    const el = child as HTMLElement;
+    if (overlayContainers.has(el)) {
+      el.inert = false;
+      continue;
+    }
+    if (previousInert.has(el)) {
+      el.inert = previousInert.get(el) ?? false;
+      previousInert.delete(el);
+    }
+  }
+}
+
 export function Modal({
   isOpen,
   onClose,
@@ -50,6 +80,20 @@ export function Modal({
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<Element | null>(null);
+  const [portalNode, setPortalNode] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = document.createElement('div');
+    overlayContainers.add(node);
+    document.body.appendChild(node);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPortalNode(node);
+    return () => {
+      overlayContainers.delete(node);
+      restoreBackgroundInert();
+      node.remove();
+    };
+  }, []);
 
   const onCloseRef = useRef(onClose);
   useEffect(() => {
@@ -99,12 +143,22 @@ export function Modal({
   }, [isOpen]);
 
   useEffect(() => {
+    if (isOpen && portalNode) {
+      overlayContainers.add(portalNode);
+      syncBackgroundInert();
+    } else if (portalNode) {
+      overlayContainers.delete(portalNode);
+      restoreBackgroundInert();
+    }
+  }, [isOpen, portalNode]);
+
+  useEffect(() => {
     if (!isOpen) return;
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, handleKeyDown]);
 
-  if (!isOpen) return null;
+  if (!portalNode || !isOpen) return null;
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) {
@@ -164,5 +218,5 @@ export function Modal({
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return createPortal(modalContent, portalNode);
 }

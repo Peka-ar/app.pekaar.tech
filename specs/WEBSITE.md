@@ -8,13 +8,18 @@
 
 Peka AR is a premium micro-SaaS that converts standard product photography into interactive 3D/AR assets for D2C brands. A **Brand** uploads reference photos and dimensions; an **Admin** (production team) produces a GLB + optional USDZ; the Brand approves; the published model is embeddable as an iframe in any storefront.
 
+**Two generation modes:**
+- **Premium** (default) — artist-finished 3D model. Brand uploads photos, Admin produces GLB + USDZ, Brand reviews and publishes. 10 credits.
+- **Fast (AI Draft)** — AI-generated 3D model (~5-10 min). Brand uploads photos + tags views, Hunyuan3D Modal API generates GLB, auto-flips to COMPLETED for brand review. 2 credits. Regenerate costs 1 credit. Clearly labeled "AI Draft" throughout.
+
 **Two roles:**
 - **`BRAND`** (default on signup) — creates projects, uploads reference images, reviews the model, requests revisions (with a note), or approves & publishes.
-- **`ADMIN`** (production + platform ops) — sees all projects, uploads 3D models, submits for the brand's review, manages users, views platform KPIs.
+- **`ADMIN`** (production + platform ops) — sees all projects, uploads 3D models (Premium) or overrides AI-generated models (Fast), submits for the brand's review, manages users, views platform KPIs.
 
 **Project lifecycle (4 states):**
 
 ```
+Premium:
 PENDING ───admin "Submit"───▶ COMPLETED ───brand "Approve & Publish"───▶ PUBLISHED
     ▲                            │                                              │
     │                            │ brand "Request Changes" (with note)         │
@@ -22,6 +27,13 @@ PENDING ───admin "Submit"───▶ COMPLETED ───brand "Approve & 
     └──────────────────── REVISIONS ◀─────── brand "Send for Revisions" ───────┘
                                     admin re-uploads + Submits
                                     back to COMPLETED
+
+Fast (AI Draft):
+PENDING ───Modal API job───▶ COMPLETED ───brand "Approve & Publish"───▶ PUBLISHED
+    ▲ (FAILED → brand "Regenerate")    │
+                                       │ brand "Request Changes" (with note)
+                                       ▼
+                               REVISIONS ──admin re-submit──▶ COMPLETED
 ```
 
 Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
@@ -68,7 +80,7 @@ website/
 ├── public/embed-viewer.html   # static template served by the /embed route handler
 ├── src/
 │   ├── app/                   # App Router pages + actions/ (server actions) + api/ (API routes)
-│   ├── components/            # ui/ (primitives), landing/, auth/, dashboard/, admin/, ThreeDConfigurator
+│   ├── components/            # ui/ (primitives), charts/ (ChartBars), landing/, auth/, dashboard/, admin/, ThreeDConfigurator
 │   ├── lib/                   # client-safe: enums, appwrite-config, status, types, utils, hooks, project-augment
 │   ├── server/                # server-only: auth-guards, appwrite, env, storage, db/, http/, domain/, services/
 │   ├── assets/fonts/          # local woff2: Figtree 400+900 (display), Inter 300-600 (sans)
@@ -99,11 +111,11 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | `/onboarding` | Logged-in, not onboarded | 5-step wizard → `completeOnboarding` |
 | `/dashboard` | BRAND/ADMIN + onboarded | Metrics, 12-mo chart, recent tasks — `pages/dashboard.md` |
 | `/tasks` | BRAND/ADMIN + onboarded | Kanban + list, 4 status modals — `pages/tasks.md` |
-| `/notifications` | BRAND/ADMIN | Recent projects + status table |
+| `/notifications` | BRAND/ADMIN | Recent projects + status table. **Role-aware shell** (`notifications/layout.tsx`): BRAND → own projects in the `DashboardLayout` shell; ADMIN → all recent platform projects in the `AdminLayout` shell. Reached from the brand sidebar and the admin sidebar's Notifications item |
 | `/integrations` | BRAND/ADMIN + onboarded | Platform directory, live iframe preview, embed-code snippet |
 | `/analytics` | BRAND/ADMIN + onboarded | `?range=7D\|30D\|ALL`; ADMIN=global, BRAND=scoped |
 | `/admin/dashboard` | ADMIN | Platform KPIs, status table, signups chart, top brands — `pages/admin.md` |
-| `/admin/users` | ADMIN | User list + detail modal with role/status/limits management |
+| `/admin/users` | ADMIN | User list + detail drawer with role/status/limits management |
 | `/admin/tasks` | ADMIN | All-project board, 3D upload + submit |
 | `/admin/analytics` | ADMIN | Platform KPI cards, signups series, top brands |
 | `/embed/[projectId]` | Public | Static HTML iframe viewer — `pages/embed.md` |
@@ -115,12 +127,13 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | Route | Auth | Purpose |
 |---|---|---|
 | `GET\|POST /api/appwrite/[...appwrite]` | public | SSR auth handlers (`createAppwriteHandlers` from `@appwrite.io/react`) — creates/deletes the session cookie, redirects to `/dashboard` or `/auth`. Needs the server API key. |
-| `GET /api/notifications` | `requirePrincipal` | 10 newest of caller's projects. Errors degrade to `[]` (NotificationBell never breaks). |
+| `GET /api/notifications` | `requirePrincipal` | 10 newest of caller's projects. Errors degrade to `[]`. No UI consumer since the header bell was removed — retained as the auth-gated uptime probe in `deployment.md` (an unauthenticated request still returns `401`, proving the server is up). |
 | `GET /api/health` | none | Verifies admin client can reach Appwrite (`200 {ok}` / `503`). For uptime monitors. |
-| `GET /api/cron/maintenance` | `Bearer CRON_SECRET` (fail closed) | Nightly maintenance: storage-permission reconciliation, `rate_limits` (>48h) + `analytics_events` (>90d) pruning. Triggered by Vercel Cron on the frozen mirror — see `deployment.md` for the migration runbook if Vercel goes away. |
+| `GET /api/cron/maintenance` | `Bearer CRON_SECRET` (fail closed) | Nightly maintenance: storage-permission reconciliation, `rate_limits` (>48h) + `analytics_events` (>90d) pruning, and AI Draft generation sweep (polls/finalizes stuck projects). Triggered by Vercel Cron on the frozen mirror — see `deployment.md` for the migration runbook if Vercel goes away. |
 | `POST /api/sdk/v1/events` | public, CORS `*` | Analytics ingest: `{ eventType: VIEW\|INTERACTION\|AR_LAUNCH, sessionId, projectId }` → `analytics_events` row. Rate-limited 60/min/IP. |
 | `GET /api/sdk/v1/config/[projectId]` | public, cached 60s | `{ assetUrls: { glb, usdz }, sdkConfig }` for PUBLISHED projects only (404 otherwise, prevents enumeration). URL derivation: `resolveAssetUrl` in the route file. |
 | `GET /api/v1/assets/[assetId]/file` | auth-gated | Streaming proxy for **all in-app asset reads** — `requirePrincipal` (BRAND passes if owner or linked-project brand), then streams from Appwrite Storage with the server API key. `Cache-Control: private, max-age=60`. |
+| `GET /api/v1/generation/[projectId]` | `requirePrincipal` | Polls and finalizes AI Draft generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Also called by the nightly cron sweep. |
 
 **Uploads have no API route:** the browser uploads directly to Appwrite Storage (session-authenticated `storage.createFile`), then the `recordAssetUpload` server action creates the `assets` row (§10).
 
@@ -261,7 +274,7 @@ Key invariants:
 - Elevation shadows (`--shadow-1/2`) are reserved for floating layers (dropdowns, drawers, dark panels, hover lifts) — static white cards on sage are shadowless.
 - Radii: canonical card `24px` (`rounded-[24px]` = `rounded-3xl`); dense/mid-size cards may use `16px` (`rounded-2xl`).
 
-**v3.2 rollout state (all committed surfaces):** app shells (`DashboardLayout`/`AdminLayout` + mobile drawers) are white header/sidebar with a sage `<main>`; content cards are borderless white `24px` surfaces that pop on the sage canvas. Rolled-out pages: `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics`, `/onboarding`, `/admin/*`; `/auth*` keeps its sanctioned white + ink-split layout with lime reserved for the dark panel. Dark ink panels survive only as component-level surfaces (`card inverted`, integrations embed section, review/published takeover modals, auth/onboarding split panels). Skeletons: pass `tone="sage"` for page-level white shapes; default (`canvas-soft`) is for bars on white card interiors.
+**v3.2 rollout state (all committed surfaces):** app shells (`DashboardLayout`/`AdminLayout` + mobile drawers) are a white sidebar with a sage `<main>`; there is no top header on desktop — mobile gets a slim top bar (hamburger + wordmark, below `md`) and page-level `action`s render right-aligned above content instead. Content cards are borderless white `24px` surfaces that pop on the sage canvas. Rolled-out pages: `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics`, `/onboarding`, `/admin/*`; `/auth*` keeps its sanctioned white + ink-split layout with lime reserved for the dark panel. Dark ink panels survive only as component-level surfaces (`card inverted`, integrations embed section, review/published takeover modals, auth/onboarding split panels). Skeletons: pass `tone="sage"` for page-level white shapes; default (`canvas-soft`) is for bars on white card interiors.
 
 Landing-specific contracts (band rhythm, one primary CTA per viewport, copy truth): `pages/landing.md`.
 
@@ -279,6 +292,9 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 | `NEXT_PUBLIC_APP_URL` | App URL for auth email links + embed code (runtime-read) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | For `sync-admin`/`seed:appwrite` — local only, never site variables |
 | `CRON_SECRET` | Optional; guards `/api/cron/maintenance` (held by the frozen Vercel mirror today) |
+| `HY3D_API_URL` | Optional; Hunyuan3D Modal API base URL (primary). Required for Fast mode. |
+| `HY3D_API_URL_2` | Optional; Hunyuan3D Modal API base URL (fallback). |
+| `HY3D_API_TOKEN` | Optional; Bearer token for Hunyuan3D Modal API (`hy3d-api-auth` secret). Required for Fast mode. |
 | `LOG_LEVEL` | Optional; `src/server/logging.ts` |
 
 ---
@@ -288,6 +304,7 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 - **`backend-architecture.md`** — server layering, error taxonomy, ActionResult, rate limiting, state machine, services, db client, auth guards, testing, cron, `ensure-backend`.
 - **`file-storage-architecture.md`** — Appwrite Storage: buckets, browser-direct uploads, proxy, publish grants/revokes, archival.
 - **`deployment.md`** — production handbook: Appwrite Sites @ pekaar.tech, env vars, workflow, rollback, DNS, frozen Vercel mirror.
+- **`generation-architecture.md`** — AI Draft (Fast) generation: Hunyuan3D Modal API integration, image normalization, manifest builder, poll/finalize, cron sweep, credits.
 - **`pages/tasks.md`** — `/tasks` Kanban + list + the 4 status modals.
 - **`pages/dashboard.md`** — `/dashboard` metrics + 12-month chart.
 - **`pages/auth.md`** — `/auth*` flows + session plumbing + security properties.

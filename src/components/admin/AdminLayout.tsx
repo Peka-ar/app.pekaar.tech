@@ -1,9 +1,8 @@
 "use client";
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, ListTodo, BarChart2, Box, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, ListTodo, Bell, BarChart2, Box, Menu } from 'lucide-react';
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
-import NotificationBell from '../dashboard/NotificationBell';
 import { AdminMobileNavDrawer } from './AdminMobileNavDrawer';
 import { Button } from '../ui/Button';
 import { Wordmark } from '../Wordmark';
@@ -24,6 +23,7 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Users', path: '/admin/users', icon: Users },
     { name: 'Tasks Management', path: '/admin/tasks', icon: ListTodo },
+    { name: 'Notifications', path: '/notifications', icon: Bell },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart2 },
   ];
 
@@ -143,30 +143,52 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
+        <h1 className="sr-only">{title}</h1>
+
+        {/* Mobile-only top bar: hamburger + wordmark */}
         <header
-          className="h-16 flex items-center justify-between gap-3 px-4 sm:px-6 sticky top-0 z-20"
+          className="md:hidden h-16 flex items-center justify-between gap-3 px-4 sticky top-0 z-20 shrink-0"
           style={{
             backgroundColor: 'var(--canvas)',
             borderBottom: '1px solid var(--border-default)',
           }}
         >
-          <div className="flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-1 min-w-0">
             <Button
               variant="ghost"
               onClick={() => setIsMobileNavOpen(true)}
               aria-label="Open navigation menu"
-              className="p-2 md:hidden shrink-0"
+              className="p-2 shrink-0"
             >
               <Menu className="w-5 h-5" />
             </Button>
-            <h1 className="page-title truncate text-[var(--color-text-primary)]">{title}</h1>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {action && <div className="hidden sm:block">{action}</div>}
-            <NotificationBell />
+            <Link
+              href="/"
+              className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
+              aria-label="Go to Home"
+            >
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
+                style={{ border: '1px solid var(--text-primary)' }}
+              >
+                <Box className="w-4 h-4" style={{ color: 'var(--text-primary)' }} aria-hidden="true" />
+              </div>
+              <Wordmark
+                className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
+                dotClassName="text-[var(--accent)]"
+              />
+            </Link>
           </div>
         </header>
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[var(--canvas-soft)] overflow-x-hidden">{children}</main>
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 bg-[var(--canvas-soft)] overflow-x-hidden">
+          {action && (
+            <div className="hidden sm:flex justify-end mb-6 shrink-0">
+              {action}
+            </div>
+          )}
+          {children}
+        </main>
       </div>
 
       <AdminMobileNavDrawer

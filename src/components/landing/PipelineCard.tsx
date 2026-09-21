@@ -208,11 +208,15 @@ export default function PipelineCard() {
         </span>
       </div>
 
-      {/* Transformation pane — fixed height, layers cross-fade (no layout shift) */}
+      {/* Transformation pane — fixed height, layers cross-fade (no layout shift).
+          aria-hidden + inert until done: the scripted layers are decorative and
+          the viewer's controls must stay out of the tab order until the demo
+          finishes (Replay re-applies both). */}
       <div
         className="relative overflow-hidden rounded-[16px]"
         style={{ background: "var(--canvas-soft)", border: "1px solid var(--border-default)", height: 300 }}
         aria-hidden={phase !== "done" ? "true" : undefined}
+        inert={phase !== "done"}
       >
         {/* LAYER: photo — idle + CAPTURE */}
         <motion.div

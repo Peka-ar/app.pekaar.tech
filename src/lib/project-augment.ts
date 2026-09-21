@@ -54,6 +54,15 @@ export type TaskJob = {
   assetUrls: { glb: string; usdz?: string } | null;
   archivedAssetUrls: { glb: TaskAsset[]; usdz: TaskAsset[] };
   revisionRequests?: RevisionRequestLite[];
+  generationMode: string | null;
+  generationStatus: string | null;
+  generationJobId: string | null;
+  generationRunId: string | null;
+  generationAssetId: string | null;
+  generationError: string | null;
+  generationViews: Record<string, string> | null;
+  generationStartedAt: string | null;
+  generationCompletedAt: string | null;
 };
 
 export type RequesterLite = { id: string; name: string | null; email: string };
@@ -136,6 +145,15 @@ export function buildTaskJob(input: {
       usdz: archivedUsdzs.map((a) => ({ ...toTaskAsset(a), url: proxyUrl(a.$id) })),
     },
     revisionRequests: mappedRevisions.length > 0 ? mappedRevisions : undefined,
+    generationMode: project.generationMode ?? null,
+    generationStatus: project.generationStatus ?? null,
+    generationJobId: project.generationJobId ?? null,
+    generationRunId: project.generationRunId ?? null,
+    generationAssetId: project.generationAssetId ?? null,
+    generationError: project.generationError ?? null,
+    generationViews: parseJson<Record<string, string>>(project.generationViews ?? null),
+    generationStartedAt: project.generationStartedAt ?? null,
+    generationCompletedAt: project.generationCompletedAt ?? null,
   };
 }
 

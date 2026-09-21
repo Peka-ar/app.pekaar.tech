@@ -2,7 +2,7 @@
 import React, { useState, useTransition, useCallback, useRef, useMemo } from 'react';
 import {
   Plus, UploadCloud, CheckCircle2, AlertCircle, Loader2, Ruler, Check,
-  Search, Filter, List as ListIcon, LayoutGrid, MessageSquareWarning, Edit3, Eye, Box as BoxIcon,
+  MessageSquareWarning, Edit3, Eye, Box as BoxIcon,
   X, Maximize2, Image as ImageIcon, Clock
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
@@ -12,7 +12,7 @@ import type { Product } from "@/lib/types";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 const ThreeDConfigurator = dynamic(() => import('@/components/ThreeDConfigurator'), { ssr: false });
-import { createProject, brandPublishProject, brandSendForRevisions } from "@/app/actions/project";
+import { createProject, brandPublishProject, brandSendForRevisions, pollGeneration, regenerateGeneration } from "@/app/actions/project";
 import { useAppwriteUpload, type UploadedAsset } from "@/lib/use-appwrite-upload";
 import { APPWRITE_REFERENCE_IMAGES_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
@@ -20,81 +20,37 @@ import { Modal } from "@/components/ui/Modal";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
-import { BRAND_LABEL, PROJECT_STATUS_META } from "@/lib/status";
+import { ADMIN_LABEL, BRAND_LABEL, PROJECT_STATUS_META } from "@/lib/status";
 import { useMediaQuery } from "@/lib/use-media-query";
+import { TaskDrawer } from "@/components/tasks/TaskDrawer";
+import { TaskColumn, type BoardColumn } from "@/components/tasks/TaskColumn";
+import { TaskToolbar } from "@/components/tasks/TaskToolbar";
+import { StatusBanner } from "@/components/tasks/StatusBanner";
+import {
+  DimensionTiles,
+  Lightbox,
+  MetaGrid,
+  MetaItem,
+  ReferenceGrid,
+  RevisionNotesCard,
+  SectionCard,
+  SectionHeading,
+} from "@/components/tasks/TaskDetailParts";
+import {
+  formatRelativeShort,
+  getCreatedDate,
+  getDimensions,
+  getLatestModelUpdatedAt,
+  getReferenceAssets,
+  getSku,
+  getThumbnail,
+  type TaskJob,
+} from "@/components/tasks/types";
 
-type TaskBrand = {
-  id: string;
-  name: string | null;
-  email: string;
-  role: string;
-  productCategory?: string | null;
-  storefrontPlatform?: string | null;
-  catalogSize?: string | null;
-};
-
-type TaskAsset = {
-  id: string;
-  type: string;
-  url: string;
-  originalName: string;
-  mimeType: string;
-  size: number;
-  status: string;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-};
-
-type RevisionRequestLite = {
-  id: string;
-  note: string;
-  createdAt: Date | string;
-};
-
-type TaskJob = {
-  id: string;
-  name: string;
-  sku: string | null;
-  instructions: string | null;
-  dimensions: unknown;
-  status: ProjectStatus;
-  assets: TaskAsset[];
-  createdAt: Date | string;
-  brand: TaskBrand;
-  referenceUrls: string[];
-  assetUrls: { glb: string; usdz?: string } | null;
-  archivedAssetUrls?: { glb: TaskAsset[]; usdz: TaskAsset[] };
-  revisionRequests?: RevisionRequestLite[];
-};
-
-const COLUMNS: { id: ProjectStatus; label: string; icon: React.ElementType }[] = [
-  { id: 'PENDING', label: 'Processing', icon: Clock },
-  { id: 'REVISIONS', label: 'Revisions', icon: MessageSquareWarning },
-  { id: 'COMPLETED', label: 'Review', icon: Eye },
-  { id: 'PUBLISHED', label: 'Published', icon: CheckCircle2 },
-];
-
-const BOARD_STATUSES: ProjectStatus[] = COLUMNS.map((c) => c.id);
-
-const getThumbnail = (project: TaskJob) => {
-  const ref = project.assets?.find((a) => a.type === 'REFERENCE_IMAGE');
-  return ref ? `/api/v1/assets/${ref.id}/file` : '';
-};
-const getSku = (project: TaskJob) => project.sku || 'No SKU';
-const getProductCategory = (project: TaskJob) => project.brand?.productCategory?.trim() || 'Not specified';
-const getInitials = (name: string) => name === 'Unassigned' ? 'UN' : name.slice(0, 2).toUpperCase();
-const getCreatedDate = (project: TaskJob) => new Date(project.createdAt).toLocaleDateString();
-const getAssets = (project: TaskJob) => {
+const getViewerProduct = (project: TaskJob): Product | null => {
   const glb = project.assetUrls?.glb;
   const usdz = project.assetUrls?.usdz;
-  return { glb, usdz } as { glb?: string; usdz?: string };
-};
-const getDimensions = (project: TaskJob) => (project.dimensions && typeof project.dimensions === 'object' ? project.dimensions : {}) as { width?: number; height?: number; depth?: number; length?: number; unit?: string };
-const getViewerProduct = (project: TaskJob): Product | null => {
-  const { glb, usdz } = getAssets(project);
   if (!glb) return null;
-
   const dimensions = getDimensions(project);
   return {
     id: project.id,
@@ -114,26 +70,20 @@ const getViewerProduct = (project: TaskJob): Product | null => {
   };
 };
 
-const formatRelativeShort = (value: Date | string): string => {
-  const date = typeof value === 'string' ? new Date(value) : value;
-  const diffMs = Date.now() - date.getTime();
-  const minutes = Math.floor(diffMs / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString();
-};
+const COLUMNS: (BoardColumn & { id: ProjectStatus })[] = [
+  { id: 'PENDING', label: 'Processing', icon: Clock, headerChip: 'bg-[var(--surface-sky)] text-[var(--surface-sky-deep)]' },
+  { id: 'REVISIONS', label: 'Revisions', icon: MessageSquareWarning, headerChip: 'bg-[var(--warning)]/20 text-[var(--warning-content)]' },
+  { id: 'COMPLETED', label: 'Review', icon: Eye, headerChip: 'bg-[var(--accent-pale)] text-[var(--positive-deep)]' },
+  { id: 'PUBLISHED', label: 'Published', icon: CheckCircle2, headerChip: 'bg-[var(--forest)] text-[var(--on-forest)]' },
+];
 
-const getLatestModelUpdatedAt = (project: TaskJob): Date | string | null => {
-  const readyModels = (project.assets || []).filter((a) => a.status === 'READY' && (a.type === 'MODEL_GLB' || a.type === 'MODEL_USDZ'));
-  if (readyModels.length === 0) return null;
-  return readyModels.reduce((latest, a) => {
-    const t = new Date(a.updatedAt).getTime();
-    return t > new Date(latest.updatedAt).getTime() ? a : latest;
-  }).updatedAt;
+const BOARD_STATUSES: ProjectStatus[] = COLUMNS.map((c) => c.id);
+
+const EMPTY_HINTS: Record<ProjectStatus, string> = {
+  PENDING: "Tasks you submit appear here while in production.",
+  REVISIONS: "Projects you send back for changes appear here.",
+  COMPLETED: "Models ready for your review appear here.",
+  PUBLISHED: "Approved models will show up here.",
 };
 
 export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJob[], role: string }) {
@@ -142,6 +92,13 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [viewMode, setViewMode] = useState<'board' | 'list'>(isDesktop ? 'board' : 'list');
   const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [productName, setProductName] = useState('');
+  const [productSku, setProductSku] = useState('');
+  const [instructions, setInstructions] = useState('');
+  const [dimW, setDimW] = useState('');
+  const [dimH, setDimH] = useState('');
+  const [dimD, setDimD] = useState('');
   const [reviewJob, setReviewJob] = useState<TaskJob | null>(null);
   const [revisionsJob, setRevisionsJob] = useState<TaskJob | null>(null);
   const [processingJob, setProcessingJob] = useState<TaskJob | null>(null);
@@ -157,6 +114,14 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [failedRefImages, setFailedRefImages] = useState<Set<string>>(new Set());
+  const [generationMode, setGenerationMode] = useState<"PREMIUM" | "FAST">("PREMIUM");
+  const [viewTags, setViewTags] = useState<Record<string, string>>({});
+  const [isPolling, setIsPolling] = useState(false);
+  const [pollingProjectId, setPollingProjectId] = useState<string | null>(null);
+
+  const labelFor = useCallback((status: ProjectStatus) => (
+    role === "ADMIN" ? ADMIN_LABEL[status] : BRAND_LABEL[status]
+  ), [role]);
 
   const reviewViewerProduct = useMemo(
     () => (reviewJob ? getViewerProduct(reviewJob) : null),
@@ -174,8 +139,6 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const clearFormError = useCallback(() => setFormError(null), []);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'all'>('all');
@@ -195,7 +158,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     else if (job.status === 'PUBLISHED') setPublishedJob(job);
   };
 
-  const closeAllModals = () => {
+  const closeAllDrawers = () => {
     setReviewJob(null);
     setRevisionsJob(null);
     setProcessingJob(null);
@@ -206,6 +169,10 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     setActionError(null);
   };
 
+  const markFailed = useCallback((id: string) => {
+    setFailedRefImages((prev) => { const next = new Set(prev); next.add(id); return next; });
+  }, []);
+
   const publishJob = async (jobId: string) => {
     if (role === "ADMIN") return;
     setIsPublishing(true);
@@ -215,7 +182,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       startTransition(() => {
         router.refresh();
       });
-      closeAllModals();
+      closeAllDrawers();
     } else {
       setActionError(result.message);
     }
@@ -233,46 +200,108 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
       startTransition(() => {
         router.refresh();
       });
-      closeAllModals();
+      closeAllDrawers();
     } else {
       setActionError(result.message);
     }
     setIsRequestingChanges(false);
   };
 
-  const submitNewJob = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError(null);
+  const pollJobGeneration = async (projectId: string) => {
+    setIsPolling(true);
+    setPollingProjectId(projectId);
+    try {
+      const result = await pollGeneration(projectId);
+      if (result.ok) {
+        startTransition(() => { router.refresh(); });
+      }
+    } finally {
+      setIsPolling(false);
+      setPollingProjectId(null);
+    }
+  };
 
+  const regenerateJob = async (projectId: string) => {
+    setIsPolling(true);
+    setPollingProjectId(projectId);
+    try {
+      const result = await regenerateGeneration(projectId);
+      if (result.ok) {
+        startTransition(() => { router.refresh(); });
+      }
+    } finally {
+      setIsPolling(false);
+      setPollingProjectId(null);
+    }
+  };
+
+  const resetWizard = () => {
+    setWizardStep(0);
+    setProductName('');
+    setProductSku('');
+    setInstructions('');
+    setDimW('');
+    setDimH('');
+    setDimD('');
+    setUploadedAssets([]);
+    setFormError(null);
+    resetUpload();
+    setUploadSuccess(false);
+    setGenerationMode("PREMIUM");
+    setViewTags({});
+  };
+
+  const submitNewJob = async () => {
+    setFormError(null);
+    if (!productName.trim()) {
+      setFormError("Please enter a product name.");
+      setWizardStep(0);
+      return;
+    }
+    if (!productSku.trim()) {
+      setFormError("Please enter a SKU.");
+      setWizardStep(0);
+      return;
+    }
     if (uploadedAssets.length === 0) {
       setFormError("Please upload at least one reference image.");
+      setWizardStep(2);
       return;
     }
-
-    const formData = new FormData(e.currentTarget as HTMLFormElement);
-    const nameVal = (formData.get('productName') as string) || 'New Custom Upload';
-    const skuVal = (formData.get('productSku') as string) || undefined;
-    const instructionsVal = (formData.get('additionalInstructions') as string) || undefined;
-    const width = Number(formData.get('dimWidth') || 0);
-    const height = Number(formData.get('dimHeight') || 0);
-    const depth = Number(formData.get('dimDepth') || 0);
-
+    const width = Number(dimW || 0);
+    const height = Number(dimH || 0);
+    const depth = Number(dimD || 0);
     if (width <= 0 || height <= 0 || depth <= 0) {
       setFormError("Please enter valid dimensions (all values must be greater than 0).");
+      setWizardStep(1);
       return;
     }
-
+    if (generationMode === "FAST") {
+      const tags = Object.keys(viewTags);
+      if (tags.length === 0) {
+        setFormError("Please tag at least one image as Front for AI Draft mode.");
+        setWizardStep(2);
+        return;
+      }
+      if (!viewTags["front"]) {
+        setFormError("Front view is required for AI Draft mode.");
+        setWizardStep(2);
+        return;
+      }
+    }
     setIsSubmitting(true);
-    const result = await createProject(nameVal, uploadedAssets.map(a => a.id), skuVal, instructionsVal, {
-      width,
-      height,
-      depth,
-      unit: 'cm',
-    });
+    const generationViews = generationMode === "FAST" ? viewTags : null;
+    const result = await createProject(
+      productName.trim(),
+      uploadedAssets.map(a => a.id),
+      productSku.trim(),
+      instructions.trim() || undefined,
+      { width, height, depth, unit: 'cm' },
+      generationMode,
+      generationViews,
+    );
     if (result.ok) {
-      setUploadedAssets([]);
-      resetUpload();
-      setUploadSuccess(false);
+      resetWizard();
       startTransition(() => {
         router.refresh();
       });
@@ -288,12 +317,10 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (uploadedAssets.length >= MAX_IMAGES) {
       setFormError("Maximum 5 images reached.");
       return;
     }
-
     const asset = await uploadFile(file, "REFERENCE_IMAGE");
     if (asset) {
       setUploadedAssets((prev) => [...prev, asset]);
@@ -305,7 +332,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
 
   const actionButton = (
     <Button
-      onClick={() => setIsWizardOpen(true)}
+      onClick={() => { resetWizard(); setIsWizardOpen(true); }}
       size="sm"
       leftIcon={<Plus className="w-4 h-4" aria-hidden="true" />}
     >
@@ -313,231 +340,170 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     </Button>
   );
 
+  const WIZARD_STEPS = ["Details", "Dimensions", "Photos"];
+  const wizardCanContinue = wizardStep === 0
+    ? productName.trim().length > 0 && productSku.trim().length > 0
+    : wizardStep === 1
+      ? Number(dimW) > 0 && Number(dimH) > 0 && Number(dimD) > 0
+      : uploadedAssets.length > 0 && (generationMode === "PREMIUM" || Object.keys(viewTags).length > 0);
+
+  const VIEW_TAG_OPTIONS = [
+    { value: "front", label: "Front", required: true },
+    { value: "left", label: "Left", required: false },
+    { value: "back", label: "Back", required: false },
+    { value: "right", label: "Right", required: false },
+  ];
+
+  const assignViewTag = (tag: string, assetId: string) => {
+    setViewTags((prev) => {
+      const next = { ...prev };
+      // Remove any existing assignment of this asset to another tag
+      for (const [k, v] of Object.entries(next)) {
+        if (v === assetId) delete next[k];
+      }
+      next[tag] = assetId;
+      return next;
+    });
+  };
+
+  const removeViewTag = (tag: string) => {
+    setViewTags((prev) => {
+      const next = { ...prev };
+      delete next[tag];
+      return next;
+    });
+  };
+
   return (
     <DashboardLayout title="Tasks Pipeline" action={role !== "ADMIN" ? actionButton : undefined}>
 
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center sm:gap-4 mb-6">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-          <div className="w-full sm:w-64">
-            <Input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search tasks or SKUs..."
-              leftIcon={<Search className="w-4 h-4" />}
-            />
-          </div>
-          <div className="w-full sm:w-40">
-            <Select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | 'all')}
-              icon={<Filter className="w-3.5 h-3.5" />}
-            >
-              <option value="all">All Statuses</option>
-              {BOARD_STATUSES.map((status) => (
-                <option key={status} value={status}>{BRAND_LABEL[status]}</option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div className="flex items-center p-1 bg-[var(--color-canvas)] rounded-full border border-[var(--color-border-default)] shrink-0 self-end sm:self-auto">
-          <button
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-colors ${viewMode === 'list' ? 'bg-[var(--color-canvas-soft)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
-          >
-            <ListIcon className="w-3.5 h-3.5" /> List
-          </button>
-          <button
-            onClick={() => setViewMode('board')}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-[11px] uppercase tracking-widest font-sans font-medium transition-colors ${viewMode === 'board' ? 'bg-[var(--color-canvas-soft)] text-[var(--color-text-primary)]' : 'text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]'}`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" /> Board
-          </button>
-        </div>
-      </div>
+      <TaskToolbar
+        search={searchQuery}
+        onSearch={setSearchQuery}
+        statusFilter={statusFilter}
+        onStatusFilter={(v) => setStatusFilter(v as ProjectStatus | 'all')}
+        statusOptions={BOARD_STATUSES.map((s) => ({ value: s, label: labelFor(s) }))}
+        count={filteredJobs.length}
+        viewMode={viewMode}
+        onViewMode={setViewMode}
+      />
 
       {viewMode === 'board' ? (
-        <div className="flex-1 overflow-x-auto pb-4 h-[calc(100vh-210px)] animate-in fade-in duration-300">
-          <div className="flex gap-6 min-w-max h-full items-start">
-            {COLUMNS.map(col => {
-              const columnJobs = filteredJobs.filter(j => j.status === col.id);
-              const ColIcon = col.icon;
-              return (
-                <div key={col.id} className="w-80 flex flex-col bg-[var(--color-canvas)] rounded-[24px] p-4 max-h-full">
-                  <div className="flex items-center justify-between mb-4 px-2 border-b border-[var(--color-border-default)] pb-3">
-                    <div className="flex items-center gap-2">
-                      <ColIcon className={`w-4 h-4 ${col.id === 'PENDING' ? 'text-[var(--text-muted)]' : col.id === 'REVISIONS' ? 'text-[var(--warning-content)]' : col.id === 'COMPLETED' ? 'text-[var(--color-text-primary)]' : 'text-[var(--positive-deep)]'}`} />
-                      <h3 className="label-mono text-[var(--color-text-primary)]">
-                        {col.label}
-                      </h3>
-                    </div>
-                    <span className="text-[10px] font-sans text-[var(--color-text-muted)] bg-[var(--color-canvas-soft)] px-2 py-0.5 rounded-full">
-                      {columnJobs.length}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-col gap-4 overflow-y-auto pr-2 custom-scrollbar pb-2">
-                    {columnJobs.map(job => (
-                      <div
-                        key={job.id}
-                        className="bg-[var(--color-canvas)] p-4 rounded-[24px] border border-[var(--color-border-default)] hover:border-[var(--color-text-primary)] hover:shadow-[var(--shadow-1)] transition-[border-color,box-shadow] cursor-pointer group shrink-0"
-                        onClick={() => handleCardClick(job)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleCardClick(job);
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                      >
-                        {getThumbnail(job) && (
-                          <div className="relative w-full h-32 bg-[var(--color-canvas)] rounded-2xl mb-3 overflow-hidden border border-[var(--color-border-default)]">
-                            <Image src={getThumbnail(job)} alt="" fill sizes="320px" unoptimized className="object-cover group-hover:scale-105 transition-transform duration-700" />
-                          </div>
-                        )}
-                        <div className="flex justify-between items-start mb-2">
-                          <span className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] bg-[var(--color-canvas-soft)] px-2 py-0.5 rounded-md">{job.id}</span>
-                          {(() => {
-                            const meta = PROJECT_STATUS_META[job.status];
-                            const Icon = meta.icon;
-                            return (
-                              <Badge tone={meta.tone} icon={<Icon className="w-3 h-3" />}>
-                                {BRAND_LABEL[job.status]}
-                              </Badge>
-                            );
-                          })()}
-                        </div>
-                        <h4 className="text-sm font-medium text-[var(--color-text-primary)] mb-1.5 leading-tight">{job.name}</h4>
-                        {role === "ADMIN" && (
-                          <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">
-                            Category: {getProductCategory(job)}
-                          </p>
-                        )}
-
-                        <div className="flex justify-between items-center mt-4">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-[var(--color-text-primary)] text-[var(--color-canvas)] flex items-center justify-center text-[8px] font-bold tracking-widest">
-                              {getInitials(job.brand?.name || 'UB')}
-                            </div>
-                            <span className="text-[10px] font-sans text-[var(--color-text-muted)]">{getSku(job)}</span>
-                          </div>
-                          <span className="text-[9px] text-[var(--color-text-muted)] uppercase">{getCreatedDate(job)}</span>
-                        </div>
-
-                        {(job.status === 'COMPLETED') && (
-                          <div className="mt-4 pt-3 border-t border-[var(--color-border-default)]">
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setReviewJob(job);
-                              }}
-                              leftIcon={<Eye className="w-3.5 h-3.5" />}
-                              className="w-full"
-                            >
-                              Review Model
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                    {columnJobs.length === 0 && (
-                      <div className="flex-1 border-2 border-dashed border-[var(--color-border-default)] rounded-2xl flex flex-col items-center justify-center p-8 text-center min-h-[120px]">
-                        <BoxIcon className="w-6 h-6 text-[var(--color-text-muted)] mb-2" />
-                        <span className="text-[11px] text-[var(--color-text-muted)] font-sans tracking-widest uppercase">Empty</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+        filteredJobs.length === 0 ? (
+          <div role="status" className="flex flex-col items-center rounded-[24px] bg-[var(--color-canvas)] px-6 py-16 text-center shadow-[var(--shadow-1)]">
+            <BoxIcon className="mb-3 h-8 w-8 text-[var(--color-text-muted)]" aria-hidden="true" />
+            <h3 className="text-sm font-semibold text-[var(--color-text-primary)]">No tasks found</h3>
+            <p className="mt-1 max-w-sm text-sm text-[var(--color-text-muted)]">
+              {initialJobs.length === 0
+                ? "Get started by creating your first task."
+                : "Try a different search or status filter."}
+            </p>
+            {role !== "ADMIN" && initialJobs.length === 0 && (
+              <Button className="mt-4" onClick={() => { resetWizard(); setIsWizardOpen(true); }} leftIcon={<Plus className="w-4 h-4" />}>
+                Create Task
+              </Button>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="task-board pb-4 xl:[--board-h:calc(100dvh_-_250px)]">
+            {COLUMNS.map(col => (
+              <TaskColumn
+                key={col.id}
+                column={col}
+                jobs={filteredJobs.filter(j => j.status === col.id)}
+                getLabel={(j) => labelFor(j.status)}
+                getMeta={(j) => (
+                  role === "ADMIN"
+                    ? `${j.brand?.name || "Unknown Brand"} · ${getSku(j)} · ${formatRelativeShort(j.createdAt)}`
+                    : `${getSku(j)} · ${formatRelativeShort(j.createdAt)}`
+                )}
+                onOpen={handleCardClick}
+                emptyHint={EMPTY_HINTS[col.id]}
+                renderAction={(job) => job.status === 'COMPLETED' ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setReviewJob(job)}
+                    leftIcon={<Eye className="w-3.5 h-3.5" aria-hidden="true" />}
+                    className="w-full"
+                  >
+                    Review Model
+                  </Button>
+                ) : undefined}
+              />
+            ))}
+          </div>
+        )
       ) : (
-        <div className="bg-[var(--color-canvas)] rounded-[24px] overflow-hidden">
+        <div className="overflow-hidden rounded-[24px] bg-[var(--color-canvas)]">
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full border-collapse text-left">
               <thead className="bg-[var(--color-canvas-soft)]">
                 <tr className="border-b border-[var(--color-border-default)]">
-                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Job ID</th>
-                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Product</th>
-                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Status</th>
-                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold">Created</th>
-                  <th className="px-3 sm:px-6 py-3 sm:py-4 text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-bold text-right">Actions</th>
+                  <th className="px-3 py-3 font-sans text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] sm:px-6 sm:py-4">Job ID</th>
+                  <th className="px-3 py-3 font-sans text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] sm:px-6 sm:py-4">Product</th>
+                  <th className="px-3 py-3 font-sans text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] sm:px-6 sm:py-4">Status</th>
+                  <th className="hidden px-3 py-3 font-sans text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] sm:px-6 sm:py-4 md:table-cell">Created</th>
+                  <th className="px-3 py-3 text-right font-sans text-[10px] font-bold uppercase tracking-widest text-[var(--color-text-muted)] sm:px-6 sm:py-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border-default)]">
                 {filteredJobs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-3 sm:px-6 py-10 sm:py-12 text-center text-[var(--color-text-muted)] text-sm">
+                    <td colSpan={5} className="px-3 py-10 text-center text-sm text-[var(--color-text-muted)] sm:px-6 sm:py-12">
                       No tasks match your search or filter.
                     </td>
                   </tr>
                 ) : (
                   filteredJobs.map(job => (
-                    <tr key={job.id} className="hover:bg-[var(--color-canvas-soft)] transition-colors group">
-                      <td className="px-3 sm:px-6 py-3 sm:py-4">
-                        <span className="text-[11px] font-sans font-medium text-[var(--color-text-primary)] bg-[var(--color-canvas-soft)] px-2 py-1 rounded-md border border-[var(--color-border-default)]">
-                          {job.id}
+                    <tr key={job.id} className="transition-colors hover:bg-[var(--color-canvas-soft)]">
+                      <td className="px-3 py-3 sm:px-6 sm:py-4">
+                        <span className="rounded-md border border-[var(--color-border-default)] bg-[var(--color-canvas-soft)] px-2 py-1 font-sans text-[11px] font-medium text-[var(--color-text-primary)]">
+                          {job.id.slice(0, 8)}…
                         </span>
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                      <td className="px-3 py-3 sm:px-6 sm:py-4">
                         <div className="flex items-center gap-3">
                           {getThumbnail(job) ? (
-                            <div className="relative w-10 h-10 overflow-hidden rounded-lg border border-[var(--color-border-default)] shrink-0">
+                            <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-[var(--color-border-default)]">
                               <Image src={getThumbnail(job)} alt="" fill sizes="40px" unoptimized className="object-cover" />
                             </div>
                           ) : (
-                            <div className="w-10 h-10 rounded-lg bg-[var(--color-canvas-soft)] border border-[var(--color-border-default)] flex items-center justify-center shrink-0">
-                              <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" />
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[var(--color-border-default)] bg-[var(--color-canvas-soft)]">
+                              <BoxIcon className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" />
                             </div>
                           )}
                           <div className="min-w-0">
-                            <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">{job.name}</div>
-                            <div className="text-[10px] font-sans text-[var(--color-text-muted)]">{getSku(job)}</div>
+                            <div className="truncate text-sm font-medium text-[var(--color-text-primary)]">{job.name}</div>
+                            <div className="font-sans text-[10px] text-[var(--color-text-muted)]">{getSku(job)}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4">
+                      <td className="px-3 py-3 sm:px-6 sm:py-4">
                         {(() => {
                           const meta = PROJECT_STATUS_META[job.status];
                           const Icon = meta.icon;
                           return (
-                            <Badge tone={meta.tone} icon={<Icon className="w-3 h-3" />}>
-                              {BRAND_LABEL[job.status]}
+                            <Badge tone={meta.tone} icon={<Icon className="w-3 h-3" aria-hidden="true" />}>
+                              {labelFor(job.status)}
                             </Badge>
                           );
                         })()}
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-xs text-[var(--color-text-muted)] font-sans">
+                      <td className="hidden px-3 py-3 font-sans text-xs text-[var(--color-text-muted)] sm:px-6 sm:py-4 md:table-cell">
                         {getCreatedDate(job)}
                       </td>
-                      <td className="px-3 sm:px-6 py-3 sm:py-4 text-right">
+                      <td className="px-3 py-3 text-right sm:px-6 sm:py-4">
                         {job.status === 'COMPLETED' ? (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={() => setReviewJob(job)}
-                          >
+                          <Button variant="primary" size="sm" onClick={() => setReviewJob(job)}>
                             Review
                           </Button>
                         ) : job.status === 'PUBLISHED' ? (
-                          <Button
-                            variant="tertiary"
-                            size="sm"
-                            onClick={() => setPublishedJob(job)}
-                          >
+                          <Button variant="tertiary" size="sm" onClick={() => setPublishedJob(job)}>
                             View 3D
                           </Button>
                         ) : (
-                          <Button
-                            variant="tertiary"
-                            size="sm"
-                            onClick={() => handleCardClick(job)}
-                          >
+                          <Button variant="tertiary" size="sm" onClick={() => handleCardClick(job)}>
                             Details
                           </Button>
                         )}
@@ -551,736 +517,600 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         </div>
       )}
 
+      {/* ── New Task wizard ─────────────────────────────── */}
       <Modal
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}
         title="Create New Task"
-        description="Upload reference photos and dimensions to generate a new 3D asset."
+        description={`Step ${wizardStep + 1} of 3 — ${WIZARD_STEPS[wizardStep]}`}
         size="xl"
         variant="dialog"
         footer={
-          <div className="flex justify-between items-center w-full">
-            <Button
-              variant="ghost"
-              onClick={() => setIsWizardOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              form="new-job-form"
-              isLoading={isSubmitting}
-              leftIcon={<Plus className="w-4 h-4" />}
-            >
-              Create Task
-            </Button>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5" aria-hidden="true">
+              {WIZARD_STEPS.map((s, i) => (
+                <span
+                  key={s}
+                  className={`h-1.5 rounded-full transition-colors ${i === wizardStep ? "w-8 bg-[var(--color-text-primary)]" : i < wizardStep ? "w-4 bg-[var(--color-text-primary)]/50" : "w-4 bg-[var(--color-border-default)]"}`}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {wizardStep > 0 ? (
+                <Button variant="ghost" onClick={() => { setFormError(null); setWizardStep((s) => s - 1); }}>
+                  Back
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={() => setIsWizardOpen(false)}>
+                  Cancel
+                </Button>
+              )}
+              {wizardStep < 2 ? (
+                <Button onClick={() => { setFormError(null); setWizardStep((s) => s + 1); }} disabled={!wizardCanContinue}>
+                  Continue
+                </Button>
+              ) : (
+                <Button onClick={submitNewJob} isLoading={isSubmitting} disabled={!wizardCanContinue} leftIcon={<Plus className="w-4 h-4" aria-hidden="true" />}>
+                  Create Task
+                </Button>
+              )}
+            </div>
           </div>
         }
       >
-        <form id="new-job-form" onSubmit={submitNewJob} onChange={clearFormError} className="grid grid-cols-1 md:grid-cols-2 gap-10">
+        <div className="space-y-6">
           {formError && (
-            <div className="col-span-1 md:col-span-2 -mt-2">
-              <div className="flex items-center gap-2 text-[12px] text-[var(--negative-deep)] bg-[var(--negative)]/10 border border-[var(--negative)]/40 rounded-xl px-4 py-3">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{formError}</span>
-              </div>
+            <div role="alert" className="flex items-center gap-2 rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-4 py-3 text-[12px] text-[var(--negative-deep)]">
+              <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+              <span>{formError}</span>
             </div>
           )}
 
-          <div className="space-y-8">
-            <section>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Product Details
+          {wizardStep === 0 && (
+            <section className="space-y-4">
+              <h3 className="flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2 font-sans text-sm font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
+                <Edit3 className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" /> Product Details
               </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="productName">Product Name <span className="text-[var(--negative-deep)]">*</span></label>
-                  <Input
-                    id="productName"
-                    name="productName"
-                    type="text"
-                    required
-                    placeholder="e.g. Modern Eames Chair"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="productSku">SKU <span className="text-[var(--negative-deep)]">*</span></label>
-                  <Input
-                    id="productSku"
-                    name="productSku"
-                    type="text"
-                    required
-                    placeholder="e.g. CHAIR-001"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--color-text-secondary)] mb-1.5" htmlFor="additionalInstructions">Additional Instructions (Optional)</label>
-                  <textarea
-                    id="additionalInstructions"
-                    name="additionalInstructions"
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-24"
-                    placeholder="Specific notes on material finish, stitching, hidden details..."
-                  />
-                </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--color-text-secondary)]" htmlFor="productName">Product Name <span className="text-[var(--negative-deep)]">*</span></label>
+                <Input id="productName" type="text" required value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="e.g. Modern Eames Chair" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--color-text-secondary)]" htmlFor="productSku">SKU <span className="text-[var(--negative-deep)]">*</span></label>
+                <Input id="productSku" type="text" required value={productSku} onChange={(e) => setProductSku(e.target.value)} placeholder="e.g. CHAIR-001" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-bold text-[var(--color-text-secondary)]" htmlFor="additionalInstructions">Additional Instructions (Optional)</label>
+                <textarea
+                  id="additionalInstructions"
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  className="input-base h-24 w-full resize-none rounded-xl px-4 py-3 font-sans text-sm outline-none"
+                  placeholder="Specific notes on material finish, stitching, hidden details…"
+                />
               </div>
             </section>
+          )}
 
-            <section>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                <Ruler className="w-4 h-4 text-[var(--color-text-muted)]" /> Physical Dimensions (CM)
+          {wizardStep === 1 && (
+            <section className="space-y-4">
+              <h3 className="flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2 font-sans text-sm font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
+                <Ruler className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" /> Physical Dimensions (CM)
               </h3>
-              <p className="text-[11px] text-[var(--color-text-muted)] mb-4">Required for exact 1:1 scale in AR rendering.</p>
+              <p className="text-[11px] text-[var(--color-text-muted)]">Required for exact 1:1 scale in AR rendering.</p>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimWidth">Width</label>
-                  <Input
-                    id="dimWidth"
-                    name="dimWidth"
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="0.0"
-                  />
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]" htmlFor="dimWidth">Width</label>
+                  <Input id="dimWidth" type="number" required min="1" placeholder="0.0" value={dimW} onChange={(e) => setDimW(e.target.value)} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimHeight">Height</label>
-                  <Input
-                    id="dimHeight"
-                    name="dimHeight"
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="0.0"
-                  />
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]" htmlFor="dimHeight">Height</label>
+                  <Input id="dimHeight" type="number" required min="1" placeholder="0.0" value={dimH} onChange={(e) => setDimH(e.target.value)} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1.5" htmlFor="dimDepth">Depth</label>
-                  <Input
-                    id="dimDepth"
-                    name="dimDepth"
-                    type="number"
-                    required
-                    min="1"
-                    placeholder="0.0"
-                  />
+                  <label className="mb-1.5 block text-xs font-medium text-[var(--color-text-secondary)]" htmlFor="dimDepth">Depth</label>
+                  <Input id="dimDepth" type="number" required min="1" placeholder="0.0" value={dimD} onChange={(e) => setDimD(e.target.value)} />
                 </div>
               </div>
             </section>
-          </div>
+          )}
 
-          <div className="space-y-6 bg-[var(--color-canvas)] p-6 rounded-2xl border border-[var(--color-border-default)]">
-            <div>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-1 flex items-center gap-2">
-                <UploadCloud className="w-4 h-4 text-[var(--color-text-muted)]" /> Reference Images
-              </h3>
-              <p className="text-[11px] text-[var(--color-text-muted)] mb-4">Upload standard JPG/PNG photos from the required angles.</p>
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={handleImageUpload}
-              className="hidden"
-              disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
-            />
-
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
-              className="w-full border border-dashed border-[var(--color-border-default)] rounded-xl py-8 flex flex-col items-center gap-3 text-[var(--color-text-muted)] hover:border-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-[var(--color-border-default)] disabled:hover:text-[var(--color-text-muted)] bg-[var(--color-canvas)]"
-            >
-              {isUploading ? (
-                <>
-                  <Loader2 className="w-6 h-6 animate-spin" />
-                  <span className="text-[12px] font-medium">Uploading...</span>
-                </>
-              ) : uploadedAssets.length >= MAX_IMAGES ? (
-                <>
-                  <ImageIcon className="w-6 h-6" />
-                  <span className="text-[12px] font-medium">Maximum 5 images reached</span>
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="w-6 h-6" />
-                  <div className="text-center">
-                    <span className="text-[12px] font-medium">Select Image</span>
-                    <p className="text-[10px] text-[var(--color-text-muted)] mt-1">JPG, PNG, WebP · max 16MB · {uploadedAssets.length}/{MAX_IMAGES}</p>
-                  </div>
-                </>
-              )}
-            </button>
-
-            {uploadError && (
-              <div className="flex items-center gap-2 text-[11px] font-sans text-[var(--negative-deep)] bg-[var(--negative)]/10 border border-[var(--negative)]/40 rounded-xl px-3 py-2">
-                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                <span>{uploadError}</span>
-              </div>
-            )}
-
-            {uploadSuccess && (
-              <div className="flex items-center gap-2 text-[11px] font-sans text-[var(--positive-deep)] bg-[var(--positive)]/10 border border-[var(--positive)]/40 rounded-xl px-3 py-2 animate-in fade-in slide-in-from-top-1 duration-300">
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span>Image uploaded successfully</span>
-              </div>
-            )}
-
-            {uploadedAssets.length > 0 && (
+          {wizardStep === 2 && (
+            <section className="space-y-4">
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">
+                <h3 className="mb-1 flex items-center gap-2 font-sans text-sm font-bold uppercase tracking-widest text-[var(--color-text-primary)]">
+                  <UploadCloud className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" /> Reference Images
+                </h3>
+                <p className="mb-4 text-[11px] text-[var(--color-text-muted)]">Upload standard JPG/PNG photos from the required angles.</p>
+              </div>
+
+              {/* Mode selector */}
+              <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-4">
+                <p className="mb-3 font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">Generation Mode</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGenerationMode("PREMIUM")}
+                    className={`flex flex-col items-start rounded-xl border-2 p-4 text-left transition-colors ${
+                      generationMode === "PREMIUM"
+                        ? "border-[var(--color-text-primary)] bg-[var(--color-text-primary)]/5"
+                        : "border-[var(--color-border-default)] hover:border-[var(--color-text-primary)]/50"
+                    }`}
+                  >
+                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">Premium</span>
+                    <span className="mt-1 text-[10px] leading-relaxed text-[var(--color-text-muted)]">Artist-finished 3D model. 10 credits.</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGenerationMode("FAST")}
+                    className={`flex flex-col items-start rounded-xl border-2 p-4 text-left transition-colors ${
+                      generationMode === "FAST"
+                        ? "border-[var(--color-text-primary)] bg-[var(--color-text-primary)]/5"
+                        : "border-[var(--color-border-default)] hover:border-[var(--color-text-primary)]/50"
+                    }`}
+                  >
+                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">AI Draft</span>
+                    <span className="mt-1 text-[10px] leading-relaxed text-[var(--color-text-muted)]">AI-generated 3D model (~5-10 min). 2 credits.</span>
+                  </button>
+                </div>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleImageUpload}
+                className="hidden"
+                disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
+                aria-label="Upload reference image"
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
+                className="flex w-full flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--color-border-default)] bg-[var(--color-canvas)] py-8 text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--color-border-default)] disabled:hover:text-[var(--color-text-muted)]"
+              >
+                {isUploading ? (
+                  <>
+                    <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" />
+                    <span className="text-[12px] font-medium">Uploading…</span>
+                  </>
+                ) : uploadedAssets.length >= MAX_IMAGES ? (
+                  <>
+                    <ImageIcon className="h-6 w-6" aria-hidden="true" />
+                    <span className="text-[12px] font-medium">Maximum 5 images reached</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="h-6 w-6" aria-hidden="true" />
+                    <div className="text-center">
+                      <span className="text-[12px] font-medium">Select Image</span>
+                      <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">JPG, PNG, WebP · max 16MB · {uploadedAssets.length}/{MAX_IMAGES}</p>
+                    </div>
+                  </>
+                )}
+              </button>
+              {uploadError && (
+                <div role="alert" className="flex items-center gap-2 rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-3 py-2 font-sans text-[11px] text-[var(--negative-deep)]">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>{uploadError}</span>
+                </div>
+              )}
+              {uploadSuccess && (
+                <div role="status" className="flex items-center gap-2 rounded-xl border border-[var(--positive)]/40 bg-[var(--positive)]/10 px-3 py-2 font-sans text-[11px] text-[var(--positive-deep)]">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <span>Image uploaded successfully</span>
+                </div>
+              )}
+              {uploadedAssets.length > 0 && (
+                <div>
+                  <p className="mb-2 font-sans text-[10px] uppercase tracking-widest text-[var(--color-text-muted)]">
                     Uploaded Images ({uploadedAssets.length})
                   </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {uploadedAssets.map((asset, i) => (
-                    <div
-                      key={asset.id}
-                      className="group relative w-20 h-20 rounded-xl overflow-hidden border border-[var(--color-border-default)] bg-[var(--color-canvas)] cursor-pointer hover:border-[var(--color-text-primary)] transition-colors"
-                      onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
-                      title="Click to enlarge"
-                    >
-                      <Image src={`/api/v1/assets/${asset.id}/file`} alt={`Uploaded ${i + 1}`} fill sizes="80px" unoptimized className="object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                        <Maximize2 className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUploadedAssets(prev => prev.filter(a => a.id !== asset.id));
-                        }}
-                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-[var(--negative)] text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-[var(--negative-deep)] focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-[var(--negative)]/40"
-                        aria-label="Remove image"
+                  <div className="flex flex-wrap gap-2">
+                    {uploadedAssets.map((asset, i) => (
+                      <div
+                        key={asset.id}
+                        className="group relative h-20 w-20 cursor-pointer overflow-hidden rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] transition-colors hover:border-[var(--color-text-primary)]"
+                        onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
+                        title="Click to enlarge"
                       >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
+                        <Image src={`/api/v1/assets/${asset.id}/file`} alt={`Uploaded ${i + 1}`} fill sizes="80px" unoptimized className="object-cover" />
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
+                          <Maximize2 className="h-4 w-4 text-white opacity-0 transition-opacity group-hover:opacity-100" aria-hidden="true" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setUploadedAssets(prev => prev.filter(a => a.id !== asset.id));
+                          }}
+                          className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--negative)] text-white opacity-0 transition-opacity hover:bg-[var(--negative-deep)] focus:opacity-100 focus:outline-none group-hover:opacity-100"
+                          aria-label="Remove image"
+                        >
+                          <X className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+              )}
+
+              {/* View tag assignment for AI Draft mode */}
+              {generationMode === "FAST" && uploadedAssets.length > 0 && (
+                <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-4">
+                  <p className="mb-1 font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">
+                    Tag Views <span className="text-[var(--negative-deep)]">*</span>
+                  </p>
+                  <p className="mb-3 text-[10px] text-[var(--color-text-muted)]">
+                    Assign each uploaded image to a view angle. Front is required. Best results with clear, high-quality images.
+                  </p>
+                  <div className="space-y-2">
+                    {VIEW_TAG_OPTIONS.map(({ value, label, required }) => (
+                      <div key={value} className="flex items-center gap-3">
+                        <span className="w-16 shrink-0 text-xs font-medium text-[var(--color-text-primary)]">
+                          {label}{required && <span className="text-[var(--negative-deep)]"> *</span>}
+                        </span>
+                        <select
+                          value={viewTags[value] || ""}
+                          onChange={(e) => {
+                            if (e.target.value) assignViewTag(value, e.target.value);
+                            else removeViewTag(value);
+                          }}
+                          className="input-base flex-1 rounded-lg px-3 py-1.5 text-xs"
+                        >
+                          <option value="">— Select image —</option>
+                          {uploadedAssets.map((asset) => {
+                            const usedElsewhere = Object.entries(viewTags).some(([k, v]) => k !== value && v === asset.id);
+                            return (
+                              <option key={asset.id} value={asset.id} disabled={usedElsewhere}>
+                                Image {uploadedAssets.indexOf(asset) + 1}{usedElsewhere ? " (assigned)" : ""}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-start gap-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-text-muted)]" aria-hidden="true" />
+                <p className="text-[10px] leading-relaxed text-[var(--color-text-muted)]">
+                  For best results, ensure images have flat lighting (no harsh shadows) and the product is fully visible within the frame.
+                </p>
               </div>
-            )}
-
-            <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-3 flex gap-3 items-start">
-              <AlertCircle className="w-4 h-4 text-[var(--color-text-muted)] shrink-0 mt-0.5" />
-              <p className="text-[10px] text-[var(--color-text-muted)] leading-relaxed">
-                For best results, ensure images have flat lighting (no harsh shadows) and the product is fully visible within the frame.
-              </p>
-            </div>
-
-          </div>
-
-        </form>
+            </section>
+          )}
+        </div>
       </Modal>
 
-      <Modal
-        isOpen={!!processingJob}
-        onClose={() => setProcessingJob(null)}
-        title={processingJob ? processingJob.name : ''}
-        description={processingJob ? `${getSku(processingJob)} • Processing` : ''}
-        size="lg"
-        variant="dialog"
+      {/* ── Processing drawer (PENDING) ─────────────────── */}
+      <TaskDrawer
+        open={!!processingJob}
+        onClose={() => { setProcessingJob(null); setActionError(null); }}
+        title={processingJob?.name ?? ""}
+        subtitle={processingJob ? `${processingJob.id} · ${getSku(processingJob)}` : ""}
+        badge={processingJob ? <Badge tone="info" icon={<Clock className="w-3 h-3" aria-hidden="true" />}>{labelFor("PENDING")}</Badge> : undefined}
+        footer={processingJob?.generationMode === "FAST" && processingJob?.generationStatus === "FAILED" ? (
+          <Button
+            onClick={() => processingJob && regenerateJob(processingJob.id)}
+            isLoading={isPolling && pollingProjectId === processingJob?.id}
+            leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
+            className="w-full"
+          >
+            Regenerate (1 credit)
+          </Button>
+        ) : processingJob?.generationMode === "FAST" && processingJob?.generationStatus !== "SUCCEEDED" ? (
+          <Button
+            variant="tertiary"
+            onClick={() => processingJob && pollJobGeneration(processingJob.id)}
+            isLoading={isPolling && pollingProjectId === processingJob?.id}
+            leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
+            className="w-full"
+          >
+            Check Status
+          </Button>
+        ) : undefined}
       >
         {processingJob && (
-          <div className="space-y-6">
-            <section>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                Product Info
-              </h3>
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
-                  <p className="text-sm font-medium text-[var(--color-text-primary)]">{processingJob.name}</p>
+          <div className="space-y-4">
+            <StatusBanner status="PENDING" />
+            {processingJob.generationMode === "FAST" && (
+              <div className="rounded-xl border border-[var(--surface-sky)]/40 bg-[var(--surface-sky)]/10 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-[var(--surface-sky-deep)]">AI Draft</span>
+                  {processingJob.generationStatus && (
+                    <Badge tone={processingJob.generationStatus === "FAILED" ? "danger" : "info"}>
+                      {processingJob.generationStatus}
+                    </Badge>
+                  )}
                 </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Status</span>
-                  <Badge tone="warning" icon={<Clock className="w-3 h-3" />}>Processing</Badge>
-                </div>
-              </div>
-            </section>
-
-            <section>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                Physical Dimensions (CM)
-              </h3>
-              <div className="grid grid-cols-3 gap-4">
-                {(() => {
-                  const dimensions = getDimensions(processingJob);
-                  const unit = dimensions.unit || 'cm';
-                  return (<>
-                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Width</span>
-                      <p className="text-sm font-sans text-[var(--color-text-primary)]">{dimensions.width ?? '-'} {unit}</p>
-                    </div>
-                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Height</span>
-                      <p className="text-sm font-sans text-[var(--color-text-primary)]">{dimensions.height ?? '-'} {unit}</p>
-                    </div>
-                    <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-3 rounded-xl">
-                      <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Depth</span>
-                      <p className="text-sm font-sans text-[var(--color-text-primary)]">{dimensions.depth ?? dimensions.length ?? '-'} {unit}</p>
-                    </div>
-                  </>);
-                })()}
-              </div>
-            </section>
-
-            <section>
-              <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                Reference Images
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {(processingJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index: number) => (
-                  <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex flex-col relative">
-                    <Image src={`/api/v1/assets/${asset.id}/file`} alt={`Reference ${index + 1}`} fill sizes="(min-width: 640px) 25vw, 50vw" unoptimized className="object-cover opacity-80 mix-blend-multiply" />
-                    <div className="absolute bottom-0 inset-x-0 bg-white/90 backdrop-blur-sm border-t border-[var(--color-border-default)] py-1.5 px-2">
-                      <span className="text-[9px] font-medium text-[var(--color-text-primary)] uppercase tracking-wider">Reference {index + 1}</span>
-                    </div>
-                  </div>
-                ))}
-                {(!processingJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                  <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center">
-                    <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
-                  </div>
+                {processingJob.generationStatus === "RUNNING" && (
+                  <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">AI is generating your 3D model. This takes ~5-10 minutes. You can close this drawer and check back later.</p>
+                )}
+                {processingJob.generationStatus === "FAILED" && processingJob.generationError && (
+                  <p className="mt-1 text-[10px] text-[var(--negative-deep)]">{processingJob.generationError}</p>
+                )}
+                {processingJob.generationStatus === "SUCCEEDED" && (
+                  <p className="mt-1 text-[10px] text-[var(--positive-deep)]">Model generated successfully. Refresh to see it.</p>
                 )}
               </div>
-            </section>
-
-            <div className="bg-[var(--warning)]/15 border border-[var(--warning)]/40 rounded-xl p-4 flex gap-3 items-start">
-              <Clock className="w-5 h-5 text-[var(--warning-deep)] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-[var(--warning-content)]">Awaiting production</p>
-                <p className="text-[11px] text-[var(--warning-content)] mt-1">Your project is in the production queue. You will be notified when the 3D model is ready for your review.</p>
-              </div>
-            </div>
+            )}
+            <SectionCard>
+              <SectionHeading
+                icon={BoxIcon}
+                iconClassName="bg-[var(--surface-sky)] text-[var(--surface-sky-deep)]"
+              >
+                Project Details
+              </SectionHeading>
+              <MetaGrid>
+                <MetaItem label="Name">{processingJob.name}</MetaItem>
+                <MetaItem label="SKU">{getSku(processingJob)}</MetaItem>
+                <MetaItem label="Brand">{processingJob.brand?.name || "Unknown"}</MetaItem>
+                <MetaItem label="Created">{getCreatedDate(processingJob)}</MetaItem>
+              </MetaGrid>
+              {processingJob.instructions && (
+                <div className="mt-4">
+                  <span className="mb-1 block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Additional Instructions</span>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">{processingJob.instructions}</p>
+                </div>
+              )}
+            </SectionCard>
+            <DimensionTiles dims={getDimensions(processingJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <SectionCard>
+              <SectionHeading
+                icon={ImageIcon}
+                iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]"
+              >
+                Reference Images
+              </SectionHeading>
+              <ReferenceGrid assets={getReferenceAssets(processingJob)} failed={failedRefImages} onFail={markFailed} onPreview={setLightboxUrl} />
+            </SectionCard>
           </div>
         )}
-      </Modal>
+      </TaskDrawer>
 
-      <Modal
-        isOpen={!!revisionsJob}
-        onClose={() => {
-          setRevisionsJob(null);
-          setRequestChangesNote('');
-          setShowRequestChangesForm(false);
-        }}
-        title={revisionsJob ? `Awaiting Revisions: ${revisionsJob.name}` : ''}
-        description={revisionsJob ? `${getSku(revisionsJob)} • Revisions in progress` : ''}
-        size="lg"
-        variant="dialog"
+      {/* ── Revisions drawer (REVISIONS) ────────────────── */}
+      <TaskDrawer
+        open={!!revisionsJob}
+        onClose={() => { setRevisionsJob(null); setRequestChangesNote(''); setShowRequestChangesForm(false); }}
+        title={revisionsJob ? revisionsJob.name : ""}
+        subtitle={revisionsJob ? `${revisionsJob.id} · ${getSku(revisionsJob)}` : ""}
+        badge={revisionsJob ? <Badge tone="warning" icon={<MessageSquareWarning className="w-3 h-3" aria-hidden="true" />}>{labelFor("REVISIONS")}</Badge> : undefined}
       >
         {revisionsJob && (
-          <div className="space-y-6">
-            <div className="bg-[var(--warning)]/15 border border-[var(--warning)]/40 rounded-xl p-4 flex gap-3 items-start">
-              <MessageSquareWarning className="w-5 h-5 text-[var(--warning-deep)] shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-[var(--warning-content)]">Production team is making changes</p>
-                <p className="text-[11px] text-[var(--warning-content)] mt-1">You will be notified when the updated model is ready for your review.</p>
-              </div>
-            </div>
+          <div className="space-y-4">
+            <StatusBanner status="REVISIONS" />
+            {(revisionsJob.revisionRequests?.length ?? 0) > 0 && (
+              <RevisionNotesCard items={revisionsJob.revisionRequests ?? []} />
+            )}
+            <SectionCard>
+              <SectionHeading
+                icon={ImageIcon}
+                iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]"
+              >
+                Reference Images
+              </SectionHeading>
+              <ReferenceGrid assets={getReferenceAssets(revisionsJob)} failed={failedRefImages} onFail={markFailed} onPreview={setLightboxUrl} />
+            </SectionCard>
+          </div>
+        )}
+      </TaskDrawer>
 
-            {revisionsJob.revisionRequests && revisionsJob.revisionRequests.length > 0 && (
-              <section>
-                <h3 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] mb-4 flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                  <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Your Revision Notes
-                </h3>
-                <div className="space-y-3">
-                  {revisionsJob.revisionRequests.map((req) => (
-                    <div key={req.id} className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-xl p-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)]">You</span>
-                        <span className="text-[9px] text-[var(--color-text-muted)] font-sans">
-                          {new Date(req.createdAt).toLocaleString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{req.note}</p>
-                    </div>
-                  ))}
+      {/* ── Review drawer (COMPLETED) ───────────────────── */}
+      <TaskDrawer
+        open={!!reviewJob}
+        onClose={() => { setReviewJob(null); setRequestChangesNote(''); setShowRequestChangesForm(false); }}
+        title={reviewJob ? reviewJob.name : ""}
+        subtitle={reviewJob ? `${reviewJob.id} · ${getSku(reviewJob)}` : ""}
+        badge={reviewJob ? <Badge tone="success" icon={<Eye className="w-3 h-3" aria-hidden="true" />}>{labelFor("COMPLETED")}</Badge> : undefined}
+        footer={reviewJob && role !== "ADMIN" ? (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="tertiary" onClick={() => setShowRequestChangesForm((v) => !v)} leftIcon={<Edit3 className="w-4 h-4" aria-hidden="true" />} className="flex-1">
+              Request Changes
+            </Button>
+            <Button onClick={() => reviewJob && publishJob(reviewJob.id)} isLoading={isPublishing} leftIcon={<Check className="w-4 h-4" aria-hidden="true" />} className="flex-1">
+              Approve & Publish
+            </Button>
+          </div>
+        ) : undefined}
+      >
+        {reviewJob && (
+          <div className="space-y-4">
+            {actionError && (
+              <div role="alert" className="rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-4 py-3 text-sm text-[var(--negative-deep)]">
+                {actionError}
+              </div>
+            )}
+            <StatusBanner status="COMPLETED" />
+            <section aria-label="3D model preview">
+              {reviewViewerProduct ? (
+                <>
+                  <ThreeDConfigurator
+                    key="review-viewer"
+                    product={reviewViewerProduct}
+                    heightClassName="relative w-full h-[340px] min-h-0 sm:h-[420px]"
+                  />
+                  {(() => {
+                    const updated = getLatestModelUpdatedAt(reviewJob);
+                    if (!updated) return null;
+                    return (
+                      <p className="mt-2 text-center font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                        Model last updated {formatRelativeShort(updated)}
+                      </p>
+                    );
+                  })()}
+                </>
+              ) : (
+                <SectionCard>
+                  <div className="flex items-center justify-center py-10 text-sm text-[var(--color-text-muted)]">
+                    No GLB asset is available for review.
+                  </div>
+                </SectionCard>
+              )}
+            </section>
+            <SectionCard>
+              <SectionHeading
+                icon={BoxIcon}
+                iconClassName="bg-[var(--surface-sky)] text-[var(--surface-sky-deep)]"
+              >
+                Project Details
+              </SectionHeading>
+              <MetaGrid>
+                <MetaItem label="Name">{reviewJob.name}</MetaItem>
+                <MetaItem label="SKU">{getSku(reviewJob)}</MetaItem>
+                <MetaItem label="Created">{getCreatedDate(reviewJob)}</MetaItem>
+                <MetaItem label="Brand">{reviewJob.brand?.name || "Unknown"}</MetaItem>
+              </MetaGrid>
+              {reviewJob.instructions && (
+                <div className="mt-4">
+                  <span className="mb-1 block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Additional Instructions</span>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">{reviewJob.instructions}</p>
                 </div>
-              </section>
+              )}
+            </SectionCard>
+            <DimensionTiles dims={getDimensions(reviewJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <SectionCard>
+              <SectionHeading
+                icon={ImageIcon}
+                iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]"
+              >
+                Reference Images
+              </SectionHeading>
+              <ReferenceGrid assets={getReferenceAssets(reviewJob)} failed={failedRefImages} onFail={markFailed} onPreview={setLightboxUrl} columns={2} />
+            </SectionCard>
+            {role !== "ADMIN" && showRequestChangesForm && (
+              <SectionCard>
+                <h4 className="flex items-center gap-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)]">
+                  <Edit3 className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" /> Request Changes
+                </h4>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--color-text-muted)]">Describe what should be changed. Your note will be sent to the production team.</p>
+                <textarea
+                  value={requestChangesNote}
+                  onChange={(e) => setRequestChangesNote(e.target.value)}
+                  placeholder="e.g. The cushion is too thin — please increase the height by ~3cm."
+                  className="textarea-base mt-3 h-28 w-full resize-none"
+                />
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => { setShowRequestChangesForm(false); setRequestChangesNote(''); }}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => reviewJob && sendForRevisions(reviewJob.id)} isLoading={isRequestingChanges} disabled={!requestChangesNote.trim()} leftIcon={<Check className="w-4 h-4" aria-hidden="true" />}>
+                    Send Request
+                  </Button>
+                </div>
+              </SectionCard>
             )}
           </div>
         )}
-      </Modal>
+      </TaskDrawer>
 
-      <Modal
-        isOpen={!!reviewJob}
-        onClose={() => {
-          setReviewJob(null);
-          setRequestChangesNote('');
-          setShowRequestChangesForm(false);
-        }}
-        title={reviewJob ? `Review: ${reviewJob.name}` : ''}
-        description={reviewJob ? `${getSku(reviewJob)} • Awaiting your review` : ''}
-        size="full"
-        variant="takeover"
-        headerAction={
-          role !== "ADMIN" ? (
-            <div className="flex items-center gap-2">
-              <Button
-                variant="tertiary"
-                onClick={() => setShowRequestChangesForm((v) => !v)}
-                leftIcon={<Edit3 className="w-4 h-4" />}
-              >
-                Request Changes
-              </Button>
-              <Button
-                onClick={() => reviewJob && publishJob(reviewJob.id)}
-                isLoading={isPublishing}
-                leftIcon={<Check className="w-4 h-4" />}
-              >
-                Approve & Publish
-              </Button>
-            </div>
-          ) : undefined
-        }
+      {/* ── Published drawer (PUBLISHED) ────────────────── */}
+      <TaskDrawer
+        open={!!publishedJob}
+        onClose={() => { setPublishedJob(null); setRequestChangesNote(''); setShowRequestChangesForm(false); }}
+        title={publishedJob?.name ?? ""}
+        subtitle={publishedJob ? `${publishedJob.id} · ${getSku(publishedJob)}` : ""}
+        badge={publishedJob ? <Badge tone="success" icon={<CheckCircle2 className="w-3 h-3" aria-hidden="true" />}>{labelFor("PUBLISHED")}</Badge> : undefined}
+        footer={publishedJob && role !== "ADMIN" ? (
+          <Button variant="tertiary" onClick={() => setShowRequestChangesForm((v) => !v)} leftIcon={<Edit3 className="w-4 h-4" aria-hidden="true" />} className="w-full">
+            Send for Revisions
+          </Button>
+        ) : undefined}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] h-full min-h-0">
-          {reviewJob && (
-            <aside className="border-r border-[var(--color-border-default)] overflow-y-auto px-6 py-5 space-y-5 bg-[var(--color-canvas)]">
-              <h3 className="text-[10px] font-sans uppercase tracking-widest font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
-              </h3>
-
-              {actionError && (
-                <div role="alert" className="bg-[var(--negative)]/10 border border-[var(--negative)]/40 text-[var(--negative-deep)] text-sm rounded-xl px-4 py-3">
-                  {actionError}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
-                  <p className="font-medium text-[var(--color-text-primary)]">{reviewJob.name}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">SKU</span>
-                  <p className="font-sans text-[var(--color-text-primary)]">{getSku(reviewJob)}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Created</span>
-                  <p className="text-[var(--color-text-primary)]">{getCreatedDate(reviewJob)}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Brand</span>
-                  <p className="text-[var(--color-text-primary)]">{reviewJob.brand?.name || 'Unknown'}</p>
-                </div>
+        {publishedJob && (
+          <div className="space-y-4">
+            {actionError && (
+              <div role="alert" className="rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-4 py-3 text-sm text-[var(--negative-deep)]">
+                {actionError}
               </div>
-
-              {reviewJob.instructions && (
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Additional Instructions</span>
-                  <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{reviewJob.instructions}</p>
-                </div>
-              )}
-
-              {(() => {
-                const dims = getDimensions(reviewJob);
-                const unit = dims.unit || 'cm';
-                return (
-                  <div>
-                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Physical Dimensions</span>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">W</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.width ?? '-'} {unit}</p>
-                      </div>
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">H</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.height ?? '-'} {unit}</p>
-                      </div>
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">D</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div>
-                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Reference Images</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {(reviewJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index) => (
-                    failedRefImages.has(asset.id) ? (
-                      <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center" title="Image unavailable">
-                        <ImageIcon className="w-5 h-5 text-[var(--color-text-muted)]" />
-                      </div>
-                    ) : (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
-                        className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
-                      >
-                        <Image
-                          src={`/api/v1/assets/${asset.id}/file`}
-                          alt={`Ref ${index + 1}`}
-                          fill
-                          sizes="200px"
-                          className="object-cover opacity-80 mix-blend-multiply"
-                          onError={() => setFailedRefImages((prev) => { const next = new Set(prev); next.add(asset.id); return next; })}
-                        />
-                      </button>
-                    )
-                  ))}
-                  {(!reviewJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                    <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center">
-                      <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {role !== "ADMIN" && showRequestChangesForm && (
-                <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-3">
-                  <div>
-                    <h4 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                      <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Request Changes
-                    </h4>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-2">Describe what should be changed. Your note will be sent to the production team.</p>
-                  </div>
-                  <textarea
-                    value={requestChangesNote}
-                    onChange={(e) => setRequestChangesNote(e.target.value)}
-                    placeholder="e.g. The cushion is too thin — please increase the height by ~3cm."
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-28"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setShowRequestChangesForm(false);
-                        setRequestChangesNote('');
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => reviewJob && sendForRevisions(reviewJob.id)}
-                      isLoading={isRequestingChanges}
-                      disabled={!requestChangesNote.trim()}
-                      leftIcon={<Check className="w-4 h-4" />}
-                    >
-                      Send Request
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </aside>
-          )}
-
-          <main className="overflow-y-auto bg-[var(--color-canvas)] min-h-0">
-            {reviewViewerProduct ? (
-              <>
-                <ThreeDConfigurator key="review-viewer" product={reviewViewerProduct} />
-                {reviewJob && (() => {
-                  const updated = getLatestModelUpdatedAt(reviewJob);
-                  if (!updated) return null;
-                  return (
-                    <p className="px-4 py-2 text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] text-center border-t border-[var(--color-border-default)]">
-                      Model last updated {formatRelativeShort(updated)}
-                    </p>
-                  );
-                })()}
-              </>
-            ) : (
-              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for review.</div>
             )}
-          </main>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={!!publishedJob}
-        onClose={() => {
-          setPublishedJob(null);
-          setRequestChangesNote('');
-          setShowRequestChangesForm(false);
-        }}
-        title={publishedJob?.name || ''}
-        description={publishedJob ? `${getSku(publishedJob)} • Published` : ''}
-        size="full"
-        variant="takeover"
-        headerAction={
-          role !== "ADMIN" ? (
-            <Button
-              variant="tertiary"
-              onClick={() => setShowRequestChangesForm((v) => !v)}
-              leftIcon={<Edit3 className="w-4 h-4" />}
-            >
-              Send for Revisions
-            </Button>
-          ) : undefined
-        }
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-[420px_1fr] h-full min-h-0">
-          {publishedJob && (
-            <aside className="border-r border-[var(--color-border-default)] overflow-y-auto px-6 py-5 space-y-5 bg-[var(--color-canvas)]">
-              <h3 className="text-[10px] font-sans uppercase tracking-widest font-bold text-[var(--color-text-primary)] flex items-center gap-2">
-                <BoxIcon className="w-4 h-4 text-[var(--color-text-muted)]" /> Project Details
-              </h3>
-
-              {actionError && (
-                <div role="alert" className="bg-[var(--negative)]/10 border border-[var(--negative)]/40 text-[var(--negative-deep)] text-sm rounded-xl px-4 py-3">
-                  {actionError}
-                </div>
+            <StatusBanner status="PUBLISHED" />
+            <section aria-label="3D model preview">
+              {publishedViewerProduct ? (
+                <>
+                  <ThreeDConfigurator
+                    key="published-viewer"
+                    product={publishedViewerProduct}
+                    heightClassName="relative w-full h-[340px] min-h-0 sm:h-[420px]"
+                  />
+                  {(() => {
+                    const updated = getLatestModelUpdatedAt(publishedJob);
+                    if (!updated) return null;
+                    return (
+                      <p className="mt-2 text-center font-sans text-[11px] uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+                        Model last updated {formatRelativeShort(updated)}
+                      </p>
+                    );
+                  })()}
+                </>
+              ) : (
+                <SectionCard>
+                  <div className="flex items-center justify-center py-10 text-sm text-[var(--color-text-muted)]">
+                    No GLB asset is available for this project.
+                  </div>
+                </SectionCard>
               )}
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Name</span>
-                  <p className="font-medium text-[var(--color-text-primary)]">{publishedJob.name}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">SKU</span>
-                  <p className="font-sans text-[var(--color-text-primary)]">{getSku(publishedJob)}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Created</span>
-                  <p className="text-[var(--color-text-primary)]">{getCreatedDate(publishedJob)}</p>
-                </div>
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Brand</span>
-                  <p className="text-[var(--color-text-primary)]">{publishedJob.brand?.name || 'Unknown'}</p>
-                </div>
-              </div>
-
+            </section>
+            <SectionCard>
+              <SectionHeading
+                icon={BoxIcon}
+                iconClassName="bg-[var(--surface-sky)] text-[var(--surface-sky-deep)]"
+              >
+                Project Details
+              </SectionHeading>
+              <MetaGrid>
+                <MetaItem label="Name">{publishedJob.name}</MetaItem>
+                <MetaItem label="SKU">{getSku(publishedJob)}</MetaItem>
+                <MetaItem label="Created">{getCreatedDate(publishedJob)}</MetaItem>
+                <MetaItem label="Brand">{publishedJob.brand?.name || "Unknown"}</MetaItem>
+              </MetaGrid>
               {publishedJob.instructions && (
-                <div>
-                  <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-1">Additional Instructions</span>
-                  <p className="text-sm text-[var(--color-text-primary)] whitespace-pre-wrap leading-relaxed">{publishedJob.instructions}</p>
+                <div className="mt-4">
+                  <span className="mb-1 block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">Additional Instructions</span>
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">{publishedJob.instructions}</p>
                 </div>
               )}
-
-              {(() => {
-                const dims = getDimensions(publishedJob);
-                const unit = dims.unit || 'cm';
-                return (
-                  <div>
-                    <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Physical Dimensions</span>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">W</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.width ?? '-'} {unit}</p>
-                      </div>
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">H</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.height ?? '-'} {unit}</p>
-                      </div>
-                      <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] p-2.5 rounded-xl text-center">
-                        <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)]">D</span>
-                        <p className="text-sm font-sans text-[var(--color-text-primary)]">{dims.depth ?? dims.length ?? '-'} {unit}</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              <div>
-                <span className="block text-[10px] font-sans uppercase tracking-[0.15em] text-[var(--color-text-muted)] mb-2">Reference Images</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {(publishedJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE') || []).map((asset, index) => (
-                    failedRefImages.has(asset.id) ? (
-                      <div key={asset.id} className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center" title="Image unavailable">
-                        <ImageIcon className="w-5 h-5 text-[var(--color-text-muted)]" />
-                      </div>
-                    ) : (
-                      <button
-                        key={asset.id}
-                        type="button"
-                        onClick={() => setLightboxUrl(`/api/v1/assets/${asset.id}/file`)}
-                        className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square relative cursor-zoom-in hover:border-[var(--color-text-primary)] transition-colors"
-                      >
-                        <Image
-                          src={`/api/v1/assets/${asset.id}/file`}
-                          alt={`Ref ${index + 1}`}
-                          fill
-                          sizes="200px"
-                          className="object-cover opacity-80 mix-blend-multiply"
-                          onError={() => setFailedRefImages((prev) => { const next = new Set(prev); next.add(asset.id); return next; })}
-                        />
-                      </button>
-                    )
-                  ))}
-                  {(!publishedJob.assets?.filter((a) => a.type === 'REFERENCE_IMAGE').length) && (
-                    <div className="border border-[var(--color-border-default)] rounded-xl overflow-hidden bg-[var(--color-canvas)] aspect-square flex items-center justify-center">
-                      <BoxIcon className="w-6 h-6 text-[var(--color-border-default)]" />
-                    </div>
-                  )}
+            </SectionCard>
+            <DimensionTiles dims={getDimensions(publishedJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <SectionCard>
+              <SectionHeading
+                icon={ImageIcon}
+                iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]"
+              >
+                Reference Images
+              </SectionHeading>
+              <ReferenceGrid assets={getReferenceAssets(publishedJob)} failed={failedRefImages} onFail={markFailed} onPreview={setLightboxUrl} columns={2} />
+            </SectionCard>
+            {role !== "ADMIN" && showRequestChangesForm && (
+              <SectionCard>
+                <h4 className="flex items-center gap-2 font-sans text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--color-text-primary)]">
+                  <Edit3 className="h-4 w-4 text-[var(--color-text-muted)]" aria-hidden="true" /> Send for Revisions
+                </h4>
+                <p className="mt-2 text-xs leading-relaxed text-[var(--color-text-muted)]">This will remove the model from your live embed. The production team will make the requested changes and resubmit.</p>
+                <textarea
+                  value={requestChangesNote}
+                  onChange={(e) => setRequestChangesNote(e.target.value)}
+                  placeholder="e.g. The handle is positioned too low — please adjust by 2cm."
+                  className="textarea-base mt-3 h-28 w-full resize-none"
+                />
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button variant="ghost" onClick={() => { setShowRequestChangesForm(false); setRequestChangesNote(''); }}>
+                    Cancel
+                  </Button>
+                  <Button onClick={() => sendForRevisions(publishedJob.id)} isLoading={isRequestingChanges} disabled={!requestChangesNote.trim()} leftIcon={<Check className="w-4 h-4" aria-hidden="true" />}>
+                    Send Request
+                  </Button>
                 </div>
-              </div>
-
-              {role !== "ADMIN" && showRequestChangesForm && (
-                <div className="bg-[var(--color-canvas)] border border-[var(--color-border-default)] rounded-2xl p-5 space-y-3">
-                  <div>
-                    <h4 className="text-sm uppercase tracking-widest font-sans font-bold text-[var(--color-text-primary)] flex items-center gap-2 border-b border-[var(--color-border-default)] pb-2">
-                      <Edit3 className="w-4 h-4 text-[var(--color-text-muted)]" /> Send for Revisions
-                    </h4>
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-2">This will remove the model from your live embed. The production team will make the requested changes and resubmit.</p>
-                  </div>
-                  <textarea
-                    value={requestChangesNote}
-                    onChange={(e) => setRequestChangesNote(e.target.value)}
-                    placeholder="e.g. The handle is positioned too low — please adjust by 2cm."
-                    className="input-base w-full px-4 py-3 rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] focus:border-[var(--color-text-primary)] focus:ring-1 focus:ring-[var(--color-text-primary)] outline-none transition-colors text-sm font-sans resize-none h-28"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        setShowRequestChangesForm(false);
-                        setRequestChangesNote('');
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={() => sendForRevisions(publishedJob.id)}
-                      isLoading={isRequestingChanges}
-                      disabled={!requestChangesNote.trim()}
-                      leftIcon={<Check className="w-4 h-4" />}
-                    >
-                      Send Request
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </aside>
-          )}
-
-          <main className="overflow-y-auto bg-[var(--color-canvas)] min-h-0">
-            {publishedViewerProduct ? (
-              <>
-                <ThreeDConfigurator key="published-viewer" product={publishedViewerProduct} />
-                {publishedJob && (() => {
-                  const updated = getLatestModelUpdatedAt(publishedJob);
-                  if (!updated) return null;
-                  return (
-                    <p className="px-4 py-2 text-[10px] font-sans uppercase tracking-widest text-[var(--color-text-muted)] text-center border-t border-[var(--color-border-default)]">
-                      Model last updated {formatRelativeShort(updated)}
-                    </p>
-                  );
-                })()}
-              </>
-            ) : (
-              <div className="h-full w-full flex items-center justify-center p-12 text-sm text-[var(--color-text-muted)]">No GLB asset is available for this project.</div>
+              </SectionCard>
             )}
-          </main>
-        </div>
-      </Modal>
-
-      {lightboxUrl && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-8 cursor-zoom-out"
-          onClick={() => setLightboxUrl(null)}
-        >
-          <div className="relative max-w-4xl max-h-[90vh] w-full h-full">
-            <Image src={lightboxUrl} alt="Reference" fill sizes="(min-width: 1024px) 1024px, 100vw" unoptimized className="object-contain" />
           </div>
-        </div>
-      )}
+        )}
+      </TaskDrawer>
+
+      <Lightbox url={lightboxUrl} onClose={() => setLightboxUrl(null)} />
     </DashboardLayout>
   );
 }

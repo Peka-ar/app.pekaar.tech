@@ -110,6 +110,48 @@ async function main(): Promise<void> {
     encryption: true,
   });
 
+  // Ensure generation columns exist on the projects table.
+  const projectsTableId = "projects";
+  const generationColumns = [
+    { key: "generationMode", type: "string" as const, config: { size: 20, required: false } },
+    { key: "generationStatus", type: "string" as const, config: { size: 20, required: false } },
+    { key: "generationJobId", type: "string" as const, config: { size: 255, required: false } },
+    { key: "generationRunId", type: "string" as const, config: { size: 255, required: false } },
+    { key: "generationAssetId", type: "string" as const, config: { size: 36, required: false } },
+    { key: "generationError", type: "string" as const, config: { size: 2000, required: false } },
+    { key: "generationViews", type: "string" as const, config: { size: 2000, required: false } },
+    { key: "generationStartedAt", type: "string" as const, config: { size: 30, required: false } },
+    { key: "generationCompletedAt", type: "string" as const, config: { size: 30, required: false } },
+  ];
+
+  try {
+    const existingCols = await tablesDB.listColumns({
+      databaseId: DATABASE_ID,
+      tableId: projectsTableId,
+    });
+    const existingKeys = new Set(existingCols.columns.map((c) => c.key));
+
+    for (const col of generationColumns) {
+      if (existingKeys.has(col.key)) continue;
+      try {
+        if (col.type === "string") {
+          await tablesDB.createStringColumn({
+            databaseId: DATABASE_ID,
+            tableId: projectsTableId,
+            key: col.key,
+            size: col.config.size,
+            required: col.config.required,
+          });
+        }
+        console.log(`[ensure-backend] created column ${col.key} on ${projectsTableId}`);
+      } catch (e) {
+        console.warn(`[ensure-backend] failed to create column ${col.key}: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    console.warn(`[ensure-backend] could not ensure generation columns: ${(e as Error).message}`);
+  }
+
   console.log("[ensure-backend] Done.");
 }
 

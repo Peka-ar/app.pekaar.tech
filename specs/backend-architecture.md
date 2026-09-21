@@ -83,6 +83,7 @@ Pure rule table `PROJECT_TRANSITIONS` + `canTransition(from, to, by)`, `allowedN
 ADMIN:  PENDING|REVISIONS  → COMPLETED
 BRAND:  COMPLETED          → PUBLISHED
 BRAND:  COMPLETED|PUBLISHED → REVISIONS
+SYSTEM: PENDING|REVISIONS  → COMPLETED  (Fast generation auto-flip)
 ```
 
 ## 6. Services (`src/server/services/`)
@@ -90,6 +91,7 @@ BRAND:  COMPLETED|PUBLISHED → REVISIONS
 | Service file                  | Exports                                                                 |
 |-------------------------------|-------------------------------------------------------------------------|
 | `project.service.ts`          | `createProjectService`, `brandPublishProjectService`, `brandSendForRevisionsService`, `getUserProjectsService`, `getAllTasksService`, `adminSubmitProjectService`, `listAppwriteModelAssetsForProject` |
+| `generation.service.ts`       | `startFastGeneration`, `pollAndFinalize`, `regenerateFastGeneration`, `finalizeStaleGenerations` |
 | `user-admin.service.ts`       | `adminGetUsersService`, `adminGetUserService`, `adminUpdateUserService`, `adminSetUserStatusService`, `adminDeleteUserService` |
 | `analytics.service.ts`        | `getProjectLivenessService`, `getPlatformKPIsService`, `getSignupsSeriesService`, `getProjectsByMonthService`, `getTopBrandsService` |
 | `notification.service.ts`     | `getRecentProjectActivity`                                             |
@@ -140,6 +142,7 @@ Publish semantics (unchanged from prior behavior, now centralized):
    - Legacy `AssetStatus.PUBLISHED` rows are treated as public-capable (matching the file-proxy route's viewable statuses).
 2. `pruneRateLimitRows(olderThanMs = 48h)` — deletes `rate_limits` rows whose `windowStart` is older than 48h. Batched: `listRows` (limit 100, `Query.select(["remaining"])`) → `deleteRows` by `$id` chunk, loop until empty (Appwrite bulk-op plan limit is 100 rows/request on Free, 1000 on Pro).
 3. `pruneAnalyticsEvents(olderThanMs = 90d)` — same batching over `analytics_events` filtered by `$createdAt` (`Query.select(["eventType"])`).
+4. `finalizeStaleGenerations()` — finds all projects in RUNNING/SUBMITTED status (Fast mode), polls/finalizes each via Modal API. Idempotent — safe to run nightly as a safety net.
 
 Response: `200 { ok: true, storage: {...}, rateLimitsDeleted, analyticsEventsDeleted }`. All work is logged via `logger`.
 
@@ -171,8 +174,12 @@ Pure helpers `hasPublicRead` and `shouldModelAssetBePublic` are unit-tested (see
 | `logger` | `src/server/logging.ts` |
 | `getSessionPrincipal`, `requirePrincipal`, `requirePrincipalOrRedirect`, `Principal` | `src/server/auth-guards.ts` |
 | `setFilePublic`, `setFilePublicWithRetry` | `src/server/storage.ts` |
+| `buildManifest`, `findGlbPath`, `validateViews`, `MANIFEST_SCHEMA`, `MODEL_NAME` | `src/server/hunyuan/manifest.ts` |
+| `getHy3dConfig`, `submitJob`, `pollJob`, `downloadArtifact`, `withFailover`, `Hy3dNotConfiguredError`, `Hy3dSubmissionError`, `Hy3dTransientError`, `Hy3dExpiredError` | `src/server/hunyuan/client.ts` |
+| `startFastGeneration`, `pollAndFinalize`, `regenerateFastGeneration`, `finalizeStaleGenerations` | `src/server/services/generation.service.ts` |
 | `runMaintenance`, `reconcileStoragePermissions`, `pruneRateLimitRows`, `pruneAnalyticsEvents`, `hasPublicRead`, `shouldModelAssetBePublic` | `src/server/services/maintenance.service.ts` |
 | `GET /api/cron/maintenance` (Vercel Cron entrypoint) | `src/app/api/cron/maintenance/route.ts` |
+| `GET /api/v1/generation/[projectId]` (generation poll endpoint) | `src/app/api/v1/generation/[projectId]/route.ts` |
 | Project/user-admin/analytics/notification services | `src/server/services/*.service.ts` |
 | Thin action adapters | `src/app/actions/{project,admin,admin-users,admin-analytics,analytics,auth,record-asset}.ts` |
 | `ensure-backend` script | `scripts/ensure-backend.ts` |

@@ -26,7 +26,7 @@ export function TopNav() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
 
         <div className="flex items-center gap-2.5 sm:gap-4 overflow-hidden">
-          <Link href="/" className="flex items-center gap-2.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded-sm">
+          <Link href="/" aria-label="Peka AR home" className="flex items-center gap-2.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded-sm">
             <div className="w-8 h-8 rounded-full border border-[var(--color-text-primary)] flex items-center justify-center bg-transparent shrink-0">
               <Box className="w-4 h-4 text-[var(--color-text-primary)]" aria-hidden="true" />
             </div>
