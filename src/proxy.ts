@@ -12,6 +12,7 @@ const protectedRoutes = {
   "/notifications": ["BRAND", "ADMIN"],
   "/integrations": ["BRAND", "ADMIN"],
   "/analytics": ["BRAND", "ADMIN"],
+  "/billing": ["BRAND", "ADMIN"],
   "/admin": ["ADMIN"],
 };
 
@@ -44,5 +45,5 @@ export function proxy(request: NextRequest) {
 
 // Optionally, don't invoke Middleware on some paths
 export const config = {
-  matcher: ["/dashboard/:path*", "/tasks/:path*", "/notifications/:path*", "/integrations/:path*", "/analytics/:path*", "/admin/:path*", "/auth/:path*", "/onboarding/:path*", "/embed/:path*"],
+  matcher: ["/dashboard/:path*", "/tasks/:path*", "/notifications/:path*", "/integrations/:path*", "/analytics/:path*", "/billing/:path*", "/admin/:path*", "/auth/:path*", "/onboarding/:path*", "/embed/:path*"],
 };

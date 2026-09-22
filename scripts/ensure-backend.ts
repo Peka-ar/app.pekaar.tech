@@ -5,10 +5,12 @@ import {
   APPWRITE_DATABASE_ID,
   APPWRITE_MODELS_BUCKET_ID,
   APPWRITE_REFERENCE_IMAGES_BUCKET_ID,
+  APPWRITE_USERS_TABLE_ID,
 } from "../src/lib/appwrite-config";
 import { RATE_LIMITS_TABLE_ID } from "../src/server/http/rate-limit";
 
 const DATABASE_ID = APPWRITE_DATABASE_ID;
+const CONTACT_REQUESTS_TABLE_ID = "contact_requests";
 
 async function ensureTable(tablesDB: TablesDB, tableId: string, name: string) {
   try {
@@ -49,6 +51,30 @@ async function ensureTable(tablesDB: TablesDB, tableId: string, name: string) {
       size: 64,
       required: false,
     });
+    console.log(`[ensure-backend] seeded columns on ${tableId}`);
+  }
+
+  if (tableId === CONTACT_REQUESTS_TABLE_ID) {
+    const contactColumns = [
+      { key: "name", type: "string" as const, size: 120 },
+      { key: "email", type: "string" as const, size: 320 },
+      { key: "company", type: "string" as const, size: 160 },
+      { key: "message", type: "string" as const, size: 2000 },
+      { key: "interestedTier", type: "string" as const, size: 20 },
+      { key: "status", type: "string" as const, size: 20 },
+      { key: "sourceIp", type: "string" as const, size: 64 },
+    ];
+    for (const col of contactColumns) {
+      if (col.type === "string") {
+        await tablesDB.createStringColumn({
+          databaseId: DATABASE_ID,
+          tableId,
+          key: col.key,
+          size: col.size,
+          required: false,
+        });
+      }
+    }
     console.log(`[ensure-backend] seeded columns on ${tableId}`);
   }
 }
@@ -150,6 +176,50 @@ async function main(): Promise<void> {
     }
   } catch (e) {
     console.warn(`[ensure-backend] could not ensure generation columns: ${(e as Error).message}`);
+  }
+
+  // Ensure contact_requests table exists with its columns.
+  await ensureTable(tablesDB, CONTACT_REQUESTS_TABLE_ID, "Contact Requests");
+
+  // Ensure subscription columns exist on the users table.
+  const subscriptionColumns = [
+    { key: "creditsRenewedAt", type: "datetime" as const },
+    { key: "monthlyCreditOverride", type: "integer" as const },
+  ];
+
+  try {
+    const existingUserCols = await tablesDB.listColumns({
+      databaseId: DATABASE_ID,
+      tableId: APPWRITE_USERS_TABLE_ID,
+    });
+    const existingUserKeys = new Set(existingUserCols.columns.map((c) => c.key));
+
+    for (const col of subscriptionColumns) {
+      if (existingUserKeys.has(col.key)) continue;
+      try {
+        if (col.type === "datetime") {
+          await tablesDB.createDatetimeColumn({
+            databaseId: DATABASE_ID,
+            tableId: APPWRITE_USERS_TABLE_ID,
+            key: col.key,
+            required: false,
+          });
+        } else if (col.type === "integer") {
+          await tablesDB.createIntegerColumn({
+            databaseId: DATABASE_ID,
+            tableId: APPWRITE_USERS_TABLE_ID,
+            key: col.key,
+            required: false,
+            min: 0,
+          });
+        }
+        console.log(`[ensure-backend] created column ${col.key} on users`);
+      } catch (e) {
+        console.warn(`[ensure-backend] failed to create column ${col.key}: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    console.warn(`[ensure-backend] could not ensure subscription columns: ${(e as Error).message}`);
   }
 
   console.log("[ensure-backend] Done.");

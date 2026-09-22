@@ -61,6 +61,31 @@ export const GenerationStatus = {
 } as const;
 export type GenerationStatus = (typeof GenerationStatus)[keyof typeof GenerationStatus];
 
+/** Subscription tier controlling monthly credit grants. */
+export const SubscriptionTier = {
+  FREE: "FREE",
+  PREMIUM: "PREMIUM",
+  BUSINESS: "BUSINESS",
+  ENTERPRISE: "ENTERPRISE",
+} as const;
+export type SubscriptionTier = (typeof SubscriptionTier)[keyof typeof SubscriptionTier];
+
+/** Monthly credit grant for each subscription tier. */
+export const TIER_MONTHLY_CREDITS: Record<SubscriptionTier, number> = {
+  [SubscriptionTier.FREE]: 6,
+  [SubscriptionTier.PREMIUM]: 50,
+  [SubscriptionTier.BUSINESS]: 100,
+  [SubscriptionTier.ENTERPRISE]: 0, // Override via monthlyCreditOverride
+};
+
+/** Contact request status for the admin inbox. */
+export const ContactRequestStatus = {
+  NEW: "NEW",
+  CONTACTED: "CONTACTED",
+  RESOLVED: "RESOLVED",
+} as const;
+export type ContactRequestStatus = (typeof ContactRequestStatus)[keyof typeof ContactRequestStatus];
+
 /** Tagged reference angles accepted by the Hunyuan3D multiview pipeline. */
 export const ReferenceView = {
   FRONT: "front",

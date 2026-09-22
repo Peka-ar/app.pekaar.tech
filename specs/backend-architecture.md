@@ -96,6 +96,7 @@ SYSTEM: PENDING|REVISIONS  → COMPLETED  (Fast generation auto-flip)
 | `analytics.service.ts`        | `getProjectLivenessService`, `getPlatformKPIsService`, `getSignupsSeriesService`, `getProjectsByMonthService`, `getTopBrandsService` |
 | `notification.service.ts`     | `getRecentProjectActivity`                                             |
 | `maintenance.service.ts`      | `runMaintenance`, `reconcileStoragePermissions`, `pruneRateLimitRows`, `pruneAnalyticsEvents`, pure helpers `hasPublicRead`, `shouldModelAssetBePublic` |
+| `subscription.service.ts`     | `getSubscriptionOverviewService`, `adminSetUserTierService`, `renewMonthlyCredits`, `submitContactRequestService`, `adminListContactRequestsService`, `adminUpdateContactRequestService`, `adminDeleteContactRequestService` |
 
 Storage permission helpers live in `src/server/storage.ts` (not a `services/` file): `setFilePublic`, `setFilePublicWithRetry` (3 attempts, 250ms exp backoff). Consumed by `project.service.ts` (publish fail-closed grant / unpublish revoke), `src/app/actions/project.ts`, and `maintenance.service.ts`.
 
@@ -143,8 +144,9 @@ Publish semantics (unchanged from prior behavior, now centralized):
 2. `pruneRateLimitRows(olderThanMs = 48h)` — deletes `rate_limits` rows whose `windowStart` is older than 48h. Batched: `listRows` (limit 100, `Query.select(["remaining"])`) → `deleteRows` by `$id` chunk, loop until empty (Appwrite bulk-op plan limit is 100 rows/request on Free, 1000 on Pro).
 3. `pruneAnalyticsEvents(olderThanMs = 90d)` — same batching over `analytics_events` filtered by `$createdAt` (`Query.select(["eventType"])`).
 4. `finalizeStaleGenerations()` — finds all projects in RUNNING/SUBMITTED status (Fast mode), polls/finalizes each via Modal API. Idempotent — safe to run nightly as a safety net.
+5. `renewMonthlyCredits()` — rolling 30-day credit renewal for BRAND users. Sets `usageLimits = monthlyCreditOverride ?? TIER_CREDITS[tier]` when 30d elapsed since `creditsRenewedAt`. Initializes null `creditsRenewedAt` to now (grace). Skips ADMIN. Dynamic import to avoid test-breaking auth chain.
 
-Response: `200 { ok: true, storage: {...}, rateLimitsDeleted, analyticsEventsDeleted }`. All work is logged via `logger`.
+Response: `200 { ok: true, storage: {...}, rateLimitsDeleted, analyticsEventsDeleted, creditsRenewed }`. All work is logged via `logger`.
 
 Pure helpers `hasPublicRead` and `shouldModelAssetBePublic` are unit-tested (see §10).
 

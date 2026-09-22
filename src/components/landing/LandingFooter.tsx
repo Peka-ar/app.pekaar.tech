@@ -17,8 +17,10 @@ const COLUMNS = [
   {
     title: "Get started",
     links: [
-      { label: "Book a demo call", href: "/auth" },
+      { label: "Pricing", href: "/pricing" },
+      { label: "Sign up", href: "/auth?view=signup" },
       { label: "Sign in", href: "/auth" },
+      { label: "Contact us", href: "/contact" },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
     ],

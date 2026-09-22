@@ -19,7 +19,7 @@ const ROWS = [
   {
     icon: CalendarCheck,
     title: "What happens next",
-    body: "Book a demo call, send photos, and see your product live in 3D within hours. Keep it if you love it — no commitment.",
+    body: "Sign up, send photos, and see your product live in 3D within hours. Keep it if you love it — no commitment.",
   },
 ] as const;
 
@@ -52,10 +52,10 @@ export default function PilotOfferBand() {
               </p>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link
-                  href="/auth"
+                  href="/auth?view=signup"
                   className="inline-flex items-center justify-center h-12 px-6 rounded-[24px] bg-[var(--accent)] text-[var(--on-accent)] text-[14px] font-semibold hover:bg-[var(--accent-active)] active:bg-[var(--accent-neutral)] active:scale-[0.98] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--on-forest)]"
                 >
-                  Book a demo call
+                  Sign up
                 </Link>
                 <a
                   href="#faq"

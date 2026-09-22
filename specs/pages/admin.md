@@ -13,6 +13,7 @@ The admin panel provides platform-wide management tools for ADMIN users. Four pa
 | `/admin/dashboard` | none (inline server component) | KPI cards, Projects by Status, signups bar chart, top 10 brands |
 | `/admin/users` | `AdminUsersClient.tsx` | User search/filter/list, detail drawer with role/status/limits management |
 | `/admin/tasks` | `AdminTasksClient.tsx` | All-project Kanban board, 3D upload + submit for review |
+| `/admin/requests` | `AdminRequestsClient.tsx` | Contact request inbox (NEW/CONTACTED/RESOLVED) |
 | `/admin/analytics` | none (inline server component) | Platform KPI cards, signups series, Projects by Status, Top Brands |
 
 All four routes are protected by `requirePrincipalOrRedirect()` in the server entry (admin pages pass `{ roles: [Role.ADMIN] }`); each server action calls `requirePrincipal({ roles: [Role.ADMIN] })`. **This is the only role gate** — the edge proxy cannot verify roles (see `../pages/auth.md` §Security properties).
@@ -39,7 +40,7 @@ No initial data server-side — `AdminUsersClient` loads on mount via `adminGetU
 - **Toolbar:** search (name/email, 300ms debounce), Role + Status filters, total count.
 - **Table:** Email, Name, Role, Status, Created (`formatDistanceToNow`), Usage Limits; rows clickable → detail drawer; pagination at 50/page. **Keyboard path:** the Email cell renders a real `<button>` (accessible name `View details for <email>`) that opens the same drawer — the `<tr>` itself is never focusable; pointer clicks on the rest of the row reuse the same handler.
 - **Detail modal:** header (email + status + suspension reason banner), info grid, stats cards (projects/assets/events counts), recent projects (last 5), and the actions card:
-  - Role update, Usage Limits update, Subscription Tier update → `adminUpdateUser`
+  - Role update, Usage Limits update, Subscription Tier update → `adminSetUserTier` (enum-validated, single path for tier+credits changes; free-text tier removed from `adminUpdateUser`)
   - Suspend (prompts for reason) / Activate → `adminSetUserStatus`
   - Delete → `adminDeleteUser`
 
@@ -98,6 +99,20 @@ Entirely an async server component (no client component): `getPlatformKPIs()` + 
 
 ---
 
+## 5. Contact Requests — `/admin/requests`
+
+No initial data server-side — `AdminRequestsClient` loads on mount via `adminListContactRequests()`.
+
+- **Toolbar:** status filter (All / NEW / CONTACTED / RESOLVED), total count, refresh button, Delete icon.
+- **Table:** Email, Name, Company, Interested Tier (badge), Status (badge), Created; rows clickable → expandable message row.
+- **Expandable row:** full message body + status transition buttons (NEW→CONTACTED, CONTACTED→RESOLVED). Current status is disabled.
+- **Delete:** clicking Delete shows a confirm checkbox row; confirm calls `adminDeleteContactRequest`.
+- **Actions:** all mutations return `ActionResult`; errors render inline; success refreshes the list + count.
+
+**Auth + rate limit** are on the authenticated `submitPlanRequest` action (session, 5/h/userId — `subscription-architecture.md` §6), not on admin reads.
+
+---
+
 ## Server actions
 
 Thin adapters over `src/server/services/*.service.ts`; full reference in `../WEBSITE.md` §8.
@@ -105,3 +120,4 @@ Thin adapters over `src/server/services/*.service.ts`; full reference in `../WEB
 - **`src/app/actions/admin.ts`** — `getAllTasks` (throws), `adminSubmitProject` → `ActionResult`
 - **`src/app/actions/admin-users.ts`** — `adminGetUsers`, `adminGetUser` (throws); `adminUpdateUser`, `adminSetUserStatus`, `adminDeleteUser` → `ActionResult`. `adminDeleteUser` runs an **explicit cascade transaction** (TablesDB has no FK cascades): deletes the user's projects, assets (owned ∪ linked), events, revision_requests, users row, and the Appwrite auth user.
 - **`src/app/actions/admin-analytics.ts`** — `getPlatformKPIs`, `getSignupsSeries`, `getProjectsByMonth`, `getTopBrands` (throws)
+- **`src/app/actions/subscription.ts`** — `adminSetUserTier`, `adminListContactRequests`, `adminUpdateContactRequest`, `adminDeleteContactRequest` → `ActionResult`

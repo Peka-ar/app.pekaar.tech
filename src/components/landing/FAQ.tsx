@@ -51,14 +51,14 @@ const ITEMS: FaqItem[] = [
           Shopify
         </a>
         ; IKEA reported a 35% drop in returns and a 14% increase in online sales after launching its AR placement
-        app. These are their reported results in size-critical categories — your demo call will cover what to
+        app. These are their reported results in size-critical categories — our team will cover what to
         expect for your products.
       </>
     ),
   },
   {
     q: "What does the free pilot include?",
-    a: "Your first product modeled free: artist-finished GLB plus USDZ, a live 3D embed for your storefront, and AR view-in-room. Book a demo call to start — if it doesn't impress you, you've lost nothing but a few photos.",
+    a: "Your first product modeled free: artist-finished GLB plus USDZ, a live 3D embed for your storefront, and AR view-in-room. Sign up to start — if it doesn't impress you, you've lost nothing but a few photos.",
   },
 ];
 

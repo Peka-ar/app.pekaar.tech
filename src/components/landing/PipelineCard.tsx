@@ -575,16 +575,16 @@ export default function PipelineCard() {
         <div className="flex items-center gap-2">
           {phase !== "done" ? (
             <Link
-              href="/auth"
+              href="/auth?view=signup"
               className="btn-primary flex-1 sm:flex-none inline-flex justify-center"
               style={{ height: 48 }}
             >
-              Book a demo call
+              Sign up
             </Link>
           ) : (
             <>
-              <Link href="/auth" className="btn-primary flex-1 justify-center">
-                Book a demo call
+              <Link href="/auth?view=signup" className="btn-primary flex-1 justify-center">
+                Sign up
               </Link>
               <button type="button" onClick={resetDemo} className="btn-secondary">
                 Replay

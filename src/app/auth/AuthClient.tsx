@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import SignInForm from "@/components/auth/SignInForm";
 import SignUpForm from "@/components/auth/SignUpForm";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
@@ -10,8 +11,14 @@ import { Wordmark } from "@/components/Wordmark";
 
 type AuthView = "signin" | "signup" | "forgot-password";
 
+const VALID_VIEWS: AuthView[] = ["signin", "signup", "forgot-password"];
+
 export default function AuthClient() {
-  const [view, setView] = useState<AuthView>("signin");
+  const searchParams = useSearchParams();
+  const initialView = searchParams.get("view");
+  const [view, setView] = useState<AuthView>(
+    VALID_VIEWS.includes(initialView as AuthView) ? (initialView as AuthView) : "signin",
+  );
 
   return (
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--text-primary)] flex flex-col lg:flex-row font-sans antialiased overflow-hidden">

@@ -22,11 +22,13 @@ export {
 export {
   AssetStatus,
   AssetType,
+  ContactRequestStatus,
   EventType,
   GenerationMode,
   GenerationStatus,
   ProjectStatus,
   ReferenceView,
+  SubscriptionTier,
   UserStatus,
 } from "@/lib/enums";
 
@@ -36,6 +38,8 @@ export type UsersRow = Models.Row & {
   role: string;
   subscriptionTier: string | null;
   usageLimits: number | null;
+  creditsRenewedAt: string | null;
+  monthlyCreditOverride: number | null;
   name: string | null;
   onboarded: boolean;
   productCategory: string | null;
@@ -92,6 +96,16 @@ export type AnalyticsEventRow = Models.Row & {
   brandId: string;
 };
 
+export type ContactRequestRow = Models.Row & {
+  name: string;
+  email: string;
+  company: string | null;
+  message: string;
+  interestedTier: string;
+  status: string;
+  sourceIp: string | null;
+};
+
 export const DB = {
   databaseId: APPWRITE_DATABASE_ID,
   users: APPWRITE_USERS_TABLE_ID,
@@ -99,6 +113,7 @@ export const DB = {
   assets: APPWRITE_ASSETS_TABLE_ID,
   revisionRequests: APPWRITE_REVISION_REQUESTS_TABLE_ID,
   analyticsEvents: APPWRITE_ANALYTICS_EVENTS_TABLE_ID,
+  contactRequests: "contact_requests",
 } as const;
 
 const globalForDb = globalThis as unknown as { tablesDB?: TablesDB };

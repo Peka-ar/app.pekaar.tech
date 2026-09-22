@@ -104,6 +104,8 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | Route | Auth | Summary |
 |---|---|---|
 | `/` | Public | Marketing landing — see `pages/landing.md` |
+| `/pricing` | Public | Pricing page: plan cards, benefits (with attributed proof), how-credits-work, included features, FAQ, final CTA; paid cards → `/billing` — `subscription-architecture.md` |
+| `/contact` | Public | Contact page: mailto `kaizen3242@gmail.com` + copy button — `subscription-architecture.md` |
 | `/terms` `/privacy` | Public | Static placeholder legal pages (replace before launch) |
 | `/auth` | Public (session → role-aware redirect) | 3-view form: signin / signup / forgot-password |
 | `/auth/verify` | Public | Email verification link (`?userId&secret` → `updateVerification`) |
@@ -114,9 +116,11 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | `/notifications` | BRAND/ADMIN | Recent projects + status table. **Role-aware shell** (`notifications/layout.tsx`): BRAND → own projects in the `DashboardLayout` shell; ADMIN → all recent platform projects in the `AdminLayout` shell. Reached from the brand sidebar and the admin sidebar's Notifications item |
 | `/integrations` | BRAND/ADMIN + onboarded | Platform directory, live iframe preview, embed-code snippet |
 | `/analytics` | BRAND/ADMIN + onboarded | `?range=7D\|30D\|ALL`; ADMIN=global, BRAND=scoped |
+| `/billing` | BRAND/ADMIN | Current plan, credits remaining, plan comparison with per-plan Contact us → plan-request popup — `subscription-architecture.md` |
 | `/admin/dashboard` | ADMIN | Platform KPIs, status table, signups chart, top brands — `pages/admin.md` |
 | `/admin/users` | ADMIN | User list + detail drawer with role/status/limits management |
 | `/admin/tasks` | ADMIN | All-project board, 3D upload + submit |
+| `/admin/requests` | ADMIN | Contact request inbox — `subscription-architecture.md` |
 | `/admin/analytics` | ADMIN | Platform KPI cards, signups series, top brands |
 | `/embed/[projectId]` | Public | Static HTML iframe viewer — `pages/embed.md` |
 
@@ -202,6 +206,12 @@ All `"use server"`, thin adapters over `src/server/services/*.service.ts` (layer
 | `getPlatformKPIs` / `getSignupsSeries` / `getProjectsByMonth` / `getTopBrands` | ADMIN | Platform aggregates for admin dashboard/analytics |
 | `getProjectLiveness` | session | Latest event per project → embed liveness badges |
 | `recordAssetUpload` | by type (REF → BRAND, MODELS → ADMIN) | Idempotent by `rowId = fileId`; ASSET_POLICY validation; creates READY `assets` row (§10) |
+| `submitPlanRequest` | session, rate-limited 5/h/userId | Billing plan-request popup → `contact_requests` row; `company` auto-injected from principal; zod |
+| `getSubscriptionOverview` | session | Billing page data: tier, credits, renewal date |
+| `adminSetUserTier` | ADMIN (not self) | Set user's subscription tier + monthly credits + renewal date |
+| `adminListContactRequests` | ADMIN | List contact requests (optional status filter) |
+| `adminUpdateContactRequest` | ADMIN | Update request status |
+| `adminDeleteContactRequest` | ADMIN | Delete contact request |
 
 **Never return a raw Appwrite row from a server action** — project to a plain object first (`Models.Row` metadata breaks Next.js Server→Client serialization).
 
@@ -213,12 +223,13 @@ Database `studiov` (id `studiov`); table ids in `src/lib/appwrite-config.ts`; ty
 
 **Row identity: `$id` is the canonical id everywhere** — users row `$id` == `userId` == Appwrite auth user id; assets row `$id` == storage fileId.
 
-- **`users`** — `$id`, `userId`, `email`, `role` (BRAND/ADMIN), `usageLimits` (Int, **remaining budget**), `name`, `onboarded`, `productCategory`, `storefrontPlatform`, `catalogSize`, `status` (ACTIVE/SUSPENDED), `suspendedAt`, `statusReason`, `emailVerified`. Indexes: email, role, status, `$createdAt`.
+- **`users`** — `$id`, `userId`, `email`, `role` (BRAND/ADMIN), `usageLimits` (Int, **remaining budget**), `subscriptionTier` (string, null→FREE), `creditsRenewedAt` (datetime), `monthlyCreditOverride` (Int, null), `name`, `onboarded`, `productCategory`, `storefrontPlatform`, `catalogSize`, `status` (ACTIVE/SUSPENDED), `suspendedAt`, `statusReason`, `emailVerified`. Indexes: email, role, status, `$createdAt`.
 - **`projects`** — `$id`, `name`, `sku`, `instructions`, `dimensions` (JSON string), `status` (PENDING/REVISIONS/COMPLETED/PUBLISHED), `sdkConfig` (JSON string, forward-compat — the embed uses hardcoded config), `brandId`. Indexes: brandId, status, `$createdAt`.
 - **`revision_requests`** — `$id`, `projectId`, `note`, `requestedBy`. One row per brand revision request.
 - **`assets`** — `$id` (= storage fileId), `projectId` (null until linked), `ownerId`, `type` (REFERENCE_IMAGE/MODEL_GLB/MODEL_USDZ), `status` (READY/ARCHIVED — never UPLOADING/PUBLISHED/DELETED), `provider` (`"appwrite"`; legacy seed rows `"external"`), `fileId` (null for seed rows), `url` (absolute Appwrite `/view` URL; legacy rows keep external URLs), `originalName`, `mimeType`, `size`, `checksum`. Compound index: projectId+type+status.
 - **`analytics_events`** — `$id`, `eventType` (VIEW/INTERACTION/AR_LAUNCH), `sessionId`, `projectId`, `brandId`.
 - **`rate_limits`** — provisioned by `ensure-backend`; consumed by `consumeRateLimit` (`src/server/http/rate-limit.ts`). Fail-open.
+- **`contact_requests`** — provisioned by `ensure-backend`; name, email, company, message, interestedTier, status (NEW/CONTACTED/RESOLVED), sourceIp. Plan-request submissions from the billing popup, managed by admins at `/admin/requests`.
 
 Schema is console-managed (no code migrations) — after console schema changes, update this section.
 
@@ -302,6 +313,7 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 ## 14. Spec index
 
 - **`backend-architecture.md`** — server layering, error taxonomy, ActionResult, rate limiting, state machine, services, db client, auth guards, testing, cron, `ensure-backend`.
+- **`subscription-architecture.md`** — subscription tiers, credit renewal, contact requests, admin deal-setting, security.
 - **`file-storage-architecture.md`** — Appwrite Storage: buckets, browser-direct uploads, proxy, publish grants/revokes, archival.
 - **`deployment.md`** — production handbook: Appwrite Sites @ pekaar.tech, env vars, workflow, rollback, DNS, frozen Vercel mirror.
 - **`generation-architecture.md`** — AI Draft (Fast) generation: Hunyuan3D Modal API integration, image normalization, manifest builder, poll/finalize, cron sweep, credits.

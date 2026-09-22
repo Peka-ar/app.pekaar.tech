@@ -62,7 +62,7 @@ export async function createProjectService(
   const user = await getRowSafe<UsersRow>(DB.users, principal.userId);
   if (!user || !user.usageLimits || user.usageLimits < cost) {
     throw new QuotaExceededError(
-      `Not enough credits. ${parsed.data.generationMode === "FAST" ? "AI Draft" : "Premium"} requires ${cost} credits.`,
+      `Not enough credits. ${parsed.data.generationMode === "FAST" ? "AI Draft" : "Premium"} requires ${cost} credits. Visit /pricing to upgrade.`,
     );
   }
 
@@ -90,7 +90,7 @@ export async function createProjectService(
       });
       remaining = row.usageLimits ?? 0;
     } catch {
-      throw new QuotaExceededError("Usage limit exceeded. Please upgrade your plan.");
+      throw new QuotaExceededError("Usage limit exceeded. Visit /pricing to upgrade.");
     }
 
     let matchedCount = 0;

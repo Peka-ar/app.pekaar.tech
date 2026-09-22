@@ -5,14 +5,12 @@ import { usePathname } from 'next/navigation';
 import { Box } from 'lucide-react';
 import { Wordmark } from './Wordmark';
 
-const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin', '/auth'];
+const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin', '/auth', '/billing'];
 
 const NAV_LINKS = [
-  { href: "/#how-it-works", label: "How it works" },
-  { href: "/#sandbox-anchor", label: "Live 3D" },
-  { href: "/#pilot", label: "Free pilot" },
-  { href: "/#faq", label: "FAQ" },
-  { href: "/#features", label: "Features" },
+  { href: "/", label: "Home" },
+  { href: "/pricing", label: "Pricing" },
+  { href: "/contact", label: "Contact us" },
 ];
 
 export function TopNav() {
@@ -53,10 +51,10 @@ export function TopNav() {
             Sign in
           </Link>
           <Link
-            href="/auth"
+            href="/auth?view=signup"
             className="inline-flex items-center justify-center h-9 sm:h-10 px-4 sm:px-5 text-sm font-semibold rounded-[24px] bg-[var(--primary)] text-[var(--on-primary)] hover:bg-[var(--primary-hover)] active:bg-[var(--primary-active)] active:scale-[0.98] transition-colors outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)]"
           >
-            Book a demo call
+            Sign up
           </Link>
         </div>
 

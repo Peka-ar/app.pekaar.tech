@@ -108,7 +108,7 @@ Public, CORS `*` (`next.config.mjs`). Body `{ eventType: VIEW|INTERACTION|AR_LAU
 
 ## Embed liveness (`/analytics`)
 
-`getProjectLiveness(projectIds)` (`src/app/actions/analytics.ts`) — per project, latest `analytics_events.$createdAt` (role-scoped: admin sees all, brand their own). Thresholds in `src/lib/embed-liveness.ts`: `< 7d` ok · `7–30d` amber "May not be live" · `> 30d`/never red "Embed may be broken". The leaderboard "Last Seen" column on `/analytics` renders these badges.
+`getProjectLiveness(projectIds)` (`src/app/actions/analytics.ts`) — per project, latest `analytics_events.$createdAt` (role-scoped: admin sees all, brand their own). Thresholds in `src/lib/embed-liveness.ts`: `< 7d` ok "Live" · `7–30d` amber "No events in 7+ days" · `> 30d` red "No events in 30+ days" · never red "No events yet". The leaderboard "Last Seen" column on `/analytics` renders these badges.
 
 Future improvement: a real `HEARTBEAT` event could power finer-grained liveness than the VIEW-based signal.
 

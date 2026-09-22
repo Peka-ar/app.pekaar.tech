@@ -28,7 +28,7 @@ export async function adminGetUser(id: string): Promise<{ user: AdminUserDetail 
 
 export async function adminUpdateUser(
   id: string,
-  data: { role?: Role; usageLimits?: number; subscriptionTier?: string },
+  data: { role?: Role; usageLimits?: number },
 ): Promise<ActionResult<{ success: true }>> {
   const result = await toActionResult(() => adminUpdateUserService(id, data));
   if (result.ok) revalidatePath("/admin/users");

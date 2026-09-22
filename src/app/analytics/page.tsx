@@ -329,9 +329,9 @@ export default async function AnalyticsPage({
                   badge === 'red' || badge === 'never' ? 'danger' as const :
                   'success' as const;
                 const badgeLabel =
-                  badge === 'red' ? 'Embed may be broken' :
-                  badge === 'amber' ? 'May not be live' :
-                  badge === 'never' ? 'Embed may be broken' :
+                  badge === 'red' ? 'No events in 30+ days' :
+                  badge === 'amber' ? 'No events in 7+ days' :
+                  badge === 'never' ? 'No events yet' :
                   'Live';
                 return (
                   <TableRow key={product.projectId}>

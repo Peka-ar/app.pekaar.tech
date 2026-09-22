@@ -36,6 +36,7 @@ export interface MaintenanceReport {
   storage: StorageReconcileReport;
   rateLimitsDeleted: number;
   analyticsEventsDeleted: number;
+  creditsRenewed: number;
 }
 
 export function hasPublicRead(permissions: string[] | undefined): boolean {
@@ -152,10 +153,12 @@ export async function pruneAnalyticsEvents(
 }
 
 export async function runMaintenance(): Promise<MaintenanceReport> {
-  const [storage, rateLimitsDeleted, analyticsEventsDeleted] = await Promise.all([
+  const { renewMonthlyCredits } = await import("@/server/services/subscription.service");
+  const [storage, rateLimitsDeleted, analyticsEventsDeleted, { renewed: creditsRenewed }] = await Promise.all([
     reconcileStoragePermissions(),
     pruneRateLimitRows(),
     pruneAnalyticsEvents(),
+    renewMonthlyCredits(),
   ]);
-  return { storage, rateLimitsDeleted, analyticsEventsDeleted };
+  return { storage, rateLimitsDeleted, analyticsEventsDeleted, creditsRenewed };
 }

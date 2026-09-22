@@ -103,7 +103,6 @@ export const adminUserUpdateSchema = z.object({
   data: z.object({
     role: z.enum(["BRAND", "ADMIN"]).optional(),
     usageLimits: z.number().min(0).max(1_000_000).optional(),
-    subscriptionTier: z.string().trim().max(50).optional(),
   }),
 });
 
@@ -111,6 +110,26 @@ export const setUserStatusSchema = z.object({
   id: appwriteId,
   status: z.enum(["ACTIVE", "SUSPENDED"]),
   reason: z.string().trim().max(500).optional(),
+});
+
+export const contactRequestSchema = z.object({
+  name: z.string().trim().min(1, "Name is required").max(120, "Name must be 120 characters or fewer"),
+  email: z.string().trim().email("Enter a valid email address").max(320),
+  company: z.string().trim().max(160).optional().nullable(),
+  interestedTier: z.enum(["FREE", "PREMIUM", "BUSINESS", "ENTERPRISE"]),
+  message: z.string().trim().min(1, "Message is required").max(2000, "Message must be 2000 characters or fewer"),
+  honeypot: z.string().max(0).optional(), // must be empty
+});
+
+export const adminSetTierSchema = z.object({
+  id: appwriteId,
+  tier: z.enum(["FREE", "PREMIUM", "BUSINESS", "ENTERPRISE"]),
+  monthlyCreditOverride: z.number().int().min(0).max(1_000_000).optional().nullable(),
+});
+
+export const contactRequestStatusSchema = z.object({
+  id: appwriteId,
+  status: z.enum(["NEW", "CONTACTED", "RESOLVED"]),
 });
 
 export const paginationSchema = z.object({

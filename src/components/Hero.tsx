@@ -59,8 +59,8 @@ export default function Hero() {
             </motion.p>
 
             <motion.div className="flex flex-col sm:flex-row gap-3 mb-3" variants={RISE} custom={3} {...anim}>
-              <Link href="/auth" className="btn-primary inline-flex justify-center">
-                Book a demo call
+              <Link href="/auth?view=signup" className="btn-primary inline-flex justify-center">
+                Sign up
               </Link>
               <a href="#sandbox-anchor" className="btn-tertiary inline-flex justify-center">
                 See live 3D

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { adminGetUsers, adminGetUser, adminUpdateUser, adminSetUserStatus, adminDeleteUser } from "@/app/actions/admin-users";
-import { Role, UserStatus } from "@/lib/enums";
+import { adminSetUserTier } from "@/app/actions/subscription";
+import { Role, UserStatus, SubscriptionTier } from "@/lib/enums";
 import { formatDistanceToNow } from "date-fns";
 
 type UserListItem = {
@@ -59,7 +60,8 @@ export function AdminUsersClient() {
 
   const [newRole, setNewRole] = useState('');
   const [newUsageLimits, setNewUsageLimits] = useState('');
-  const [newSubscriptionTier, setNewSubscriptionTier] = useState('');
+  const [newTier, setNewTier] = useState('');
+  const [newCreditOverride, setNewCreditOverride] = useState('');
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => {
@@ -102,7 +104,8 @@ export function AdminUsersClient() {
       setSelectedUser(user);
       setNewRole(user.role);
       setNewUsageLimits(user.usageLimits?.toString() ?? '');
-      setNewSubscriptionTier(user.subscriptionTier ?? '');
+      setNewTier(user.subscriptionTier ?? 'FREE');
+      setNewCreditOverride('');
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to load user details');
     }
@@ -136,7 +139,8 @@ export function AdminUsersClient() {
       setSelectedUser(user);
       setNewRole(user.role);
       setNewUsageLimits(user.usageLimits?.toString() ?? '');
-      setNewSubscriptionTier(user.subscriptionTier ?? '');
+      setNewTier(user.subscriptionTier ?? 'FREE');
+      setNewCreditOverride('');
     } catch {
       closeDetail();
     }
@@ -166,10 +170,11 @@ export function AdminUsersClient() {
     }
   };
 
-  const handleUpdateSubscriptionTier = async () => {
-    if (!selectedUser) return;
+  const handleSetTier = async () => {
+    if (!selectedUser || !newTier) return;
     setActionError(null);
-    const result = await adminUpdateUser(selectedUser.id, { subscriptionTier: newSubscriptionTier });
+    const override = newCreditOverride ? Number(newCreditOverride) : undefined;
+    const result = await adminSetUserTier(selectedUser.id, newTier as SubscriptionTier, override);
     if (result.ok) {
       await fetchDetail(selectedUser.id);
       refreshUsers();
@@ -247,6 +252,15 @@ export function AdminUsersClient() {
     }
   };
 
+  const tierTone = (tier: string | null) => {
+    switch (tier) {
+      case 'PREMIUM': return 'success' as const;
+      case 'BUSINESS': return 'info' as const;
+      case 'ENTERPRISE': return 'inverted' as const;
+      default: return 'neutral' as const;
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
@@ -295,6 +309,7 @@ export function AdminUsersClient() {
               <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Name</TableCell>
               <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Role</TableCell>
               <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Status</TableCell>
+              <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Tier</TableCell>
               <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Created</TableCell>
               <TableCell className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] font-normal">Usage Limits</TableCell>
             </TableRow>
@@ -307,12 +322,13 @@ export function AdminUsersClient() {
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-5 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-12" /></TableCell>
                 </TableRow>
               ))
             ) : users.length === 0 ? (
-              <TableEmptyState colSpan={6} message="No users found matching your filters." />
+              <TableEmptyState colSpan={7} message="No users found matching your filters." />
             ) : (
               users.map((user) => (
                 <TableRow
@@ -341,6 +357,9 @@ export function AdminUsersClient() {
                   </TableCell>
                   <TableCell>
                     <Badge tone={statusTone(user.status)}>{user.status}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge tone={tierTone(user.subscriptionTier)}>{user.subscriptionTier ?? 'FREE'}</Badge>
                   </TableCell>
                   <TableCell>
                     <span className="text-[var(--color-text-secondary)] text-sm">
@@ -509,14 +528,26 @@ export function AdminUsersClient() {
                 <div className="flex items-end gap-3">
                   <div className="flex-1">
                     <label className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] mb-1 block">Subscription Tier</label>
+                    <Select
+                      value={newTier}
+                      onChange={(e) => setNewTier(e.target.value)}
+                    >
+                      <option value="FREE">Free</option>
+                      <option value="PREMIUM">Premium ($25)</option>
+                      <option value="BUSINESS">Business ($50)</option>
+                      <option value="ENTERPRISE">Enterprise (Custom)</option>
+                    </Select>
+                  </div>
+                  <div className="w-28">
+                    <label className="text-[10px] uppercase tracking-widest font-sans text-[var(--color-text-muted)] mb-1 block">Credit Override</label>
                     <Input
-                      type="text"
-                      value={newSubscriptionTier}
-                      onChange={(e) => setNewSubscriptionTier(e.target.value)}
-                      placeholder="e.g. pro"
+                      type="number"
+                      value={newCreditOverride}
+                      onChange={(e) => setNewCreditOverride(e.target.value)}
+                      placeholder="auto"
                     />
                   </div>
-                  <Button variant="tertiary" size="sm" onClick={handleUpdateSubscriptionTier}>Update</Button>
+                  <Button variant="tertiary" size="sm" onClick={handleSetTier}>Set Tier</Button>
                 </div>
               </CardBody>
               <CardFooter className="flex items-center gap-3">

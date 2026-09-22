@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { LayoutDashboard, Users, ListTodo, Bell, BarChart2, Box, Menu } from 'lucide-react';
+import { LayoutDashboard, Users, ListTodo, Bell, BarChart2, Inbox, Box, Menu } from 'lucide-react';
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
 import { AdminMobileNavDrawer } from './AdminMobileNavDrawer';
@@ -25,6 +25,7 @@ export default function AdminLayout({ children, title, action, user }: AdminLayo
     { name: 'Tasks Management', path: '/admin/tasks', icon: ListTodo },
     { name: 'Notifications', path: '/notifications', icon: Bell },
     { name: 'Analytics', path: '/admin/analytics', icon: BarChart2 },
+    { name: 'Requests', path: '/admin/requests', icon: Inbox },
   ];
 
   const displayName = user?.name ?? user?.email ?? 'Admin';

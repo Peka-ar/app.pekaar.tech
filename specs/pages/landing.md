@@ -2,7 +2,7 @@
 
 > **Parent:** [`../WEBSITE.md`](../WEBSITE.md) · Design contract: `design.md` (local-only) + `globals.css` · Product truth: `PRODUCT.md` (local-only) §Positioning, §Evidence on Hand
 
-The landing is the v3 design showcase and the product's salesperson: a sage-band hero driving **one primary action** (`Book a demo call` → `/auth`), an honest-evidence section stack, the interactive sandbox, the free-pilot risk reversal, an objection-handling FAQ, and an ink-band close. **Every fabricated claim is banned** (see §Copy truth — a hard product commitment). Attributed third-party research with outbound links is allowed, phrased as reported outcomes, never as Peka's own results.
+The landing is the v3 design showcase and the product's salesperson: a sage-band hero driving **one primary action** (`Sign up` → `/auth?view=signup`), an honest-evidence section stack, the interactive sandbox, the free-pilot risk reversal, an objection-handling FAQ, and an ink-band close. **Every fabricated claim is banned** (see §Copy truth — a hard product commitment). Attributed third-party research with outbound links is allowed, phrased as reported outcomes, never as Peka's own results.
 
 ---
 
@@ -18,7 +18,7 @@ The landing is the v3 design showcase and the product's salesperson: a sage-band
 ### Composition tree (in order)
 
 ```
-<TopNav />                         // global — mobile CTA + anchor links
+<TopNav />                         // global — Home / Pricing / Contact us + Sign up CTA
 <Hero />                           // sage band · display-xl headline + PipelineCard
 <CategoryStrip />                  // platform-compat strip (Shopify/Woo/Webflow/Custom)
 <ProblemSolution />                // problem vs fix, return-rate context
@@ -46,7 +46,7 @@ Section components live in `src/components/landing/`; `LandingPageClient`, `Prod
 ### Hero (`src/components/Hero.tsx` + `landing/PipelineCard.tsx`)
 - Sage ground, flat. Staged load choreography (eyebrow → H1 → sub → CTAs → risk line → proof row → card; ~90ms steps, `0.7s` rise) — skipped entirely under `prefers-reduced-motion`. No scroll-linked motion in the hero.
 - H1 `.display-xl` (Figtree 900): `Your products in 3D and AR, live on your storefront in hours.` Sub carries `First model free.`
-- **CTA row (single primary):** `.btn-primary` `Book a demo call` → `/auth`; `.btn-tertiary` `See live 3D` → `#sandbox-anchor`. Risk microline below.
+- **CTA row (single primary):** `.btn-primary` `Sign up` → `/auth?view=signup`; `.btn-tertiary` `See live 3D` → `#sandbox-anchor`. Risk microline below.
 - Metrics row: product facts only (`Hours` / `1 line` / `GLB + USDZ`). Proof line (S1): HBR 19.8% AR purchase lift, attributed + linked.
 - Right column: `<PipelineCard />` (below CTAs on mobile).
 
@@ -102,7 +102,7 @@ The hero's right column: a scripted photo → 3D transformation that makes the p
 - **Narration panel:** fixed min-height under the pane (no layout shift); running copy shows `Step n of 4 · STAGE` + a plain-language sentence.
 - **Autoplay:** `useInView(cardRef, { once: true, margin: "-16%" })` — **disabled under reduced motion**; manual `Run demo` always available. Timers: CAPTURE 2.6s → MODEL 3.2s → FINISH 4s → SERVE 3s (~13s total).
 - **Pipeline strip:** `role="status" aria-live="polite"` stage dots mirroring the pane. Transformation pane carries both `aria-hidden` and `inert` until the demo finishes — focusable viewer controls stay out of the tab order during the scripted run; `Replay` re-applies both.
-- **Footer:** iframe snippet + `Book a demo call` → `/auth`; `Replay` resets when done. Microcopy: demo uses a bundled model, no upload required; real projects artist-finished in hours; first model free.
+- **Footer:** iframe snippet + `Sign up` → `/auth?view=signup`; `Replay` resets when done. Microcopy: demo uses a bundled model, no upload required; real projects artist-finished in hours; first model free.
 
 ---
 
@@ -135,17 +135,19 @@ No invented metric, customer, or benchmark — ever. This is the product honesty
 
 ## Anchor contract
 
-Must not break — `TopNav`, Hero CTAs, and the footer sitemap link to these ids. All anchored sections carry `scroll-mt-16` for the sticky 64px `TopNav`.
+Must not break — Hero CTAs and the footer sitemap link to these ids (TopNav no longer links anchors — it carries only Home / Pricing / Contact us). All anchored sections carry `scroll-mt-16` for the sticky 64px `TopNav`. TopNav and LandingFooter also link to `/pricing` and `/contact` (public pages, not anchors).
 
 | Id | File | Maps to |
 |---|---|---|
-| `#features` | `src/components/BentoFeatures.tsx` | TopNav "Features", footer sitemap |
-| `#sandbox-anchor` | `src/components/LandingPageClient.tsx` | Hero `See live 3D` + TopNav "Live 3D" |
+| `#features` | `src/components/BentoFeatures.tsx` | footer sitemap |
+| `#sandbox-anchor` | `src/components/LandingPageClient.tsx` | Hero `See live 3D` + footer sitemap |
 | `#showroom-catalog-panel` | `src/components/LandingPageClient.tsx` | External backlinks, footer sitemap |
-| `#how-it-works` | `src/components/landing/HowItWorks.tsx` | TopNav "How it works", footer sitemap |
+| `#how-it-works` | `src/components/landing/HowItWorks.tsx` | footer sitemap |
 | `#benefits` | `src/components/landing/Benefits.tsx` | (no nav link yet — document order) |
-| `#pilot` | `src/components/landing/PilotOfferBand.tsx` | TopNav "Free pilot", footer sitemap |
-| `#faq` | `src/components/landing/FAQ.tsx` | TopNav "FAQ", PilotOfferBand secondary CTA, footer sitemap |
+| `#pilot` | `src/components/landing/PilotOfferBand.tsx` | footer sitemap |
+| `#faq` | `src/components/landing/FAQ.tsx` | PilotOfferBand secondary CTA, footer sitemap |
+| `/pricing` | `src/app/pricing/page.tsx` | TopNav "Pricing", footer sitemap "Pricing" |
+| `/contact` | `src/app/contact/page.tsx` | TopNav "Contact us", footer sitemap "Contact us" |
 
 Removal or rename of any id with inbound links is a breaking change.
 
@@ -164,7 +166,7 @@ Removal or rename of any id with inbound links is a breaking change.
 
 1. **Static:** `npm run lint` (0) · `npm run build` (pass, all static) · `npm run test` (untouched, server-only). **Lighthouse a11y ≥95** on both desktop and mobile.
 2. **Copy-truth:** grep `src/` for the banned names/numbers above → 0 real matches (ignore the `xl:w-[42%]` Tailwind class in `AuthClient.tsx`).
-3. **Design contract:** one primary CTA per viewport (`Book a demo call`); band rhythm — no run of more than two whites; peach/sky only on non-interactive surfaces; no gradients/mesh/glow; Figtree-900 display clamped; eyebrows are the only tracked-uppercase text; v3 tokens only.
+3. **Design contract:** one primary CTA per viewport (`Sign up`); band rhythm — no run of more than two whites; peach/sky only on non-interactive surfaces; no gradients/mesh/glow; Figtree-900 display clamped; eyebrows are the only tracked-uppercase text; v3 tokens only.
 4. **A11y:** single `h1`; pipeline strip `role="status" aria-live="polite"`; transformation pane `aria-hidden` + `inert` until interactive; `ol > li` semantics in HowItWorks (Reveal `as="li"`); FAQ `aria-expanded`/`aria-controls`; keyboard-reachable controls with visible rings; `prefers-reduced-motion` disables choreography + autoplay + reveals + scrub + marquee; brand header link carries `aria-label="Peka AR home"`; `--text-muted` meets AA on both canvas and canvas-soft (≥4.5:1); TaglineReveal resting opacity ≥3:1 at ≥24px (large-text AA).
-5. **Functional:** all 7 anchors navigate; demo autoplays once on hero-in-view and runs end-to-end (rotatable + `View in your space` when supported); `Replay` resets; every primary CTA hits `/auth`; category pills always resolve; outbound stat links open `target=_blank rel=noopener`.
+5. **Functional:** all 7 anchors navigate; demo autoplays once on hero-in-view and runs end-to-end (rotatable + `View in your space` when supported); `Replay` resets; every primary CTA hits `/auth?view=signup` (opens the Sign up tab); category pills always resolve; outbound stat links open `target=_blank rel=noopener`.
 6. **Performance:** `model-viewer` script `lazyOnload` + `pageLoaded` guard — GLB streams only once the hero run starts; the local pipeline photo is eager/priority (LCP); framer-motion consumed by landing client leaves only.

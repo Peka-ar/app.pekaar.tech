@@ -91,7 +91,7 @@ export async function regenerateGeneration(
     const user = await getRowSafe<UsersRow>(DB.users, principal.userId);
     if (!user || (user.usageLimits ?? 0) < cost) {
       throw new QuotaExceededError(
-        `Not enough credits. Regeneration requires ${cost} credit${cost > 1 ? "s" : ""}.`,
+        `Not enough credits. Regeneration requires ${cost} credit${cost > 1 ? "s" : ""}. Visit /pricing to upgrade.`,
       );
     }
 

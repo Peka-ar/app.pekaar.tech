@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from 'react';
-import { Box, LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, Menu } from 'lucide-react';
+import { Box, LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, CreditCard, Menu } from 'lucide-react';
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
 import { useAuth } from "@appwrite.io/react";
@@ -35,6 +35,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
     { name: 'Notifications', path: '/notifications', icon: Bell },
     { name: 'Integrations', path: '/integrations', icon: LinkIcon },
     { name: 'Analytics', path: '/analytics', icon: BarChart2 },
+    { name: 'Billing', path: '/billing', icon: CreditCard },
   ];
 
   return (

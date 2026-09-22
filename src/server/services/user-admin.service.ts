@@ -140,7 +140,7 @@ export async function adminGetUserService(id: string): Promise<{ user: AdminUser
 
 export async function adminUpdateUserService(
   id: string,
-  data: { role?: Role; usageLimits?: number; subscriptionTier?: string },
+  data: { role?: Role; usageLimits?: number },
 ): Promise<{ success: true }> {
   const principal = await requirePrincipal({ roles: [Role.ADMIN] });
 
