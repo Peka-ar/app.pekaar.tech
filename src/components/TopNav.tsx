@@ -2,8 +2,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box } from 'lucide-react';
-import { Wordmark } from './Wordmark';
+import Image from 'next/image';
 
 const HIDDEN_ROUTES = ['/dashboard', '/tasks', '/analytics', '/notifications', '/integrations', '/onboarding', '/admin', '/auth', '/billing'];
 
@@ -25,10 +24,7 @@ export function TopNav() {
 
         <div className="flex items-center gap-2.5 sm:gap-4 overflow-hidden">
           <Link href="/" aria-label="Peka AR home" className="flex items-center gap-2.5 outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] rounded-sm">
-            <div className="w-8 h-8 rounded-full border border-[var(--color-text-primary)] flex items-center justify-center bg-transparent shrink-0">
-              <Box className="w-4 h-4 text-[var(--color-text-primary)]" aria-hidden="true" />
-            </div>
-            <Wordmark className="text-[15px] sm:text-lg font-semibold tracking-tight font-display text-[var(--color-text-primary)] shrink-0 hidden sm:block" />
+            <Image src="/peka_logo.png" alt="" width={427} height={429} className="h-8 w-auto shrink-0" />
           </Link>
           <nav aria-label="Primary" className="hidden lg:flex items-center gap-5 ml-6">
             {NAV_LINKS.map((l) => (

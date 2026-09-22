@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Role } from "@/lib/enums";
 import { requirePrincipal } from "@/server/auth-guards";
+import { getRowSafe, type ProjectsRow } from "@/server/db/client";
 import { handleApiError } from "@/server/http/handler";
+import { NotFoundError } from "@/server/http/errors";
 import { pollAndFinalize } from "@/server/services/generation.service";
 import { logger } from "@/server/logging";
 
@@ -21,8 +24,14 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   try {
-    await requirePrincipal();
+    const principal = await requirePrincipal();
     const { projectId } = await params;
+
+    const project = await getRowSafe<ProjectsRow>("projects", projectId);
+    if (!project) throw new NotFoundError("Project not found");
+    if (principal.role !== Role.ADMIN && project.brandId !== principal.userId) {
+      throw new NotFoundError("Project not found");
+    }
 
     const result = await pollAndFinalize(projectId);
 

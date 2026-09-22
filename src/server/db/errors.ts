@@ -24,6 +24,24 @@ export function isNotFoundError(err: unknown): boolean {
   return false;
 }
 
+export function isUnknownAttributeError(err: unknown): string | null {
+  const raw = err instanceof Error ? err.message : String(err ?? "");
+  const m = raw.match(/Unknown attribute:\s*"([^"]+)"/i) ?? raw.match(/Unknown attribute:\s*'([^']+)'/i);
+  return m ? m[1] : null;
+}
+
+const GENERATION_ATTRIBUTE_KEYS = new Set([
+  "generationMode",
+  "generationStatus",
+  "generationJobId",
+  "generationRunId",
+  "generationAssetId",
+  "generationError",
+  "generationViews",
+  "generationStartedAt",
+  "generationCompletedAt",
+]);
+
 /** Maps an Appwrite SDK failure to the AppError taxonomy. */
 export function mapAppwriteError(err: unknown): AppError {
   if (err instanceof AppwriteException) {
@@ -32,7 +50,19 @@ export function mapAppwriteError(err: unknown): AppError {
     if (status === 429) return new RateLimitError(undefined, { cause: err });
     if (status === 401) return new UnauthenticatedError(undefined, { cause: err });
     if (status === 403) return new ForbiddenError(undefined, { cause: err });
-    if (status === 400) return new ValidationError("Invalid request", { cause: err });
+    if (status === 400) {
+      const unknownKey = isUnknownAttributeError(err);
+      if (unknownKey) {
+        if (GENERATION_ATTRIBUTE_KEYS.has(unknownKey)) {
+          return new ValidationError(
+            `Database schema is out of date (missing "${unknownKey}"). Run "npm run ensure-backend" and retry.`,
+            { cause: err },
+          );
+        }
+        return new ValidationError(`Invalid document structure: unknown attribute "${unknownKey}"`, { cause: err });
+      }
+      return new ValidationError("Invalid request", { cause: err });
+    }
     return new InternalError("Appwrite request failed", { cause: err });
   }
   return new InternalError("Database request failed", { cause: err });

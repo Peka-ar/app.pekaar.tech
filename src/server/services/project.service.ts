@@ -27,6 +27,7 @@ import { setFilePublic } from "@/server/storage";
 import { createProjectSchema, adminSubmitSchema, projectIdSchema, sendForRevisionsSchema } from "@/server/http/schemas";
 import { AppError, NotFoundError, ConflictError, QuotaExceededError } from "@/server/http/errors";
 import { logger } from "@/server/logging";
+import { isGenerationUnknownAttributeError } from "@/server/db/ensure";
 import { startFastGeneration, GENERATION_COSTS, refundCredits } from "@/server/services/generation.service";
 
 export interface CreateProjectResult {
@@ -113,30 +114,44 @@ export async function createProjectService(
     }
 
     const projectId = ID.unique();
-    await db.createRow<ProjectsRow>({
-      databaseId: DB.databaseId,
-      tableId: DB.projects,
-      rowId: projectId,
-      data: {
-        name: cleanName,
-        sku: cleanSku ?? null,
-        instructions: cleanInstructions ?? null,
-        dimensions: cleanDimensions ? JSON.stringify(cleanDimensions) : null,
-        status: ProjectStatus.PENDING,
-        sdkConfig: null,
-        brandId: principal.userId,
-        generationMode: cleanMode,
-        generationStatus: null,
-        generationJobId: null,
-        generationRunId: null,
-        generationAssetId: null,
-        generationError: null,
-        generationViews: cleanViews ? JSON.stringify(cleanViews) : null,
-        generationStartedAt: null,
-        generationCompletedAt: null,
-      },
-      transactionId: txId,
-    });
+    const createProjectRow = async () =>
+      db.createRow<ProjectsRow>({
+        databaseId: DB.databaseId,
+        tableId: DB.projects,
+        rowId: projectId,
+        data: {
+          name: cleanName,
+          sku: cleanSku ?? null,
+          instructions: cleanInstructions ?? null,
+          dimensions: cleanDimensions ? JSON.stringify(cleanDimensions) : null,
+          status: ProjectStatus.PENDING,
+          sdkConfig: null,
+          brandId: principal.userId,
+          generationMode: cleanMode,
+          generationStatus: null,
+          generationJobId: null,
+          generationRunId: null,
+          generationAssetId: null,
+          generationError: null,
+          generationViews: cleanViews ? JSON.stringify(cleanViews) : null,
+          generationStartedAt: null,
+          generationCompletedAt: null,
+          generationCreditCost: null,
+        },
+        transactionId: txId,
+      });
+
+    try {
+      await createProjectRow();
+    } catch (err) {
+      if (isGenerationUnknownAttributeError(err)) {
+        const { ensureGenerationColumns } = await import("@/server/db/ensure");
+        await ensureGenerationColumns(db as unknown as import("node-appwrite").TablesDB);
+        await createProjectRow();
+      } else {
+        throw err;
+      }
+    }
 
     if (cleanAssetIds.length > 0) {
       await db.updateRows<AssetsRow>({

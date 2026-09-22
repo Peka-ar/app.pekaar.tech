@@ -78,6 +78,7 @@ Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
 ```
 website/
 ├── public/embed-viewer.html   # static template served by the /embed route handler
+├── public/peka_logo.png       # brand logo (image mark used by every header/footer; source for favicon set)
 ├── src/
 │   ├── app/                   # App Router pages + actions/ (server actions) + api/ (API routes)
 │   ├── components/            # ui/ (primitives), charts/ (ChartBars), landing/, auth/, dashboard/, admin/, ThreeDConfigurator
@@ -335,5 +336,7 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 - **Revalidation:** after project mutations call `revalidatePath("/tasks")` + `revalidatePath("/dashboard")` (and `/admin/tasks`, `/embed/[id]` where relevant).
 - **Transitions:** only `transition-colors`, `transition-transform`, `transition-opacity` (never `transition-all`). `active:scale-95` on buttons. `duration-300` standard.
 - **Ellipsis:** use `…` not `...`. Icon-only buttons need `aria-label`. Decorative icons get `aria-hidden="true"`.
+- **Brand mark:** the logo is the image `public/peka_logo.png` rendered via `next/image` (there is no text wordmark component). Use `alt=""` inside home links that already carry an `aria-label`, `alt="Peka AR"` elsewhere. The favicon set is `src/app/favicon.ico` + `icon.png` + `apple-icon.png` (Next file conventions, all derived from `peka_logo.png` — regenerate all three together when the logo changes).
 - **3D:** `<model-viewer>` loads via `next/script` (no SSR) for the in-app configurator. Camera state (`cameraOrbit`/`cameraTarget`/`autoRotate`) is preserved across re-renders once the user has interacted; reset only on fresh `product.src` if not yet interacted. The public embed is static HTML — see `pages/embed.md`.
 - **Modal focus:** `Modal` splits its mount/open effect by `[isOpen]` only, with the keydown listener in a separate stable-callback effect — prevents focus-stealing from textareas in modals like Review/Published on `/tasks`.
+- **Modal sizing:** the panel is height-constrained (`max-h-[calc(100dvh-32px)]`, flex column, `shrink-0` header/footer, `min-h-0` scrollable body) so long content scrolls instead of pushing the footer off-screen. Sizes: `sm|md|lg|xl|2xl|full` (`2xl` = `max-w-2xl`, used by the New Task wizard).

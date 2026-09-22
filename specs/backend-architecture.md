@@ -152,11 +152,12 @@ Pure helpers `hasPublicRead` and `shouldModelAssetBePublic` are unit-tested (see
 
 ## 12. Infra provisioning
 
-`npm run ensure-backend` (`scripts/ensure-backend.ts`, tsx, needs `.env` with API key) — idempotent:
+`npm run ensure-backend` (`scripts/ensure-backend.ts` + `src/server/db/ensure.ts`, tsx, needs `.env` with API key) — idempotent:
 - Creates `rate_limits` table + `remaining`/`windowStart`/`route` columns if missing.
 - Hardens buckets:
   - `reference-images`: perms `['create("label:BRAND")']` (no read), `fileSecurity: true`, antivirus + encryption on.
   - `models`: perms `['create("label:ADMIN")','read("label:ADMIN")']`, allowed extensions `["glb","usdz"]`, antivirus + encryption on.
+- Creates the 10 generation columns on `projects` (`generationMode`/`generationStatus`/`generationJobId`/`generationRunId`/`generationAssetId`/`generationError`/`generationViews`/`generationStartedAt`/`generationCompletedAt`/`generationCreditCost` — `src/server/db/ensure.ts`) and waits for `available`. `createProjectService` also auto-heals on the first Unknown-attribute, so a cold DB self-heals without a manual run; still run `ensure-backend` eagerly after any schema change and verify `GET /api/health` → `generationSchemaReady:true`.
 
 ## 13. Module index
 
@@ -184,4 +185,5 @@ Pure helpers `hasPublicRead` and `shouldModelAssetBePublic` are unit-tested (see
 | `GET /api/v1/generation/[projectId]` (generation poll endpoint) | `src/app/api/v1/generation/[projectId]/route.ts` |
 | Project/user-admin/analytics/notification services | `src/server/services/*.service.ts` |
 | Thin action adapters | `src/app/actions/{project,admin,admin-users,admin-analytics,analytics,auth,record-asset}.ts` |
+| `ensure-generation` helper | `src/server/db/ensure.ts` (generation columns + Unknown-attribute detection + polling) |
 | `ensure-backend` script | `scripts/ensure-backend.ts` |

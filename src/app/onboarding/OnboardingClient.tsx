@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Alert } from "@/components/ui/Alert";
 import { Input } from "@/components/ui/Input";
 import { FormField } from "@/components/ui/FormField";
-import { Wordmark } from "@/components/Wordmark";
+import Image from "next/image";
 
 const categoryOptions = ["Furniture", "Home decor", "Fashion", "Beauty", "Electronics", "Other"];
 const platformOptions = ["Shopify", "WooCommerce", "Webflow", "Custom", "Other"];
@@ -68,8 +68,9 @@ export default function OnboardingClient() {
         {/* Aside — v2 ink panel, constant across themes, hairline delineates in dark */}
         <aside className="relative hidden flex-col justify-between gap-12 bg-[var(--ink)] p-8 text-[var(--on-ink)] sm:p-8 lg:flex lg:p-12 border-r border-[var(--border-default)]">
           <div>
-            <p className="font-sans text-[11px] uppercase tracking-[0.2em] text-[var(--on-ink)]/60">
-              <Wordmark className="font-display font-semibold tracking-[0.2em] uppercase text-[var(--on-ink)]" dotClassName="text-[var(--accent)]" /> setup
+            <p className="flex items-center gap-2 font-sans text-[11px] uppercase tracking-[0.2em] text-[var(--on-ink)]/60">
+              <Image src="/peka_logo.png" alt="Peka AR" width={427} height={429} className="h-4 w-auto" />
+              setup
             </p>
             <h1 className="mt-6 max-w-md font-display text-[clamp(1.9rem,3vw,2.5rem)] font-bold leading-[1.1] tracking-[-0.015em] text-[var(--on-ink)]" style={{ textWrap: "balance" }}>
               Build your 3D commerce workspace.

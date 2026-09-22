@@ -93,7 +93,15 @@ The domain is **NS-delegated** to Appwrite DNS (`ns1.appwrite.zone` / `ns2.appwr
 
 ### Schema changes
 
-Tables/columns/indexes are edited in the console → Databases → `studiov` → table → Columns/Indexes. After changing a schema, update `WEBSITE.md` §9 and the relevant deep-dive. There is no migration tool — **make schema changes manually and update docs**.
+Tables/columns/indexes are edited in the console → Databases → `studiov` → table → Columns/Indexes, or idempotently via `npm run ensure-backend` (`src/server/db/ensure.ts`).
+
+```powershell
+npm run ensure-backend
+```
+
+Idempotent — creates all missing `generationMode`/`generationStatus`/`generationJobId`/`generationRunId`/`generationAssetId`/`generationError`/`generationViews`/`generationStartedAt`/`generationCompletedAt`/`generationCreditCost` columns on `projects` (and `rate_limits`, `contact_requests`, subscription columns on `users`). The New Task AI-Draft path also **auto-heals** on the first `Unknown attribute: "generationMode"` at request time (creates + waits for `available` + retries once), so a cold DB self-heals; still run `ensure-backend` eagerly after any schema change and verify with `GET /api/health` → `generationSchemaReady:true`.
+
+After changing a schema, update `WEBSITE.md` §9 and the relevant deep-dive. There is no point-in-time restore; treat console deletes as destructive.
 
 ### Admin bootstrap
 

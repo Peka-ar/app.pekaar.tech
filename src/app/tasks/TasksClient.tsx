@@ -90,7 +90,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [viewMode, setViewMode] = useState<'board' | 'list'>(isDesktop ? 'board' : 'list');
+  const [userViewMode, setUserViewMode] = useState<'board' | 'list' | null>(null);
+  const viewMode = userViewMode ?? (isDesktop ? 'board' : 'list');
+  const handleViewMode = (v: 'board' | 'list') => setUserViewMode(v);
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(0);
   const [productName, setProductName] = useState('');
@@ -385,7 +387,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         statusOptions={BOARD_STATUSES.map((s) => ({ value: s, label: labelFor(s) }))}
         count={filteredJobs.length}
         viewMode={viewMode}
-        onViewMode={setViewMode}
+        onViewMode={handleViewMode}
       />
 
       {viewMode === 'board' ? (
@@ -523,10 +525,10 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         onClose={() => setIsWizardOpen(false)}
         title="Create New Task"
         description={`Step ${wizardStep + 1} of 3 — ${WIZARD_STEPS[wizardStep]}`}
-        size="xl"
+        size="2xl"
         variant="dialog"
         footer={
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-1.5" aria-hidden="true">
               {WIZARD_STEPS.map((s, i) => (
                 <span
@@ -668,7 +670,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={isUploading || uploadedAssets.length >= MAX_IMAGES}
-                className="flex w-full flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--color-border-default)] bg-[var(--color-canvas)] py-8 text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--color-border-default)] disabled:hover:text-[var(--color-text-muted)]"
+                className="flex w-full flex-col items-center gap-3 rounded-xl border border-dashed border-[var(--color-border-default)] bg-[var(--color-canvas)] py-6 text-[var(--color-text-muted)] transition-colors hover:border-[var(--color-text-primary)] hover:text-[var(--color-text-primary)] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--color-border-default)] disabled:hover:text-[var(--color-text-muted)]"
               >
                 {isUploading ? (
                   <>
@@ -745,9 +747,9 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                   <p className="mb-3 text-[10px] text-[var(--color-text-muted)]">
                     Assign each uploaded image to a view angle. Front is required. Best results with clear, high-quality images.
                   </p>
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {VIEW_TAG_OPTIONS.map(({ value, label, required }) => (
-                      <div key={value} className="flex items-center gap-3">
+                      <div key={value} className="flex min-w-0 items-center gap-3">
                         <span className="w-16 shrink-0 text-xs font-medium text-[var(--color-text-primary)]">
                           {label}{required && <span className="text-[var(--negative-deep)]"> *</span>}
                         </span>
@@ -757,7 +759,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                             if (e.target.value) assignViewTag(value, e.target.value);
                             else removeViewTag(value);
                           }}
-                          className="input-base flex-1 rounded-lg px-3 py-1.5 text-xs"
+                          className="input-base min-w-0 flex-1 rounded-lg px-3 py-1.5 text-xs"
                         >
                           <option value="">— Select image —</option>
                           {uploadedAssets.map((asset) => {

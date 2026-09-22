@@ -277,8 +277,8 @@ export default function AdminTasksClient({
                 )}
                 {selectedTask.generationStartedAt && (
                   <p className="mt-1 text-[10px] text-[var(--color-text-muted)]">
-                    Started: {new Date(selectedTask.generationStartedAt).toLocaleString()}
-                    {selectedTask.generationCompletedAt && ` · Finished: ${new Date(selectedTask.generationCompletedAt).toLocaleString()}`}
+                    Started: {new Date(selectedTask.generationStartedAt).toLocaleString("en-US", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    {selectedTask.generationCompletedAt && ` · Finished: ${new Date(selectedTask.generationCompletedAt).toLocaleString("en-US", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`}
                   </p>
                 )}
                 {(selectedTask.generationStatus === "FAILED" || selectedTask.generationStatus === "SUCCEEDED") && (
@@ -327,7 +327,7 @@ export default function AdminTasksClient({
                     </span>
                   )}
                 </MetaItem>
-                <MetaItem label="Created">{new Date(selectedTask.createdAt).toLocaleDateString()}</MetaItem>
+                <MetaItem label="Created">{new Date(selectedTask.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "numeric", day: "numeric" })}</MetaItem>
               </MetaGrid>
               {selectedTask.instructions && (
                 <div className="mt-4">
@@ -501,7 +501,7 @@ export default function AdminTasksClient({
                               <div className="min-w-0">
                                 <p className="truncate text-xs font-medium text-[var(--color-text-primary)]" title={m.originalName}>{m.originalName}</p>
                                 <p className="font-sans text-[11px] uppercase tracking-[0.1em] tabular-nums text-[var(--color-text-muted)]">
-                                  {isGlb ? 'GLB' : 'USDZ'} · {formatFileSize(m.size)} · {new Date(m.updatedAt).toLocaleDateString()}
+                                  {isGlb ? 'GLB' : 'USDZ'} · {formatFileSize(m.size)} · {new Date(m.updatedAt).toLocaleDateString("en-US", { year: "numeric", month: "numeric", day: "numeric" })}
                                 </p>
                               </div>
                             </div>

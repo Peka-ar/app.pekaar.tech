@@ -45,6 +45,67 @@ describe("createProjectSchema", () => {
     const ids = Array.from({ length: 51 }, (_, i) => `id${i}`);
     expect(createProjectSchema.safeParse({ name: "x", assetIds: ids }).success).toBe(false);
   });
+
+  // generationViews is a partial record — only tagged views are sent.
+  // Zod v4 z.record(enum) would be exhaustive and reject these.
+  const validId = "68f2a1b2c3d4e5f6a7b8c9d0";
+  const validId2 = "68f2a1b2c3d4e5f6a7b8c9d1";
+  const validId3 = "68f2a1b2c3d4e5f6a7b8c9d2";
+  const validId4 = "68f2a1b2c3d4e5f6a7b8c9d3";
+
+  it("accepts FAST mode with only the front view tagged", () => {
+    const out = createProjectSchema.safeParse({
+      name: "Chair",
+      assetIds: [validId],
+      generationMode: "FAST",
+      generationViews: { front: validId },
+    });
+    expect(out.success).toBe(true);
+  });
+
+  it("accepts FAST mode with all four views tagged", () => {
+    const out = createProjectSchema.safeParse({
+      name: "Chair",
+      assetIds: [validId],
+      generationMode: "FAST",
+      generationViews: { front: validId, left: validId2, back: validId3, right: validId4 },
+    });
+    expect(out.success).toBe(true);
+  });
+
+  it("rejects FAST mode with no views", () => {
+    const out = createProjectSchema.safeParse({
+      name: "Chair",
+      assetIds: [validId],
+      generationMode: "FAST",
+      generationViews: null,
+    });
+    expect(out.success).toBe(false);
+    expect(out.success ? "" : out.error.issues[0].message).toBe(
+      "At least one view (front, left, back, or right) is required for AI Draft mode",
+    );
+  });
+
+  it("rejects FAST mode without the front view", () => {
+    const out = createProjectSchema.safeParse({
+      name: "Chair",
+      assetIds: [validId],
+      generationMode: "FAST",
+      generationViews: { left: validId },
+    });
+    expect(out.success).toBe(false);
+    expect(out.success ? "" : out.error.issues[0].message).toBe("Front view is required for AI Draft mode");
+  });
+
+  it("rejects unknown view tags", () => {
+    const out = createProjectSchema.safeParse({
+      name: "Chair",
+      assetIds: [validId],
+      generationMode: "FAST",
+      generationViews: { front: validId, top: validId2 },
+    });
+    expect(out.success).toBe(false);
+  });
 });
 
 describe("sendForRevisionsSchema", () => {

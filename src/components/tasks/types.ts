@@ -79,7 +79,11 @@ export function getInitials(name: string): string {
 }
 
 export function getCreatedDate(project: TaskJob): string {
-  return new Date(project.createdAt).toLocaleDateString();
+  return new Date(project.createdAt).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
 }
 
 export function getDimensions(project: TaskJob): TaskDimensions {
@@ -103,7 +107,11 @@ export function formatRelativeShort(value: Date | string): string {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  });
 }
 
 export function getLatestModelUpdatedAt(project: TaskJob): Date | string | null {

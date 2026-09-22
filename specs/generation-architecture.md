@@ -19,7 +19,7 @@ Two-tier generation: **Premium** (artist-finished, admin-managed) and **Fast** (
 - `GenerationStatus`: `SUBMITTED | RUNNING | FINALIZING | SUCCEEDED | FAILED`
 - `ReferenceView`: `front | left | back | right`
 
-## Project columns (9 new on `projects` table)
+## Project columns (10 on `projects` table)
 
 | Column | Type | Purpose |
 |---|---|---|
@@ -32,6 +32,7 @@ Two-tier generation: **Premium** (artist-finished, admin-managed) and **Fast** (
 | `generationViews` | string(2000) | JSON map: `{front: assetId, left?: assetId, ...}` |
 | `generationStartedAt` | string(30) | ISO timestamp when job started |
 | `generationCompletedAt` | string(30) | ISO timestamp when job finished |
+| `generationCreditCost` | string(11) | Credits charged for this attempt (2 create / 1 regenerate); used for exact refund on failure |
 
 ## Image normalization
 
@@ -49,7 +50,8 @@ Pure functions — no I/O, fully unit-tested.
 - Single mode (1 view): `files=[{filename:"model.jpg"}]`, no manifest needed.
 - Multiview (2-4 views): staged filenames `model__front.jpg`, `model__left.jpg`, etc. Manifest: `{"models":[{"name":"model","views":{"front":"model__front.jpg",...}}]}`.
 - `findGlbPath(files, name)` — picks the `_textured.glb` from job output.
-- `validateViews(tags)` — enforces front required, max 4, no duplicates.
+- `validateViews(tags)` — enforces front required, max 4, no duplicates (rejects repeated tags), no unknown tags.
+- `GENERATION_QUALITY = "max"` — AI Draft runs at Modal `quality: "max"` (9 views, 25 texture steps) for best output; `remove_bg: true` is always sent.
 
 ### API client (`client.ts`)
 
@@ -71,9 +73,10 @@ Pure functions — no I/O, fully unit-tested.
 ### startFastGeneration
 
 1. Verify project is FAST mode + PENDING/REVISIONS status.
-2. Set `generationStatus: SUBMITTED`, normalize images, build manifest, submit to Modal.
-3. On success: set `generationStatus: RUNNING` + `generationJobId`.
-4. On failure: set `generationStatus: FAILED` + `generationError`.
+2. Set `generationStatus: SUBMITTED` + record `generationCreditCost` (the caller-charged amount).
+3. Normalize images, build manifest, submit to Modal — any failure here sets `FAILED` + `generationError` and rethrows (never leaves the row stuck in `SUBMITTED`).
+4. On success: set `generationStatus: RUNNING` + `generationJobId`.
+5. On submission failure: set `generationStatus: FAILED` + `generationError`, rethrow. Caller (`createProjectService`) refunds the exact `creditCost`.
 
 **Credit handling**: The service does NOT deduct credits. Credit logic lives in callers only:
 - `createProjectService` deducts 2 credits inside a transaction before calling this. On failure, `refundCredits` returns them.
@@ -82,18 +85,24 @@ Pure functions — no I/O, fully unit-tested.
 ### pollAndFinalize
 
 1. Skip if already terminal (SUCCEEDED/FAILED/FINALIZING).
-2. Job timeout check (15 min).
-3. Poll Modal → running (return), failed (set FAILED), succeeded → finalize.
-4. **Finalize**: claim via `RUNNING → FINALIZING` guard (single-row update, check affected rows).
-5. Download GLB, upload to storage with `read:any`, create asset row, link via `generationAssetId`.
-6. Reconcile publish permissions.
+2. Job timeout check (15 min from `generationStartedAt`, falls back to `$createdAt`).
+3. Stale `SUBMITTED` with no `generationJobId` past timeout → FAILED + refund.
+4. Poll Modal → running (return), failed (set FAILED + refund), succeeded → finalize.
+5. **Finalize**: claim via `RUNNING|SUBMITTED → FINALIZING` guard (single-row update, check affected rows). SUBMITTED is claimable because `withFailover` may succeed before the RUNNING flip lands.
+6. Download GLB, upload to storage with `read:any`, create asset row matching `AssetsRow` (`type: MODEL_GLB`, `status: READY`, `provider: appwrite`, `fileId`, `originalName`, `mimeType`, `size`), link via `generationAssetId`.
+7. Set `generationRunId` from Modal's `run_id`.
+8. Flip `status → COMPLETED` via `SYSTEM_ACTOR` transition when allowed (brand then publishes).
+9. On any finalize failure (no GLB, download, upload, asset row), set FAILED + refund `generationCreditCost`.
+10. Storage file is deleted if asset-row creation fails after upload (no orphan).
+
+**Refunds**: every failure path after the charge refunds `generationCreditCost` (2 for create, 1 for regenerate) via `refundCredits`, which uses `incrementRowColumn` when available.
 
 ### regenerateFastGeneration
 
 1. Verify FAST mode + SUCCEEDED/FAILED generation status.
 2. Verify regenerable state (PENDING or COMPLETED).
-3. Re-normalize views, re-submit to Modal.
-4. Reset generation state to RUNNING.
+3. Re-normalize views, re-submit to Modal — failures set FAILED + rethrow (caller refunds 1 credit).
+4. Reset generation state to RUNNING + record `generationCreditCost: 1`.
 
 **Credit handling**: The service does NOT deduct credits. Callers handle deduction:
 - `regenerateGeneration` (brand/admin action) deducts 1 credit, refunds on failure.
@@ -109,26 +118,26 @@ Called by `/api/cron/maintenance` nightly. Finds all projects in RUNNING/SUBMITT
 
 ## State machine update (`src/server/domain/project-state-machine.ts`)
 
-Added 4th transition: `PENDING|REVISIONS → COMPLETED by SYSTEM_ACTOR`. This allows the Modal API job completion to auto-flip the project to COMPLETED without an admin step.
+Added 4th transition: `PENDING|REVISIONS → COMPLETED by SYSTEM_ACTOR`. `pollAndFinalize` invokes this on successful finalize so the project flips to `COMPLETED` automatically — the brand then publishes (`COMPLETED → PUBLISHED by BRAND`). `canTransition` guards the flip; already-`COMPLETED` projects are left alone.
 
 ## Credits
 
 | Action | Credits | Enforcement |
 |---|---|---|
 | Create Premium project | 10 | `decrementRowColumn(value=10, min=0)` inside transaction in `createProjectService` |
-| Create Fast project | 2 | `decrementRowColumn(value=2, min=0)` inside transaction in `createProjectService`. On Modal submission failure, `refundCredits` returns the 2 credits. |
-| Regenerate (Fast, brand) | 1 | `updateRow` in `regenerateGeneration` action before calling service. On failure, `refundCredits` returns the 1 credit. |
+| Create Fast project | 2 | `decrementRowColumn(value=2, min=0)` inside transaction in `createProjectService`. Any failure (start, poll, finalize) refunds the exact `generationCreditCost` (2). |
+| Regenerate (Fast, brand) | 1 | `decrementRowColumn(value=1, min=0)` in `regenerateGeneration` action before calling service. On failure, `refundCredits` returns the 1 credit. Poll/finalize failure refunds `generationCreditCost` (1). |
 | Regenerate (Fast, admin) | 0 | Admin bypass — no credit deduction, `skipOwnershipCheck: true`. |
 
 Default new-brand credit allocation: **8** (down from 10). Existing users backfilled to 8.
 
 Premium is **paid-only** for default brands (8 < 10). Admin override can grant more.
 
-**Credit flow principle**: generation service functions (`startFastGeneration`, `regenerateFastGeneration`) never handle credits. Callers are responsible for check + deduct + refund-on-failure. This keeps credit logic in the action layer where auth context is available.
+**Credit flow principle**: generation service functions (`startFastGeneration`, `regenerateFastGeneration`) never handle credits. Callers are responsible for check + deduct + refund-on-failure. This keeps credit logic in the action layer where auth context is available. `pollAndFinalize` refunds `generationCreditCost` (the amount actually charged for this attempt) on every failure path.
 
 ## API route
 
-`GET /api/v1/generation/[projectId]` — auth-gated poll+finalize. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Brand, admin, or cron can call this.
+`GET /api/v1/generation/[projectId]` — auth-gated poll+finalize. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Ownership enforced: brand owner or admin only; others get 404.
 
 ## UI
 
@@ -139,11 +148,23 @@ Premium is **paid-only** for default brands (8 < 10). Admin override can grant m
 
 ## Gotchas
 
-- Modal call-output retention is **7 days**; finalize must happen within that window.
-- `POST /jobs` must never be retried — a lost response could mean the request landed; retrying double-bills GPU time.
+- **`generationViews` must be a partial record** (`z.partialRecord(z.enum(REFERENCE_VIEW_TAGS), appwriteId)` in `createProjectSchema`): the client only sends tagged views (Front required, Left/Back/Right optional). Zod v4 `z.record(z.enum(...))` is exhaustive and requires all keys — use `z.partialRecord` instead. Empty maps / missing `front` are caught by explicit refinements with friendly messages.
+- **`projects` must carry the 10 generation columns** (`generationMode`, `generationStatus`, `generationJobId`, `generationRunId`, `generationAssetId`, `generationError`, `generationViews`, `generationStartedAt`, `generationCompletedAt`, `generationCreditCost` — see `src/server/db/ensure.ts`). Without them Appwrite rejects `createRow` with `Unknown attribute: "generationMode"` (surfaced as `[action] unexpected failure` until this fix). Provision with `npm run ensure-backend`; the New Task path also auto-heals on the first Unknown-attribute, so a cold DB recovers on the next attempt.
+- **Asset status is case-sensitive and uppercase**: `AssetStatus.READY = "READY"`. `normalizeImage` must compare `asset.status !== AssetStatus.READY` — comparing to lowercase `"ready"` fails for every legitimate asset (this was the root cause of `Asset … is not ready`). Generated asset rows must also use `AssetType.MODEL_GLB` / `AssetStatus.READY` / `provider: "appwrite"` / `fileId` / `originalName` / `mimeType` / `size` so `listAppwriteModelAssets` and reconcile can find them.
+- **AI Draft runs at Modal `quality: "max"` + `remove_bg: true`** — `GENERATION_QUALITY` in `manifest.ts` is `"max"` (9 views, 25 texture steps), not `"balanced"`. Both `startFastGeneration` and `regenerateFastGeneration` always send `remove_bg: true`.
+- **Normalize failure must set FAILED**: `startFastGeneration` and `regenerateFastGeneration` wrap normalization + manifest in try/catch that sets `generationStatus: FAILED` + `generationError` and rethrows — otherwise the row stays stuck in `SUBMITTED` with no job forever.
+- **Claim guard accepts RUNNING *or* SUBMITTED**: `withFailover` can return `succeeded` before the `SUBMITTED → RUNNING` flip lands, so the finalize claim queries both statuses. Claiming only `RUNNING` would miss that race.
+- **Refund uses `generationCreditCost`**: every `pollAndFinalize` failure path refunds `project.generationCreditCost` (2 for create, 1 for regenerate), not a hard-coded 2 — otherwise a regenerate poll-failure would net the brand +1 credit. `refundCredits` prefers `incrementRowColumn` (atomic) with a read-modify-write fallback.
+- **Modal call-output retention is 7 days**; finalize must happen within that window.
+- **`POST /jobs` must never be retried** — a lost response could mean the request landed; retrying double-bills GPU time.
+- **`GET /jobs` returns 401 on bad token** (not transient); `404` means unknown/expired job → `Hy3dExpiredError`. `withFailover` does not retry on `Hy3dSubmissionError` or `Hy3dExpiredError`.
+- **`HY3D_API_URL_2` unset makes failover a no-op** — `getHy3dConfig(1)` throws `Hy3dNotConfiguredError` when the fallback URL is absent rather than silently reusing the primary.
 - Appwrite `getFilePreview` only works on images < 10 MB; larger files fail with a clear error.
+- **Normalized output must be ≤ 8 MB** (Modal `MAX_FILE_MB`); `normalizeImage` checks the preview byte length before submitting.
 - `updateRows` in a transaction returns `{total:0}` — use single-row updates for claims.
 - All generation env vars are optional — the app works without them; Fast mode surfaces a clear error when invoked without config.
 - `Buffer.from(uint8array)` is required for Blob/File constructors in Node 24 (SharedArrayBuffer incompatibility).
-- **Credit deduction is caller-owned**: `startFastGeneration` and `regenerateFastGeneration` never touch credits. Callers (project service, action layer) handle check + deduct + refund. This prevents double-deduction and keeps auth context where it belongs.
+- **Credit deduction is caller-owned**: `startFastGeneration` and `regenerateFastGeneration` never touch credits. Callers (project service, action layer) handle check + deduct + refund. This prevents double-deduction and keeps auth context where it belongs. The service only *records* the charge in `generationCreditCost` for later refund.
 - **Admin bypass**: `adminRegenerateGeneration` uses `skipOwnershipCheck: true` and skips credit deduction entirely — admin can regenerate any FAST project without cost.
+- **Reconcile removed from finalize hot path**: `pollAndFinalize` no longer calls the full `reconcileStoragePermissions()` sweep after success (it was an unbounded `getFile`-per-asset scan on every generation). Publish permissions are set at upload time (`read:any`) and reconciled by the nightly cron.
+- **Orphan cleanup**: if `createRow` for the generated asset fails after `storage.createFile` succeeded, the file is deleted before returning FAILED — no orphaned GLB in the `models` bucket.

@@ -19,7 +19,7 @@ export const REQUIRED_VIEW: ReferenceView = ReferenceView.FRONT;
 export const MIN_VIEWS = 1;
 export const MAX_VIEWS = 4;
 
-export const GENERATION_QUALITY = "balanced" as const;
+export const GENERATION_QUALITY = "max" as const;
 
 export interface SubmissionFile {
   /** Remote filename; the manifest references these verbatim. */
@@ -70,6 +70,9 @@ export function validateViews(tags: string[]): ValidationResult {
   }
   if (!tags.includes(REQUIRED_VIEW)) {
     return { ok: false, reason: "The front view is required" };
+  }
+  if (new Set(tags).size !== tags.length) {
+    return { ok: false, reason: "Duplicate view tags are not allowed" };
   }
   return { ok: true };
 }

@@ -6,7 +6,7 @@ import { useAuth } from "@appwrite.io/react";
 import { X } from 'lucide-react';
 import { Button } from '../ui/Button';
 import { cn } from '../ui/cn';
-import { Wordmark } from '../Wordmark';
+import Image from 'next/image';
 import { logout } from '@/app/actions/auth';
 
 interface NavItem {
@@ -129,26 +129,7 @@ export function MobileNavDrawer({ isOpen, onClose, navItems, pathname }: MobileN
           style={{ borderBottom: '1px solid var(--border-default)' }}
         >
           <Link href="/" className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]" aria-label="Go to Home" onClick={handleLinkClick}>
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
-              style={{ border: '1px solid var(--text-primary)' }}
-            >
-              <svg
-                className="w-4 h-4"
-                style={{ color: 'var(--text-primary)' }}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden={true}
-              >
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-              </svg>
-            </div>
-            <Wordmark
-              className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
-              dotClassName="text-[var(--accent)]"
-            />
+            <Image src="/peka_logo.png" alt="" width={427} height={429} className="h-8 w-auto" />
           </Link>
           <Button
             variant="ghost"

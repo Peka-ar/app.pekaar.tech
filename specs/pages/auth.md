@@ -22,7 +22,7 @@ The proxy whitelists `/auth/*` as public. The logged-in re-visit redirect lives 
 
 Server entry: `requirePrincipal()` in try/catch — no session → `<AuthClient />`; onboarded → role-aware redirect (not onboarded → `/onboarding`, ADMIN → `/admin/dashboard`, BRAND → `/dashboard`).
 
-`AuthClient` is a split-screen client component: left ink brand panel (Wordmark, "Photos in. Showroom out." headline, proof bullets — desktop only, compact ink header on mobile), right white form area with a segmented Sign in / Sign up tablist. `type AuthView = 'signin' | 'signup' | 'forgot-password'`; forgot-password is entered from a tertiary link inside `SignInForm` (no tab). `SignUpForm` owns its post-submit state internally (inbox screen).
+`AuthClient` is a split-screen client component: left ink brand panel (logo image `public/peka_logo.png`, "Photos in. Showroom out." headline, proof bullets — desktop only, compact ink header on mobile), right white form area with a segmented Sign in / Sign up tablist. `type AuthView = 'signin' | 'signup' | 'forgot-password'`; forgot-password is entered from a tertiary link inside `SignInForm` (no tab). `SignUpForm` owns its post-submit state internally (inbox screen).
 
 ---
 

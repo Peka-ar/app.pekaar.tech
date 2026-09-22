@@ -95,18 +95,40 @@ export async function regenerateGeneration(
       );
     }
 
-    // Deduct credit before calling the service
+    // Deduct credit atomically before calling the service
     const { getTablesDB } = await import("@/server/db/client");
     const { APPWRITE_DATABASE_ID } = await import("@/lib/appwrite-config");
     const tablesDB = getTablesDB();
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: "users",
-      rowId: principal.userId,
-      data: {
-        usageLimits: (user.usageLimits ?? 0) - cost,
-      },
-    });
+    try {
+      await tablesDB.decrementRowColumn({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: DB.users,
+        rowId: principal.userId,
+        column: "usageLimits",
+        value: cost,
+        min: 0,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (/quota|insufficient|remaining|limit/i.test(msg)) {
+        throw new QuotaExceededError(
+          `Not enough credits. Regeneration requires ${cost} credit${cost > 1 ? "s" : ""}. Visit /pricing to upgrade.`,
+        );
+      }
+      // Fallback — verify balance and do read-modify-write
+      const fresh = await getRowSafe<UsersRow>(DB.users, principal.userId);
+      if (!fresh || (fresh.usageLimits ?? 0) < cost) {
+        throw new QuotaExceededError(
+          `Not enough credits. Regeneration requires ${cost} credit${cost > 1 ? "s" : ""}. Visit /pricing to upgrade.`,
+        );
+      }
+      await tablesDB.updateRow({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: DB.users,
+        rowId: principal.userId,
+        data: { usageLimits: (fresh.usageLimits ?? 0) - cost },
+      });
+    }
 
     try {
       await regenerateFastGeneration({ projectId, brandId: principal.userId });

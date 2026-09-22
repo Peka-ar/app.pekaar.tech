@@ -35,6 +35,9 @@ export interface Hy3dConfig {
 
 export function getHy3dConfig(fallbackIndex: 0 | 1 = 0): Hy3dConfig {
   const urls = [process.env.HY3D_API_URL, process.env.HY3D_API_URL_2];
+  if (fallbackIndex === 1 && !urls[1]) {
+    throw new Hy3dNotConfiguredError("HY3D_API_URL_2 not set — no fallback available");
+  }
   const baseUrl = urls[fallbackIndex] || urls[0] || "";
   const token = process.env.HY3D_API_TOKEN || "";
   if (!token) throw new Hy3dNotConfiguredError();
@@ -80,14 +83,14 @@ export async function submitJob(
     );
   }
   if (params.manifest) {
-    formData.append("manifest", new Blob([params.manifest], { type: "application/json" }));
+    formData.append("manifest", params.manifest);
   }
   const optionsPayload: Record<string, unknown> = {};
   if (params.options?.quality) optionsPayload.quality = params.options.quality;
   if (params.options?.remove_bg) optionsPayload.remove_bg = true;
   if (params.options?.bake_normals) optionsPayload.bake_normals = true;
   if (Object.keys(optionsPayload).length > 0) {
-    formData.append("options", new Blob([JSON.stringify(optionsPayload)], { type: "application/json" }));
+    formData.append("options", JSON.stringify(optionsPayload));
   }
 
   const res = await fetch(`${config.baseUrl}/jobs`, {
@@ -153,6 +156,9 @@ export async function pollJob(config: Hy3dConfig, jobId: string): Promise<Hy3dPo
     // Unknown terminal status — treat as failed
     return { status: "failed", error: `Unexpected status: ${data.status}` };
   }
+  if (res.status === 401) {
+    throw new Hy3dSubmissionError("401 Unauthorized — check HY3D_API_TOKEN", 401);
+  }
   if (res.status === 404) {
     throw new Hy3dExpiredError(jobId);
   }
@@ -200,7 +206,8 @@ export async function downloadArtifact(
 }
 
 /**
- * Tries a config, falling back to the second URL on auth/network errors.
+ * Tries a config, falling back to the second URL on network/transient errors.
+ * Submission (422/401) and expiry errors never fail over.
  */
 export async function withFailover<T>(
   fn: (config: Hy3dConfig) => Promise<T>,
@@ -210,15 +217,16 @@ export async function withFailover<T>(
   } catch (e) {
     if (
       e instanceof Hy3dNotConfiguredError ||
-      e instanceof Hy3dSubmissionError
+      e instanceof Hy3dSubmissionError ||
+      e instanceof Hy3dExpiredError
     ) {
       throw e;
     }
-    // Network or auth error — try fallback
+    // Transient/network error — try fallback
     try {
       return await fn(getHy3dConfig(1));
-    } catch {
-      // If fallback also fails, throw the original
+    } catch (fallbackErr) {
+      if (fallbackErr instanceof Hy3dNotConfiguredError) throw e;
       throw e;
     }
   }

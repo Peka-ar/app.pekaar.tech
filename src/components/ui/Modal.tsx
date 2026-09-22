@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 import { Button } from './Button';
 import { cn } from './cn';
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'full';
 export type ModalVariant = 'dialog' | 'takeover';
 
 export interface ModalProps {
@@ -24,6 +24,7 @@ const sizeClasses: Record<ModalSize, string> = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  '2xl': 'max-w-2xl',
   full: 'max-w-full mx-4',
 };
 
@@ -32,7 +33,8 @@ const sizeStyles: Record<ModalSize, React.CSSProperties> = {
   md: { width: '100%' },
   lg: { width: '100%' },
   xl: { width: '100%' },
-  full: { width: 'calc(100vw - 32px)', height: 'calc(100vh - 32px)' },
+  '2xl': { width: '100%' },
+  full: { width: 'calc(100vw - 32px)', height: 'calc(100dvh - 32px)' },
 };
 
 const firstFocusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
@@ -181,14 +183,15 @@ export function Modal({
         aria-labelledby="modal-title"
         aria-describedby={description ? 'modal-description' : undefined}
         className={cn(
-          'bg-[var(--color-canvas)] rounded-[24px] w-full',
+          'flex w-full flex-col overflow-hidden rounded-[24px] bg-[var(--color-canvas)]',
+          'max-h-[calc(100dvh-32px)]',
           'shadow-[var(--shadow-2)]',
           sizeClasses[size],
-          variant === 'takeover' && 'h-full flex flex-col'
+          variant === 'takeover' && 'h-full'
         )}
         style={sizeStyles[size]}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border-default)]">
+        <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[var(--color-border-default)] px-6 py-4">
           <div>
             <h2 id="modal-title" className="text-xl font-semibold tracking-tight text-[var(--color-text-primary)]" style={{ fontFamily: 'var(--font-display)' }}>
               {title}
@@ -205,12 +208,12 @@ export function Modal({
           </div>
         </div>
 
-        <div className={cn('flex-1 overflow-y-auto px-6 py-4', variant === 'takeover' && 'h-full')}>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">
           {children}
         </div>
 
         {footer && (
-          <div className="px-6 py-4 border-t border-[var(--color-border-default)]">
+          <div className="shrink-0 border-t border-[var(--color-border-default)] px-6 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4">
             {footer}
           </div>
         )}

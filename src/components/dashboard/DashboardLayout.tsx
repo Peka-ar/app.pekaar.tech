@@ -1,12 +1,12 @@
 "use client";
 import React, { useState } from 'react';
-import { Box, LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, CreditCard, Menu } from 'lucide-react';
+import { LayoutDashboard, ListTodo, Bell, Link as LinkIcon, BarChart2, CreditCard, Menu } from 'lucide-react';
 import Link from "next/link";
 import { usePathname } from 'next/navigation';
 import { useAuth } from "@appwrite.io/react";
 import { MobileNavDrawer } from './MobileNavDrawer';
 import { Button } from '../ui/Button';
-import { Wordmark } from '../Wordmark';
+import Image from 'next/image';
 import { logout } from '@/app/actions/auth';
 
 interface DashboardLayoutProps {
@@ -58,16 +58,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
           style={{ borderBottom: '1px solid var(--border-default)' }}
         >
           <Link href="/" className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]" aria-label="Go to Home">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
-              style={{ border: '1px solid var(--text-primary)' }}
-            >
-              <Box className="w-4 h-4" style={{ color: 'var(--text-primary)' }} aria-hidden="true" />
-            </div>
-            <Wordmark
-              className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
-              dotClassName="text-[var(--accent)]"
-            />
+            <Image src="/peka_logo.png" alt="" width={427} height={429} className="h-8 w-auto" />
           </Link>
         </div>
 
@@ -153,7 +144,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
       <div className="flex-1 flex flex-col min-w-0">
         <h1 className="sr-only">{title}</h1>
 
-        {/* Mobile-only top bar: hamburger + wordmark */}
+        {/* Mobile-only top bar: hamburger + logo */}
         <header
           className="md:hidden h-16 flex items-center justify-between gap-3 px-4 sticky top-0 z-20 shrink-0"
           style={{
@@ -175,16 +166,7 @@ export default function DashboardLayout({ children, title, action }: DashboardLa
               className="flex items-center gap-2 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-primary)]"
               aria-label="Go to Home"
             >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center bg-transparent"
-                style={{ border: '1px solid var(--text-primary)' }}
-              >
-                <Box className="w-4 h-4" style={{ color: 'var(--text-primary)' }} aria-hidden="true" />
-              </div>
-              <Wordmark
-                className="text-[15px] font-semibold tracking-tight font-display text-[var(--color-text-primary)]"
-                dotClassName="text-[var(--accent)]"
-              />
+              <Image src="/peka_logo.png" alt="" width={427} height={429} className="h-8 w-auto" />
             </Link>
           </div>
         </header>

@@ -120,7 +120,7 @@ export function RevisionTimeline({ items }: { items: RevisionRequestLite[] }) {
               {req.requester?.name || req.requester?.email || "Brand"}
             </span>
             <time className="shrink-0 font-sans text-[11px] tabular-nums text-[var(--color-text-muted)]">
-              {new Date(req.createdAt).toLocaleString()}
+              {new Date(req.createdAt).toLocaleString("en-US", { year: "numeric", month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}
             </time>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--color-text-primary)]">

@@ -7,7 +7,7 @@ import SignUpForm from "@/components/auth/SignUpForm";
 import ForgotPasswordForm from "@/components/auth/ForgotPasswordForm";
 import { ArrowLeft } from "lucide-react";
 import { LinkButton } from "@/components/ui/LinkButton";
-import { Wordmark } from "@/components/Wordmark";
+import Image from "next/image";
 
 type AuthView = "signin" | "signup" | "forgot-password";
 
@@ -24,7 +24,7 @@ export default function AuthClient() {
     <div className="min-h-screen bg-[var(--canvas)] text-[var(--text-primary)] flex flex-col lg:flex-row font-sans antialiased overflow-hidden">
       {/* Mobile ink header band — brand moment survives mobile */}
       <div className="flex lg:hidden shrink-0 items-center justify-between bg-[var(--ink)] px-6 py-4 text-[var(--on-ink)]">
-        <Wordmark className="text-sm font-display font-semibold tracking-[0.22em] uppercase text-[var(--on-ink)]" dotClassName="text-[var(--accent)]" />
+        <Image src="/peka_logo.png" alt="Peka AR" width={427} height={429} className="h-6 w-auto" />
         <LinkButton
           href="/"
           variant="ghost"
@@ -40,7 +40,7 @@ export default function AuthClient() {
       <div className="hidden lg:flex lg:w-[44%] xl:w-[42%] bg-[var(--ink)] text-[var(--on-ink)] flex-col relative overflow-hidden border-r border-[var(--border-default)]">
         <div className="flex h-full flex-col justify-between p-10 xl:p-12">
           <div>
-            <Wordmark className="font-display text-lg font-semibold tracking-[0.22em] uppercase text-[var(--on-ink)]" dotClassName="text-[var(--accent)]" />
+            <Image src="/peka_logo.png" alt="Peka AR" width={427} height={429} className="h-9 w-auto" />
             <h2
               className="mt-10 max-w-[16ch] font-display text-[clamp(1.625rem,3vw,2.125rem)] font-bold leading-[1.15] tracking-[-0.015em] text-[var(--on-ink)]"
               style={{ textWrap: "balance" }}

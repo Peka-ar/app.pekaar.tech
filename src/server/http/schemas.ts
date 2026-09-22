@@ -42,7 +42,7 @@ export const createProjectSchema = z.object({
   assetIds: z.array(appwriteId).max(50, "Too many assets"),
   generationMode: z.enum(["PREMIUM", "FAST"]).default("PREMIUM"),
   generationViews: z
-    .record(z.enum(REFERENCE_VIEW_TAGS), appwriteId)
+    .partialRecord(z.enum(REFERENCE_VIEW_TAGS), appwriteId)
     .optional()
     .nullable(),
 }).refine(

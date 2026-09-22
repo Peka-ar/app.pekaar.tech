@@ -94,9 +94,11 @@ Shared detail primitives (`src/components/tasks/TaskDetailParts.tsx`): `SectionC
 
 ---
 
-## Drawer — New Task (BRAND creates a project)
+## Modal — New Task (BRAND creates a project)
 
-Opened by the "New Task" button (BRAND only). `TaskDrawer` with a 3-step wizard flow (Details → Dimensions → Photos, progress dots in the footer, Back/Continue, Create on the last step).
+Opened by the "New Task" button (BRAND only; also from the empty-board CTA). `Modal` size `2xl` (`max-w-2xl`, 672px) with a 3-step wizard flow (Details → Dimensions → Photos, progress dots in the footer, Back/Continue, Create on the last step).
+
+**Height contract:** the modal panel is height-constrained (`max-h-[calc(100dvh-32px)]`, flex column, `shrink-0` header/footer, scrollable body) — long step content scrolls inside the body while header and footer stay pinned, so the Create button is never pushed off-screen on short viewports. (An unconstrained panel grows past the viewport while body scroll is locked — footer unreachable. See `../WEBSITE.md` §15.)
 
 1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional).
 2. **Physical Dimensions (CM)** — width/height/depth (required, `min="1"`).
@@ -104,19 +106,11 @@ Opened by the "New Task" button (BRAND only). `TaskDrawer` with a 3-step wizard 
 
 **Generation mode selector** (on the Photos step): radio-style toggle between "Premium" and "AI Draft". Premium = artist-finished (10 credits); AI Draft = fast generation (~5-10 min, 2 credits). Default is Premium.
 
-**FAST mode view tagging**: when AI Draft is selected, show 4 view slots (Front required, Left/Back/Right optional). Each slot has a dropdown to assign one of the uploaded images. Views are sent to the server as a JSON map.
+**FAST mode view tagging**: when AI Draft is selected, show 4 view slots (Front required, Left/Back/Right optional) in a 2-column grid at ≥`sm` (single column on mobile). Each slot has a dropdown assigning one uploaded image (an image can hold only one tag). Views are sent to the server as a **partial** JSON map — only tagged views are included.
 
-**Submit** validates `uploadedAssets.length > 0` + all dimensions > 0, then `createProject(name, assetIds, sku, instructions, dimensions, mode, views)`. For FAST mode, the server also checks credits (2) and kicks off the Modal API job. Success → clear state + `router.refresh()` inside `startTransition`; failure → error banner.
+**Submit** validates `uploadedAssets.length > 0` + all dimensions > 0 + (FAST) front tagged, then `createProject(name, assetIds, sku, instructions, dimensions, mode, views)`. For FAST mode, the server also checks credits (2) and kicks off the Modal API job. Success → clear state + `router.refresh()` inside `startTransition`; failure → error banner with `result.message`.
 
-Opened by the "New Task" button (BRAND only). `Modal` size `xl` with a 3-step flow (Details → Dimensions → Photos, progress dots in the footer, Back/Continue, Create on the last step) — stepped because the `xl` width never reaches the old 2-column breakpoint.
-
-1. **Product Details** — `productName` (required), `productSku` (required), `additionalInstructions` (optional).
-2. **Physical Dimensions (CM)** — width/height/depth (required, `min="1"`).
-3. **Reference Images** — dashed dropzone, max **5 images**. Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `useAppwriteUpload({ bucketId: "reference-images", maxSizeMB: 16 })` and appends the `RecordedAsset` to `uploadedAssets`. Thumbnails (`unoptimized`) with remove buttons + click-to-enlarge lightbox.
-
-**Submit** validates `uploadedAssets.length > 0` + all dimensions > 0, then `createProject(name, assetIds, sku, instructions, dimensions)`. Success → clear state + `router.refresh()` inside `startTransition`; failure → error banner with `result.message`.
-
-Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decrement, asset ownership/READY/`isNull(projectId)` check, PENDING project, link assets. Full contract: `../WEBSITE.md` §8.
+Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decrement, asset ownership/READY/`isNull(projectId)` check, PENDING project, link assets. Full contract: `../WEBSITE.md` §8. `generationViews` is a partial record — see the Zod gotcha in `../generation-architecture.md`.
 
 > Upload mechanics: `../file-storage-architecture.md`.
 

@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { Wordmark } from "@/components/Wordmark";
+import Image from "next/image";
 import Reveal from "./Reveal";
 
 const COLUMNS = [
@@ -38,14 +38,7 @@ export default function LandingFooter() {
         <div className="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_1fr] gap-8">
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-3">
-              <div
-                className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0"
-                style={{ border: "1px solid rgba(232,235,230,.5)", color: "var(--on-ink)" }}
-                aria-hidden="true"
-              >
-                P
-              </div>
-              <Wordmark className="font-display font-semibold tracking-tight text-sm text-[var(--on-ink)]" dotClassName="text-[var(--accent)]" />
+              <Image src="/peka_logo.png" alt="Peka AR" width={427} height={429} className="h-7 w-auto shrink-0" />
             </div>
             <p className="font-sans text-[13px] leading-relaxed text-[var(--on-ink)]/60 max-w-xs" style={{ textWrap: "pretty" }}>
               Product photos → interactive 3D. Artist-finished models, live on your storefront in hours.

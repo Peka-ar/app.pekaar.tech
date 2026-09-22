@@ -57,7 +57,7 @@ describe("hunyuan/manifest", () => {
     it("builds a manifest-less single-view submission named model.jpg", () => {
       const submission = buildSubmission([{ tag: ReferenceView.FRONT, bytes: bytes(1) }]);
       expect(submission.mode).toBe("single");
-      expect(submission.quality).toBe("balanced");
+      expect(submission.quality).toBe("max");
       expect(submission.manifest).toBeNull();
       expect(submission.files).toEqual([{ filename: "model.jpg", bytes: bytes(1) }]);
     });
