@@ -24,7 +24,13 @@ import {
 } from "@/lib/project-augment";
 import { canTransition } from "@/server/domain/project-state-machine";
 import { setFilePublic } from "@/server/storage";
-import { createProjectSchema, adminSubmitSchema, projectIdSchema, sendForRevisionsSchema } from "@/server/http/schemas";
+import {
+  createProjectSchema,
+  adminSubmitSchema,
+  projectIdSchema,
+  sendForRevisionsSchema,
+  updateDimensionsSchema,
+} from "@/server/http/schemas";
 import { AppError, NotFoundError, ConflictError, QuotaExceededError } from "@/server/http/errors";
 import { logger } from "@/server/logging";
 import { isGenerationUnknownAttributeError } from "@/server/db/ensure";
@@ -299,6 +305,33 @@ export async function brandSendForRevisionsService(
   });
 
   return { wasPublished };
+}
+
+export async function updateProjectDimensionsService(
+  projectId: string,
+  dimensions: { width: number; height: number; depth: number; unit?: string },
+): Promise<{ success: true }> {
+  const parsed = updateDimensionsSchema.safeParse({ projectId, dimensions });
+  if (!parsed.success) {
+    throw new AppError("VALIDATION", parsed.error.issues[0]?.message ?? "Invalid dimensions");
+  }
+
+  const principal = await requirePrincipal();
+
+  const project = await getRowSafe<ProjectsRow>(DB.projects, parsed.data.projectId);
+  // Generic 404 for missing AND foreign-brand projects — no enumeration.
+  if (!project || (principal.role !== Role.ADMIN && project.brandId !== principal.userId)) {
+    throw new NotFoundError("Project not found");
+  }
+
+  await getTablesDB().updateRow<ProjectsRow>({
+    databaseId: DB.databaseId,
+    tableId: DB.projects,
+    rowId: parsed.data.projectId,
+    data: { dimensions: JSON.stringify(parsed.data.dimensions) },
+  });
+
+  return { success: true };
 }
 
 export async function getUserProjectsService(): Promise<TaskJob[]> {

@@ -69,6 +69,16 @@ export const createProjectSchema = z.object({
   },
 );
 
+export const updateDimensionsSchema = z.object({
+  projectId: appwriteId,
+  dimensions: z.object({
+    width: z.number().min(1).max(1_000_000),
+    height: z.number().min(1).max(1_000_000),
+    depth: z.number().min(1).max(1_000_000),
+    unit: z.string().min(1).max(10).default("cm"),
+  }),
+});
+
 export const sendForRevisionsSchema = z.object({
   projectId: appwriteId,
   note: z.string().trim().min(1, "A note is required when requesting revisions").max(2000, "Note must be 2000 characters or fewer"),

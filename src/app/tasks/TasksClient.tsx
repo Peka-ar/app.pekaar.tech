@@ -27,7 +27,7 @@ import { TaskColumn, type BoardColumn } from "@/components/tasks/TaskColumn";
 import { TaskToolbar } from "@/components/tasks/TaskToolbar";
 import { StatusBanner } from "@/components/tasks/StatusBanner";
 import {
-  DimensionTiles,
+  DimensionEditor,
   Lightbox,
   MetaGrid,
   MetaItem,
@@ -860,7 +860,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 </div>
               )}
             </SectionCard>
-            <DimensionTiles dims={getDimensions(processingJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <DimensionEditor projectId={processingJob.id} dims={getDimensions(processingJob)} />
             <SectionCard>
               <SectionHeading
                 icon={ImageIcon}
@@ -897,6 +897,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
               </SectionHeading>
               <ReferenceGrid assets={getReferenceAssets(revisionsJob)} failed={failedRefImages} onFail={markFailed} onPreview={setLightboxUrl} />
             </SectionCard>
+            <DimensionEditor projectId={revisionsJob.id} dims={getDimensions(revisionsJob)} />
           </div>
         )}
       </TaskDrawer>
@@ -973,7 +974,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 </div>
               )}
             </SectionCard>
-            <DimensionTiles dims={getDimensions(reviewJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <DimensionEditor projectId={reviewJob.id} dims={getDimensions(reviewJob)} />
             <SectionCard>
               <SectionHeading
                 icon={ImageIcon}
@@ -1076,7 +1077,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 </div>
               )}
             </SectionCard>
-            <DimensionTiles dims={getDimensions(publishedJob) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <DimensionEditor projectId={publishedJob.id} dims={getDimensions(publishedJob)} />
             <SectionCard>
               <SectionHeading
                 icon={ImageIcon}

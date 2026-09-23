@@ -13,14 +13,42 @@
       --text-muted: #6f6d64;
       --text-primary: #161510;
       --hover: #e4e6dc;
+      --btn-bg: #ffffff;
+      --grid-end: #d9dbd0;
+      --grid-line: rgba(22, 21, 16, 0.08);
+      /* Invert-dependent controls: --text-primary flips in dark mode, so the
+         active-control and AR pill surfaces carry their own tokens (they
+         would otherwise render light-on-light / white-on-light). */
+      --ctl-active-bg: #161510;
+      --ctl-active-fg: #ffffff;
+      --ar-bg: #161510;
+      --ar-fg: #ffffff;
+      --ar-bg-hover: #2a2a24;
+      color-scheme: light;
     }
-    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    [data-theme="dark"] {
+      --bg: #151713;
+      --border: #2c2f29;
+      --text-muted: #a0a39a;
+      --text-primary: #f0f1ec;
+      --hover: #23261f;
+      --btn-bg: #1e211b;
+      --grid-end: #0e100c;
+      --grid-line: rgba(240, 241, 236, 0.08);
+      --ctl-active-bg: #f0f1ec;
+      --ctl-active-fg: #151713;
+      --ar-bg: #f0f1ec;
+      --ar-fg: #151713;
+      --ar-bg-hover: #d8d9d2;
+      color-scheme: dark;
+    }
+    html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; transition: background-color 200ms, color 200ms; }
     .grid-floor {
       position: absolute; inset: 0; z-index: 0; pointer-events: none;
       background:
-        linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, #d9dbd0 100%),
-        repeating-linear-gradient(90deg, transparent 0 60px, rgba(22,21,16,0.08) 60px 61px),
-        repeating-linear-gradient(0deg, transparent 0 60px, rgba(22,21,16,0.08) 60px 61px);
+        linear-gradient(180deg, var(--bg) 0%, var(--bg) 38%, var(--grid-end) 100%),
+        repeating-linear-gradient(90deg, transparent 0 60px, var(--grid-line) 60px 61px),
+        repeating-linear-gradient(0deg, transparent 0 60px, var(--grid-line) 60px 61px);
       transform: perspective(800px) rotateX(62deg);
       transform-origin: center 100%;
       mask-image: linear-gradient(180deg, transparent 0%, #000 28%, #000 72%, transparent 100%);
@@ -33,6 +61,7 @@
       border-radius: 16px;
       overflow: hidden;
       background: transparent;
+      transition: border-color 200ms;
     }
     #stage { position: absolute; inset: 0; z-index: 1; background: transparent; }
     #stage model-viewer {
@@ -76,14 +105,14 @@
     .ctrl-btn {
       width: 40px; height: 40px; border-radius: 9999px;
       display: flex; align-items: center; justify-content: center;
-      background: #fff; border: 1px solid var(--border); color: var(--text-muted);
+      background: var(--btn-bg); border: 1px solid var(--border); color: var(--text-muted);
       box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       cursor: pointer; padding: 0;
       transition: background-color 200ms, color 200ms, border-color 200ms;
     }
     .ctrl-btn:hover { background: var(--hover); }
     .ctrl-btn[aria-pressed="true"] {
-      background: var(--text-primary); color: #fff; border-color: var(--text-primary);
+      background: var(--ctl-active-bg); color: var(--ctl-active-fg); border-color: var(--ctl-active-bg);
     }
     .ctrl-btn:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .ctrl-btn svg { width: 16px; height: 16px; display: block; }
@@ -92,20 +121,31 @@
       position: absolute; bottom: 16px; right: 16px;
       display: inline-flex; align-items: center; gap: 8px;
       padding: 10px 16px; border-radius: 9999px;
-      background: var(--text-primary); color: #fff;
-      border: 1px solid var(--text-primary);
+      background: var(--ar-bg); color: var(--ar-fg);
+      border: 1px solid var(--ar-bg);
       font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
       font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
       cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
       transition: background-color 200ms, color 200ms, border-color 200ms, transform 100ms;
     }
-    .ar-button:hover { background: #2a2a24; }
+    .ar-button:hover { background: var(--ar-bg-hover); border-color: var(--ar-bg-hover); }
     .ar-button:active { transform: scale(0.97); }
     .ar-button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
     .ar-button[hidden] { display: none; }
     .ar-button svg { width: 14px; height: 14px; display: block; }
+    .theme-icon-sun { display: none; }
+    [data-theme="dark"] .theme-icon-sun { display: block; }
+    [data-theme="dark"] .theme-icon-moon { display: none; }
     :focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
   </style>
+  <script>
+    // Apply the stored theme before first paint — light stays the default.
+    try {
+      if (localStorage.getItem("peka-embed-theme") === "dark") {
+        document.documentElement.setAttribute("data-theme", "dark");
+      }
+    } catch (_) {}
+  </script>
 </head>
 <body>
   <div class="grid-floor" aria-hidden="true"></div>
@@ -122,6 +162,18 @@
       </div>
     </div>
     <div class="controls" id="controls" hidden>
+      <button type="button" class="ctrl-btn" id="btn-theme" aria-label="Toggle dark mode" title="Toggle dark mode" aria-pressed="false">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>
+        </svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2"/><path d="M12 20v2"/>
+          <path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/>
+          <path d="M2 12h2"/><path d="M20 12h2"/>
+          <path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+        </svg>
+      </button>
       <button type="button" class="ctrl-btn" id="btn-rotate" aria-label="Toggle auto rotation" aria-pressed="true" data-spin>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
@@ -141,6 +193,27 @@
       var projectId = "{PROJECT_ID}";
       var sessionId = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + "-" + Math.random().toString(36).slice(2));
       var APP_URL = "";
+
+      var themeBtn = document.getElementById("btn-theme");
+      function isDark() {
+        return document.documentElement.getAttribute("data-theme") === "dark";
+      }
+      function syncThemeBtn() {
+        if (themeBtn) themeBtn.setAttribute("aria-pressed", String(isDark()));
+      }
+      syncThemeBtn();
+      if (themeBtn) {
+        themeBtn.addEventListener("click", function () {
+          if (isDark()) {
+            document.documentElement.removeAttribute("data-theme");
+            try { localStorage.setItem("peka-embed-theme", "light"); } catch (_) {}
+          } else {
+            document.documentElement.setAttribute("data-theme", "dark");
+            try { localStorage.setItem("peka-embed-theme", "dark"); } catch (_) {}
+          }
+          syncThemeBtn();
+        });
+      }
 
       function send(eventType) {
         try {

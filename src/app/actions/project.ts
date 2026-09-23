@@ -9,6 +9,7 @@ import {
   brandSendForRevisionsService,
   getUserProjectsService,
   listAppwriteModelAssetsForProject,
+  updateProjectDimensionsService,
 } from "@/server/services/project.service";
 import {
   pollAndFinalize,
@@ -147,4 +148,17 @@ export async function regenerateGeneration(
 
 export async function getUserProjects(): Promise<TaskJob[]> {
   return getUserProjectsService();
+}
+
+export async function updateProjectDimensions(
+  projectId: string,
+  dimensions: { width: number; height: number; depth: number; unit?: string },
+): Promise<ActionResult<{ success: true }>> {
+  const result = await toActionResult(() => updateProjectDimensionsService(projectId, dimensions));
+  if (result.ok) {
+    revalidatePath("/tasks");
+    revalidatePath("/dashboard");
+    revalidatePath("/admin/tasks");
+  }
+  return result;
 }

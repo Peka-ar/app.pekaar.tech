@@ -7,6 +7,7 @@ import {
   signupSchema,
   adminSubmitSchema,
   recordAssetSchema,
+  updateDimensionsSchema,
   appwriteId,
 } from "./schemas";
 
@@ -179,6 +180,72 @@ describe("recordAssetSchema", () => {
 
   it("rejects unknown asset types", () => {
     expect(recordAssetSchema.safeParse({ fileId: "f1", type: "MODEL_STL" }).success).toBe(false);
+  });
+});
+
+describe("updateDimensionsSchema", () => {
+  it("accepts valid dimensions and defaults unit to cm", () => {
+    const out = updateDimensionsSchema.parse({
+      projectId: "proj_123",
+      dimensions: { width: 90, height: 95, depth: 88 },
+    });
+    expect(out.dimensions.unit).toBe("cm");
+  });
+
+  it("keeps an explicit unit", () => {
+    const out = updateDimensionsSchema.parse({
+      projectId: "proj_123",
+      dimensions: { width: 36, height: 37.4, depth: 34.6, unit: "in" },
+    });
+    expect(out.dimensions.unit).toBe("in");
+  });
+
+  it("rejects zero or negative values", () => {
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "proj_123",
+        dimensions: { width: 0, height: 95, depth: 88 },
+      }).success,
+    ).toBe(false);
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "proj_123",
+        dimensions: { width: 90, height: -95, depth: 88 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects NaN and non-numeric values", () => {
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "proj_123",
+        dimensions: { width: NaN, height: 95, depth: 88 },
+      }).success,
+    ).toBe(false);
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "proj_123",
+        dimensions: { width: "90", height: 95, depth: 88 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects oversized values", () => {
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "proj_123",
+        dimensions: { width: 1_000_001, height: 95, depth: 88 },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a malformed projectId", () => {
+    expect(
+      updateDimensionsSchema.safeParse({
+        projectId: "has space",
+        dimensions: { width: 90, height: 95, depth: 88 },
+      }).success,
+    ).toBe(false);
   });
 });
 

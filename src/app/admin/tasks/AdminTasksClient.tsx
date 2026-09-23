@@ -19,7 +19,7 @@ import { TaskColumn, type BoardColumn } from "@/components/tasks/TaskColumn";
 import { TaskToolbar } from "@/components/tasks/TaskToolbar";
 import { QueuedHint, StatusBanner } from "@/components/tasks/StatusBanner";
 import {
-  DimensionTiles,
+  DimensionEditor,
   MetaGrid,
   MetaItem,
   ReferenceGrid,
@@ -347,7 +347,7 @@ export default function AdminTasksClient({
               </div>
             </SectionCard>
 
-            <DimensionTiles dims={getDimensions(selectedTask) as { width?: number; height?: number; depth?: number; unit?: string }} />
+            <DimensionEditor projectId={selectedTask.id} dims={getDimensions(selectedTask)} />
 
             {/* Revision notes */}
             {selectedTask.status === 'REVISIONS' && (selectedTask.revisionRequests?.length ?? 0) > 0 && (

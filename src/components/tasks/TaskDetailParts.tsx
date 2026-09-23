@@ -1,9 +1,20 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
-import { Image as ImageIcon, MessageSquareWarning, Ruler, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  AlertCircle,
+  Image as ImageIcon,
+  MessageSquareWarning,
+  Pencil,
+  Ruler,
+  X,
+} from "lucide-react";
 import { cn } from "@/components/ui/cn";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { updateProjectDimensions } from "@/app/actions/project";
 import type { TaskAsset, RevisionRequestLite } from "./types";
 
 /* ── Grouped-section primitives (white cards on the drawer's sage ground) ── */
@@ -25,10 +36,12 @@ export function SectionCard({
 export function SectionHeading({
   icon: Icon,
   iconClassName,
+  action,
   children,
 }: {
   icon: React.ElementType;
   iconClassName?: string;
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -42,6 +55,7 @@ export function SectionHeading({
         <Icon className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
       </span>
       {children}
+      {action && <span className="ml-auto flex shrink-0 items-center">{action}</span>}
     </h3>
   );
 }
@@ -213,39 +227,173 @@ export function MetaItem({ label, children }: { label: string; children: React.R
 
 /* ── Dimensions (compact — own grouped card) ── */
 
-export function DimensionTiles({
-  dims,
-}: {
-  dims: { width?: number; height?: number; depth?: number; unit?: string };
-}) {
+type EditorDims = {
+  width?: number;
+  height?: number;
+  depth?: number;
+  length?: number;
+  unit?: string;
+};
+
+function DimensionGrid({ dims }: { dims: EditorDims }) {
   const unit = dims.unit || "cm";
   const tiles = [
     { k: "W", v: dims.width },
     { k: "H", v: dims.height },
-    { k: "D", v: dims.depth },
+    { k: "D", v: dims.depth ?? dims.length },
   ];
   return (
+    <div className="grid grid-cols-3 gap-2">
+      {tiles.map((t) => (
+        <div key={t.k} className="rounded-xl bg-[var(--color-canvas-soft)] px-3 py-2.5">
+          <span className="block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
+            {t.k}
+          </span>
+          <p className="font-sans text-sm font-semibold tabular-nums leading-tight text-[var(--color-text-primary)]">
+            {t.v ?? "–"}
+            {t.v != null && (
+              <span className="ml-0.5 text-[11px] font-normal text-[var(--color-text-muted)]">
+                {unit}
+              </span>
+            )}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Inline-editable dimensions card — BRAND owners and ADMINs can correct the
+ * recorded size on any task status (PENDING/REVISIONS/COMPLETED/PUBLISHED).
+ * Mirrors the inline "Request Changes" form pattern: edit swaps the tiles in
+ * place; save calls the `updateProjectDimensions` action then refreshes.
+ */
+export function DimensionEditor({ projectId, dims }: { projectId: string; dims: EditorDims }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [w, setW] = useState("");
+  const [h, setH] = useState("");
+  const [d, setD] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const startEditing = () => {
+    setW(dims.width != null ? String(dims.width) : "");
+    setH(dims.height != null ? String(dims.height) : "");
+    setD(dims.depth != null ? String(dims.depth) : dims.length != null ? String(dims.length) : "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+
+  const save = async () => {
+    const width = Number(w);
+    const height = Number(h);
+    const depth = Number(d);
+    if (!(width > 0) || !(height > 0) || !(depth > 0)) {
+      setError("Please enter valid dimensions (all values must be greater than 0).");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const result = await updateProjectDimensions(projectId, {
+      width,
+      height,
+      depth,
+      unit: dims.unit || "cm",
+    });
+    if (result.ok) {
+      setEditing(false);
+      router.refresh();
+    } else {
+      setError(result.message);
+    }
+    setSaving(false);
+  };
+
+  const fields = [
+    { key: "width", label: "Width", value: w, set: setW },
+    { key: "height", label: "Height", value: h, set: setH },
+    { key: "depth", label: "Depth", value: d, set: setD },
+  ] as const;
+
+  return (
     <SectionCard>
-      <SectionHeading icon={Ruler} iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]">
+      <SectionHeading
+        icon={Ruler}
+        iconClassName="bg-[var(--accent-pale)] text-[var(--ink-deep)]"
+        action={
+          !editing ? (
+            <button
+              type="button"
+              onClick={startEditing}
+              aria-label="Edit dimensions"
+              title="Edit dimensions"
+              className="flex h-7 w-7 items-center justify-center rounded-full text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-canvas-soft)] hover:text-[var(--color-text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-text-primary)] active:scale-95"
+            >
+              <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          ) : undefined
+        }
+      >
         Dimensions
       </SectionHeading>
-      <div className="grid grid-cols-3 gap-2">
-        {tiles.map((t) => (
-          <div key={t.k} className="rounded-xl bg-[var(--color-canvas-soft)] px-3 py-2.5">
-            <span className="block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]">
-              {t.k}
-            </span>
-            <p className="font-sans text-sm font-semibold tabular-nums leading-tight text-[var(--color-text-primary)]">
-              {t.v ?? "–"}
-              {t.v != null && (
-                <span className="ml-0.5 text-[11px] font-normal text-[var(--color-text-muted)]">
-                  {unit}
-                </span>
-              )}
-            </p>
+
+      {!editing ? (
+        <DimensionGrid dims={dims} />
+      ) : (
+        <div>
+          {error && (
+            <div
+              role="alert"
+              className="mb-3 flex items-center gap-2 rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-3 py-2 text-[12px] text-[var(--negative-deep)]"
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <span>{error}</span>
+            </div>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            {fields.map((f) => (
+              <div key={f.key}>
+                <label
+                  htmlFor={`dim-edit-${f.key}`}
+                  className="mb-1.5 block font-sans text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--color-text-muted)]"
+                >
+                  {f.label}
+                </label>
+                <Input
+                  id={`dim-edit-${f.key}`}
+                  type="number"
+                  min="1"
+                  step="any"
+                  inputMode="decimal"
+                  value={f.value}
+                  onChange={(e) => f.set(e.target.value)}
+                  className="h-10 px-3 text-sm"
+                />
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+          <div className="mt-3 flex items-center justify-between gap-2">
+            <span className="font-sans text-[11px] text-[var(--color-text-muted)]">
+              {dims.unit || "cm"} · applies to the 3D review and live embeds
+            </span>
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={cancel} disabled={saving}>
+                Cancel
+              </Button>
+              <Button size="sm" onClick={save} isLoading={saving}>
+                Save
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </SectionCard>
   );
 }

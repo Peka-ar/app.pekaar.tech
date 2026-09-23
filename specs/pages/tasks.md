@@ -39,7 +39,7 @@ type TaskJob = {
 };
 ```
 
-Shared board primitives live in `src/components/tasks/` and are used by both `/tasks` and `/admin/tasks`: `TaskDrawer` (right slide-over detail panel), `TaskCard` + `TaskColumn` (board), `TaskToolbar` (search + status filter + count + List↔Board toggle), `StatusBanner` (per-status banners), `TaskDetailParts` (`ReferenceGrid`, `RevisionTimeline`, `Lightbox`, `MetaGrid`/`MetaItem`, `DimensionTiles`), and `types.ts` (`TaskJob` + selectors — `getThumbnail`, `getSku`, `getDimensions`, `formatRelativeShort`, `getLatestModelUpdatedAt` — moved out of the clients so both share them).
+Shared board primitives live in `src/components/tasks/` and are used by both `/tasks` and `/admin/tasks`: `TaskDrawer` (right slide-over detail panel), `TaskCard` + `TaskColumn` (board), `TaskToolbar` (search + status filter + count + List↔Board toggle), `StatusBanner` (per-status banners), `TaskDetailParts` (`ReferenceGrid`, `RevisionTimeline`, `Lightbox`, `MetaGrid`/`MetaItem`, `DimensionEditor`), and `types.ts` (`TaskJob` + selectors — `getThumbnail`, `getSku`, `getDimensions`, `formatRelativeShort`, `getLatestModelUpdatedAt` — moved out of the clients so both share them).
 
 `TaskDrawer` replaces the old centered `Modal` for every task-detail view: sticky header (title + status `Badge` + close), single scroll body, sticky footer for contextual actions. Full-screen sheet on mobile, `sm:max-w-xl` slide-over with `sm:m-3` rounding on desktop. Same focus contract as `Modal` (focus close on open, Esc, Tab trap, restore trigger focus, body scroll lock).
 
@@ -90,7 +90,9 @@ All drawers use `TaskDrawer` (`src/components/tasks/TaskDrawer.tsx`): panel slid
 
 Drawer body renders on soft sage ground (`--color-canvas-soft`). Content uses white grouped `SectionCard` sections with `SectionHeading` (icon + label). Content settles with `drawer-content` animation (320ms, 120ms delay).
 
-Shared detail primitives (`src/components/tasks/TaskDetailParts.tsx`): `SectionCard`, `SectionHeading`, `MetaGrid`, `MetaItem`, `DimensionTiles` (compact 3-cell row), `ReferenceGrid` (labeled empty states, per-tile unavailable state), `RevisionNotesCard`, `Lightbox` (z-[100], `lightbox-enter`/`lightbox-zoom` animations), `StatusBanner` (inline styles, per-role subtexts).
+Shared detail primitives (`src/components/tasks/TaskDetailParts.tsx`): `SectionCard`, `SectionHeading` (optional `action` slot, right-aligned in the heading row), `MetaGrid`, `MetaItem`, `DimensionEditor` (compact 3-cell row + inline edit form — see below), `ReferenceGrid` (labeled empty states, per-tile unavailable state), `RevisionNotesCard`, `Lightbox` (z-[100], `lightbox-enter`/`lightbox-zoom` animations), `StatusBanner` (inline styles, per-role subtexts).
+
+**Dimension editing** (`DimensionEditor`): every drawer on both boards shows the dimensions card with a pencil `action` button in its `SectionHeading`. Clicking swaps the tiles in place for three number inputs (W/H/D, prefilled — legacy `length` seeds the depth field) + Cancel/Save, mirroring the inline "Request Changes" sub-form pattern. Save calls `updateProjectDimensions` (BRAND owner or ADMIN, **any status**) then `router.refresh()`; failures render `result.message` above the fields. Unit is fixed `cm` (matches the create wizard). The card notes the values "apply to the 3D review and live embeds".
 
 ---
 
@@ -118,7 +120,7 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 ## Drawer — Processing (PENDING, read-only)
 
-`StatusBanner` (inline styles, "In the production queue" subtext) + `SectionCard` with Project Details (`SectionHeading` + `MetaGrid`: name, SKU, brand, created) + `DimensionTiles` (compact row) + `SectionCard` with Reference Images (`SectionHeading` + `ReferenceGrid`).
+`StatusBanner` (inline styles, "In the production queue" subtext) + `SectionCard` with Project Details (`SectionHeading` + `MetaGrid`: name, SKU, brand, created) + `DimensionEditor` + `SectionCard` with Reference Images (`SectionHeading` + `ReferenceGrid`).
 
 **AI Draft mode**: when `generationMode === "FAST"`, the Processing drawer shows a generation status banner with current status (SUBMITTED/RUNNING/FINALIZING), elapsed time, and a "Check Status" button that polls the generation endpoint. On SUCCEEDED, the drawer auto-refreshes. On FAILED, shows error message + "Regenerate" button (1 credit).
 
@@ -126,7 +128,7 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 ## Drawer — Revisions (REVISIONS, read-only)
 
-`StatusBanner` (amber, "Brand has requested changes") + `RevisionNotesCard` (newest-first notes with timestamps) + `SectionCard` with Reference Images.
+`StatusBanner` (amber, "Brand has requested changes") + `RevisionNotesCard` (newest-first notes with timestamps) + `SectionCard` with Reference Images + `DimensionEditor`.
 
 ---
 
@@ -134,7 +136,7 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 `TaskDrawer` with sticky footer actions (BRAND only): **Request Changes** (toggles sub-form) and **Approve & Publish** → `brandPublishProject(jobId)`.
 
-**Stacked layout**: `StatusBanner` → 3D viewer (`<ThreeDConfigurator product={reviewViewerProduct} heightClassName="relative w-full h-[340px] min-h-0 sm:h-[420px]" />`, always mounted, memoized product) + "Model last updated" caption → `SectionCard` with Project Details + `DimensionTiles` + `SectionCard` with Reference Images (2-col) → Request Changes sub-form (`SectionCard` with textarea + "Send Request" → `brandSendForRevisions`).
+**Stacked layout**: `StatusBanner` → 3D viewer (`<ThreeDConfigurator product={reviewViewerProduct} heightClassName="relative w-full h-[340px] min-h-0 sm:h-[420px]" />`, always mounted, memoized product) + "Model last updated" caption → `SectionCard` with Project Details + `DimensionEditor` + `SectionCard` with Reference Images (2-col) → Request Changes sub-form (`SectionCard` with textarea + "Send Request" → `brandSendForRevisions`).
 
 - AR button appears when `canActivateAR` is truthy; hidden on desktop.
 - No GLB → "No GLB asset is available for review." in a `SectionCard`.
@@ -144,7 +146,7 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 ## Drawer — Published (PUBLISHED — View 3D or Send for Revisions)
 
-Same layout as Review: `StatusBanner` → viewer + "Model last updated" caption → `SectionCard` with Project Details + `DimensionTiles` + `SectionCard` with Reference Images. Sticky footer (BRAND only): **Send for Revisions** — sub-form warns "This will remove the model from your live embed." `brandSendForRevisions` revokes storage grants + revalidates embed.
+Same layout as Review: `StatusBanner` → viewer + "Model last updated" caption → `SectionCard` with Project Details + `DimensionEditor` + `SectionCard` with Reference Images. Sticky footer (BRAND only): **Send for Revisions** — sub-form warns "This will remove the model from your live embed." `brandSendForRevisions` revokes storage grants + revalidates embed.
 
 ---
 
@@ -162,6 +164,7 @@ All in `src/app/actions/project.ts` / `admin.ts`, thin adapters over `project.se
 - **`brandPublishProject`** — BRAND owner; **fail-closed publish**: `read:any` on every READY GLB/USDZ storage file *before* the status flip; any grant failure revokes and aborts.
 - **`brandSendForRevisions`** — BRAND owner; in-tx precondition (ownership + status ∈ {COMPLETED, PUBLISHED} — not re-entrant from REVISIONS); if was PUBLISHED, revoke grants + revalidate embed.
 - **`getUserProjects`** — caller's projects, derived `referenceUrls`/`assetUrls` (proxy-rewritten in `src/lib/project-augment.ts`).
+- **`updateProjectDimensions`** — BRAND owner or ADMIN (generic 404 for missing/foreign projects), **any status**; single-row write of the `dimensions` JSON; revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
 - **`pollGeneration`** — BRAND/ADMIN; polls and finalizes a FAST generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`.
 - **`regenerateGeneration`** — BRAND/ADMIN; re-submits a FAILED/SUCCEEDED FAST generation (1 credit).
 - **`adminSubmitProject`** — ADMIN; tx with in-tx status precondition + per-asset link verification; archives prior READY models (kept in storage, no quota impact). See `./admin.md` §3.

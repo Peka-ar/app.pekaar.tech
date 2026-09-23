@@ -202,6 +202,7 @@ All `"use server"`, thin adapters over `src/server/services/*.service.ts` (layer
 | `getUserProjects` | any role | Caller's projects (newest first) → `TaskJob[]` via `buildTaskJob()` (`src/lib/project-augment.ts`) |
 | `getAllTasks` | ADMIN | All projects + brands + assets + revisions → `TaskJob[]` |
 | `adminSubmitProject` | ADMIN | Tx: precondition + per-asset link verification + archive prior models + link new + → COMPLETED (§6) |
+| `updateProjectDimensions` | BRAND owner or ADMIN | Overwrite the `dimensions` JSON on **any status** (generic 404 for missing/foreign — no enumeration); revalidates `/tasks`, `/dashboard`, `/admin/tasks` |
 | `adminGetUsers` / `adminGetUser` | ADMIN | User list (JS search, 50/page) / user detail + counts + last-5 projects |
 | `adminUpdateUser` / `adminSetUserStatus` / `adminDeleteUser` | ADMIN (not self) | Update role/limits/tier / suspend+reason or activate / **explicit cascade delete** (TablesDB has no FK cascades: projects, assets, events, revision_requests, users row, Appwrite user) |
 | `getPlatformKPIs` / `getSignupsSeries` / `getProjectsByMonth` / `getTopBrands` | ADMIN | Platform aggregates for admin dashboard/analytics |
@@ -266,6 +267,7 @@ Full spec: `pages/embed.md`.
 - **`/embed/[projectId]`** — route handler that reads `public/embed-viewer.html`, replaces `{PROJECT_ID}`, returns `no-store` + `force-dynamic` (PUBLISHED→REVISIONS stops serving immediately). Never touches `app/layout.tsx` — no fonts, no React, no providers.
 - **`GET /api/sdk/v1/config/[projectId]`** — public, 60s-cached. Only `assetUrls.glb`/`usdz` are per-project; **viewer config is hardcoded** (matches landing `ThreeDConfigurator` exactly, user decision). `sdkConfig` is kept for forward-compat.
 - **`POST /api/sdk/v1/events`** — VIEW on load, INTERACTION on first camera-change, AR_LAUNCH on first AR session-started/object-placed (once each per page view).
+- **Dark/light toggle** in the viewer: light default, applied pre-paint from `localStorage["peka-embed-theme"]` (per-origin — shared across all embeds); fires no analytics event. Themed via local tokens only — see `pages/embed.md` §Dark / light theme (incl. the `--text-primary` inversion trap).
 - **Embed liveness:** latest VIEW per project → "Last Seen" + amber (>7d) / red (>30d) badges on `/analytics` (`src/lib/embed-liveness.ts`).
 - Resilience headers on `/embed/*` (`next.config.mjs`): nosniff, strict-origin-when-cross-origin, XR-sensor Permissions-Policy — and **no X-Frame-Options** (meant to be cross-origin framed).
 - Embed code generator: `generateEmbedCode` in `src/lib/utils.ts` (iframe snippet shown on `/integrations`).
@@ -274,7 +276,7 @@ Full spec: `pages/embed.md`.
 
 ## 12. Design system
 
-**Primary reference:** `design.md` (repo root, local-only) — v3.2: forest `#163300` primary CTA, lime `#9fe870` accent (accents + CTA fill on dark grounds), butter support on dark grounds, Figtree 400/900 display, sage `#e8ebe6`, light-only, 24px rounded-rect buttons. Tokens + component classes in `globals.css`; no dark mode.
+**Primary reference:** `design.md` (repo root, local-only) — v3.2: forest `#163300` primary CTA, lime `#9fe870` accent (accents + CTA fill on dark grounds), butter support on dark grounds, Figtree 400/900 display, sage `#e8ebe6`, light-only, 24px rounded-rect buttons. Tokens + component classes in `globals.css`; no dark mode in the app (the public embed template carries its own local light/dark toggle — `pages/embed.md` §Dark / light theme).
 
 Key invariants:
 - **Never white text on lime** — ink labels on accent (`--on-accent`); lime is never a button fill on a light ground.
