@@ -41,7 +41,7 @@ export const Role = {
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
 
-/** How a project's 3D model is produced: manual artist (Premium) or the AI pipeline (Fast). */
+/** How a project's 3D model is produced: manual artist (labelled "Artist") or the AI pipeline (labelled "AI pipeline"). Enum values stay PREMIUM/FAST — labels are display-only. */
 export const GenerationMode = {
   PREMIUM: "PREMIUM",
   FAST: "FAST",

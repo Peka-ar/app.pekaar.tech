@@ -52,7 +52,7 @@ const CREDIT_STEPS = [
     icon: Zap,
     well: "bg-[var(--accent-pale)]",
     glyph: "text-[var(--ink-deep)]",
-    title: "AI Draft",
+    title: "AI pipeline",
     cost: "2 credits per model · 1 to regenerate",
     desc: "Upload photos and get a first 3D draft in about 5 to 10 minutes. Good enough to preview, priced to try.",
   },
@@ -60,7 +60,7 @@ const CREDIT_STEPS = [
     icon: Paintbrush,
     well: "bg-[var(--surface-butter)]",
     glyph: "text-[var(--surface-butter-deep)]",
-    title: "Premium production",
+    title: "Artist production",
     cost: "10 credits per model",
     desc: "A 3D artist finishes the model by hand, with revisions until it matches your product.",
   },
@@ -79,7 +79,7 @@ const INCLUDED = [
   { title: "AR view-in-room", desc: "Let shoppers see products in their space before buying." },
   { title: "GLB + USDZ formats", desc: "Universal compatibility with WebXR and Apple Quick Look." },
   { title: "One-line iframe embed", desc: "Drop a single line of code into Shopify, WooCommerce, or any platform." },
-  { title: "AI Draft generation", desc: "Turn photos into a first 3D draft in minutes, on every plan including Free." },
+  { title: "AI pipeline generation", desc: "Turn photos into a first 3D draft in minutes, on every plan including Free." },
   { title: "Revisions included", desc: "Request changes with a note until the model matches your product." },
   { title: "You keep the files", desc: "Download your GLB and USDZ any time. No lock-in." },
   { title: "Engagement analytics", desc: "Track views and AR launches per project from your dashboard." },
@@ -88,7 +88,7 @@ const INCLUDED = [
 const FAQS = [
   {
     q: "What is a credit?",
-    a: "A credit is one unit of production. AI Draft costs 2 credits per model and regenerating a draft costs 1. Premium production costs 10 credits per model.",
+    a: "A credit is one unit of production. AI pipeline costs 2 credits per model and regenerating a draft costs 1. Artist production costs 10 credits per model.",
   },
   {
     q: "What happens when I run out of credits?",
@@ -108,7 +108,7 @@ const FAQS = [
   },
   {
     q: "What is the difference between Free and Premium?",
-    a: "Free includes AI Draft generation, hosting, and embeds. Premium adds artist-finished production, more monthly credits, and priority support.",
+    a: "Free includes AI pipeline generation, hosting, and embeds. Premium adds artist-finished production, more monthly credits, and priority support.",
   },
   {
     q: "Does it work with my storefront?",

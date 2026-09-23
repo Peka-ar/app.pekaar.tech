@@ -2,7 +2,7 @@
 
 > Parent: `../WEBSITE.md`
 
-Two-tier generation: **Premium** (artist-finished, admin-managed) and **Fast** (AI Draft, automated via Hunyuan3D Modal API).
+Two-tier generation: **Artist** (enum `PREMIUM`; artist-finished, admin-managed) and **Fast** (enum `FAST`, labeled **"AI pipeline"**; automated via Hunyuan3D Modal API). Labels are display-only — enum values remain `PREMIUM`/`FAST`.
 
 ## Generation modes
 
@@ -51,7 +51,7 @@ Pure functions — no I/O, fully unit-tested.
 - Multiview (2-4 views): staged filenames `model__front.jpg`, `model__left.jpg`, etc. Manifest: `{"models":[{"name":"model","views":{"front":"model__front.jpg",...}}]}`.
 - `findGlbPath(files, name)` — picks the `_textured.glb` from job output.
 - `validateViews(tags)` — enforces front required, max 4, no duplicates (rejects repeated tags), no unknown tags.
-- `GENERATION_QUALITY = "max"` — AI Draft runs at Modal `quality: "max"` (9 views, 25 texture steps) for best output; `remove_bg: true` is always sent.
+- `GENERATION_QUALITY = "max"` — AI pipeline runs at Modal `quality: "max"` (9 views, 25 texture steps) for best output; `remove_bg: true` is always sent.
 
 ### API client (`client.ts`)
 
@@ -141,17 +141,18 @@ Premium is **paid-only** for default brands (8 < 10). Admin override can grant m
 
 ## UI
 
-- **New Task wizard**: Mode selector (Premium/AI Draft) on Photos step. FAST mode shows 4 tagged view slots (Front required, Left/Back/Right optional) with image assignment dropdowns.
-- **Task cards**: "AI Draft" badge on FAST projects.
+- **New Task wizard**: Mode selector (Artist / AI pipeline) on Photos step. FAST mode shows 4 tagged view slots (Front required, Left/Back/Right optional) with image assignment dropdowns.
+- **Task cards**: "AI pipeline" badge on FAST projects.
 - **Processing drawer**: Generation status banner for FAST projects, "Check Status" poll button, "Regenerate" button on FAILED (brand: 1 credit).
 - **Admin drawer**: Generation status + timing info for FAST projects, "Regenerate" button on FAILED/SUCCEEDED (admin: no credit cost).
 
 ## Gotchas
 
+- **Deleting a PENDING project does not cancel the Modal job** — `deletePendingProjectService` (project delete) removes the row, but the Hunyuan client has no cancel API; the job finishes and its result is discarded (`pollAndFinalize` gets `NotFoundError` on the missing project). A post-commit re-sweep in the delete service removes any asset row a racing finalize re-creates with the dead projectId. **Credits are never refunded on delete.**
 - **`generationViews` must be a partial record** (`z.partialRecord(z.enum(REFERENCE_VIEW_TAGS), appwriteId)` in `createProjectSchema`): the client only sends tagged views (Front required, Left/Back/Right optional). Zod v4 `z.record(z.enum(...))` is exhaustive and requires all keys — use `z.partialRecord` instead. Empty maps / missing `front` are caught by explicit refinements with friendly messages.
 - **`projects` must carry the 10 generation columns** (`generationMode`, `generationStatus`, `generationJobId`, `generationRunId`, `generationAssetId`, `generationError`, `generationViews`, `generationStartedAt`, `generationCompletedAt`, `generationCreditCost` — see `src/server/db/ensure.ts`). Without them Appwrite rejects `createRow` with `Unknown attribute: "generationMode"` (surfaced as `[action] unexpected failure` until this fix). Provision with `npm run ensure-backend`; the New Task path also auto-heals on the first Unknown-attribute, so a cold DB recovers on the next attempt.
 - **Asset status is case-sensitive and uppercase**: `AssetStatus.READY = "READY"`. `normalizeImage` must compare `asset.status !== AssetStatus.READY` — comparing to lowercase `"ready"` fails for every legitimate asset (this was the root cause of `Asset … is not ready`). Generated asset rows must also use `AssetType.MODEL_GLB` / `AssetStatus.READY` / `provider: "appwrite"` / `fileId` / `originalName` / `mimeType` / `size` so `listAppwriteModelAssets` and reconcile can find them.
-- **AI Draft runs at Modal `quality: "max"` + `remove_bg: true`** — `GENERATION_QUALITY` in `manifest.ts` is `"max"` (9 views, 25 texture steps), not `"balanced"`. Both `startFastGeneration` and `regenerateFastGeneration` always send `remove_bg: true`.
+- **AI pipeline runs at Modal `quality: "max"` + `remove_bg: true`** — `GENERATION_QUALITY` in `manifest.ts` is `"max"` (9 views, 25 texture steps), not `"balanced"`. Both `startFastGeneration` and `regenerateFastGeneration` always send `remove_bg: true`.
 - **Normalize failure must set FAILED**: `startFastGeneration` and `regenerateFastGeneration` wrap normalization + manifest in try/catch that sets `generationStatus: FAILED` + `generationError` and rethrows — otherwise the row stays stuck in `SUBMITTED` with no job forever.
 - **Claim guard accepts RUNNING *or* SUBMITTED**: `withFailover` can return `succeeded` before the `SUBMITTED → RUNNING` flip lands, so the finalize claim queries both statuses. Claiming only `RUNNING` would miss that race.
 - **Refund uses `generationCreditCost`**: every `pollAndFinalize` failure path refunds `project.generationCreditCost` (2 for create, 1 for regenerate), not a hard-coded 2 — otherwise a regenerate poll-failure would net the brand +1 credit. `refundCredits` prefers `incrementRowColumn` (atomic) with a read-modify-write fallback.

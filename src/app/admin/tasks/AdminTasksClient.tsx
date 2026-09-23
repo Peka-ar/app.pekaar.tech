@@ -262,7 +262,7 @@ export default function AdminTasksClient({
             {selectedTask.generationMode === "FAST" && (
               <div className="rounded-xl border border-[var(--surface-sky)]/40 bg-[var(--surface-sky)]/10 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[var(--surface-sky-deep)]">AI Draft</span>
+                  <span className="text-xs font-semibold text-[var(--surface-sky-deep)]">AI pipeline</span>
                   {selectedTask.generationStatus && (
                     <Badge tone={
                       selectedTask.generationStatus === "SUCCEEDED" ? "success" :

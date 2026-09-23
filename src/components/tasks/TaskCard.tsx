@@ -76,7 +76,7 @@ export function TaskCard({
         <p className="truncate flex-1 text-xs text-[var(--color-text-muted)]">{meta}</p>
         {job.generationMode === "FAST" && (
           <span className="shrink-0 rounded-full bg-[var(--surface-sky)]/30 px-2 py-0.5 font-sans text-[9px] font-bold uppercase tracking-wider text-[var(--surface-sky-deep)]">
-            AI Draft
+            AI pipeline
           </span>
         )}
       </div>

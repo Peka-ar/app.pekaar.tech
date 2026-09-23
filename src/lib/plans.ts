@@ -23,7 +23,7 @@ export const PLANS: Plan[] = [
     creditLabel: "6 credits/mo",
     highlighted: false,
     features: [
-      "AI Draft 3D generation",
+      "AI pipeline 3D generation",
       "Model hosting",
       "Embed + AR view",
       "GLB + USDZ formats",
@@ -41,7 +41,7 @@ export const PLANS: Plan[] = [
     features: [
       "Everything in Free",
       "Artist-finished models",
-      "Premium production quality",
+      "Artist production quality",
       "Priority support",
     ],
   },

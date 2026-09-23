@@ -49,7 +49,7 @@ type ActionResult<T = undefined> =
   | { ok: false; code: ErrorCode; message: string }
 ```
 
-- **Mutations** (`createProject`, `brandPublishProject`, `brandSendForRevisions`, `adminSubmitProject`, `updateProjectDimensions`, `adminUpdateUser`, `adminSetUserStatus`, `adminDeleteUser`) return `ActionResult`; clients branch on `result.ok` and render `result.message` (never `console.error`).
+- **Mutations** (`createProject`, `brandPublishProject`, `brandSendForRevisions`, `adminSubmitProject`, `updateProjectDimensions`, `deletePendingProject`, `adminUpdateUser`, `adminSetUserStatus`, `adminDeleteUser`) return `ActionResult`; clients branch on `result.ok` and render `result.message` (never `console.error`).
 - **Reads** (`getUserProjects`, `getAllTasks`, `adminGetUsers`, admin-analytics, `getProjectLiveness`) keep throwing; server pages catch via `error.tsx`.
 - **Auth forms** (register/reset/verify/onboarding) keep the throw contract — form components catch and display `err.message`.
 
@@ -90,7 +90,7 @@ SYSTEM: PENDING|REVISIONS  → COMPLETED  (Fast generation auto-flip)
 
 | Service file                  | Exports                                                                 |
 |-------------------------------|-------------------------------------------------------------------------|
-| `project.service.ts`          | `createProjectService`, `brandPublishProjectService`, `brandSendForRevisionsService`, `getUserProjectsService`, `getAllTasksService`, `adminSubmitProjectService`, `updateProjectDimensionsService`, `listAppwriteModelAssetsForProject` |
+| `project.service.ts`          | `createProjectService`, `brandPublishProjectService`, `brandSendForRevisionsService`, `deletePendingProjectService`, `getUserProjectsService`, `getAllTasksService`, `adminSubmitProjectService`, `updateProjectDimensionsService`, `listAppwriteModelAssetsForProject` |
 | `generation.service.ts`       | `startFastGeneration`, `pollAndFinalize`, `regenerateFastGeneration`, `finalizeStaleGenerations` |
 | `user-admin.service.ts`       | `adminGetUsersService`, `adminGetUserService`, `adminUpdateUserService`, `adminSetUserStatusService`, `adminDeleteUserService` |
 | `analytics.service.ts`        | `getProjectLivenessService`, `getPlatformKPIsService`, `getSignupsSeriesService`, `getProjectsByMonthService`, `getTopBrandsService` |

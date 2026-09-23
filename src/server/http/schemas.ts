@@ -53,7 +53,7 @@ export const createProjectSchema = z.object({
     return true;
   },
   {
-    message: "At least one view (front, left, back, or right) is required for AI Draft mode",
+    message: "At least one view (front, left, back, or right) is required for AI pipeline mode",
     path: ["generationViews"],
   },
 ).refine(
@@ -64,7 +64,7 @@ export const createProjectSchema = z.object({
     return true;
   },
   {
-    message: "Front view is required for AI Draft mode",
+    message: "Front view is required for AI pipeline mode",
     path: ["generationViews"],
   },
 );

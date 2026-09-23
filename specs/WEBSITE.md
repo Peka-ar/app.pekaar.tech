@@ -8,18 +8,18 @@
 
 Peka AR is a premium micro-SaaS that converts standard product photography into interactive 3D/AR assets for D2C brands. A **Brand** uploads reference photos and dimensions; an **Admin** (production team) produces a GLB + optional USDZ; the Brand approves; the published model is embeddable as an iframe in any storefront.
 
-**Two generation modes:**
-- **Premium** (default) — artist-finished 3D model. Brand uploads photos, Admin produces GLB + USDZ, Brand reviews and publishes. 10 credits.
-- **Fast (AI Draft)** — AI-generated 3D model (~5-10 min). Brand uploads photos + tags views, Hunyuan3D Modal API generates GLB, auto-flips to COMPLETED for brand review. 2 credits. Regenerate costs 1 credit. Clearly labeled "AI Draft" throughout.
+**Two generation modes:** (display labels — enum values stay `PREMIUM`/`FAST`)
+- **Artist** (default, enum `PREMIUM`) — artist-finished 3D model. Brand uploads photos, Admin produces GLB + USDZ, Brand reviews and publishes. 10 credits.
+- **Fast** (enum `FAST`, labeled **"AI pipeline"**) — AI-generated 3D model (~5-10 min). Brand uploads photos + tags views, Hunyuan3D Modal API generates GLB, auto-flips to COMPLETED for brand review. 2 credits. Regenerate costs 1 credit. Clearly labeled "AI pipeline" throughout.
 
 **Two roles:**
 - **`BRAND`** (default on signup) — creates projects, uploads reference images, reviews the model, requests revisions (with a note), or approves & publishes.
-- **`ADMIN`** (production + platform ops) — sees all projects, uploads 3D models (Premium) or overrides AI-generated models (Fast), submits for the brand's review, manages users, views platform KPIs.
+- **`ADMIN`** (production + platform ops) — sees all projects, uploads 3D models (Artist mode) or overrides AI-generated models (Fast), submits for the brand's review, manages users, views platform KPIs.
 
 **Project lifecycle (4 states):**
 
 ```
-Premium:
+Artist (enum PREMIUM):
 PENDING ───admin "Submit"───▶ COMPLETED ───brand "Approve & Publish"───▶ PUBLISHED
     ▲                            │                                              │
     │                            │ brand "Request Changes" (with note)         │
@@ -28,7 +28,7 @@ PENDING ───admin "Submit"───▶ COMPLETED ───brand "Approve & 
                                     admin re-uploads + Submits
                                     back to COMPLETED
 
-Fast (AI Draft):
+Fast (AI pipeline):
 PENDING ───Modal API job───▶ COMPLETED ───brand "Approve & Publish"───▶ PUBLISHED
     ▲ (FAILED → brand "Regenerate")    │
                                        │ brand "Request Changes" (with note)
@@ -134,11 +134,11 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | `GET\|POST /api/appwrite/[...appwrite]` | public | SSR auth handlers (`createAppwriteHandlers` from `@appwrite.io/react`) — creates/deletes the session cookie, redirects to `/dashboard` or `/auth`. Needs the server API key. |
 | `GET /api/notifications` | `requirePrincipal` | 10 newest of caller's projects. Errors degrade to `[]`. No UI consumer since the header bell was removed — retained as the auth-gated uptime probe in `deployment.md` (an unauthenticated request still returns `401`, proving the server is up). |
 | `GET /api/health` | none | Verifies admin client can reach Appwrite (`200 {ok}` / `503`). For uptime monitors. |
-| `GET /api/cron/maintenance` | `Bearer CRON_SECRET` (fail closed) | Nightly maintenance: storage-permission reconciliation, `rate_limits` (>48h) + `analytics_events` (>90d) pruning, and AI Draft generation sweep (polls/finalizes stuck projects). Triggered by Vercel Cron on the frozen mirror — see `deployment.md` for the migration runbook if Vercel goes away. |
+| `GET /api/cron/maintenance` | `Bearer CRON_SECRET` (fail closed) | Nightly maintenance: storage-permission reconciliation, `rate_limits` (>48h) + `analytics_events` (>90d) pruning, and AI pipeline generation sweep (polls/finalizes stuck projects). Triggered by Vercel Cron on the frozen mirror — see `deployment.md` for the migration runbook if Vercel goes away. |
 | `POST /api/sdk/v1/events` | public, CORS `*` | Analytics ingest: `{ eventType: VIEW\|INTERACTION\|AR_LAUNCH, sessionId, projectId }` → `analytics_events` row. Rate-limited 60/min/IP. |
 | `GET /api/sdk/v1/config/[projectId]` | public, cached 60s | `{ assetUrls: { glb, usdz }, sdkConfig }` for PUBLISHED projects only (404 otherwise, prevents enumeration). URL derivation: `resolveAssetUrl` in the route file. |
 | `GET /api/v1/assets/[assetId]/file` | auth-gated | Streaming proxy for **all in-app asset reads** — `requirePrincipal` (BRAND passes if owner or linked-project brand), then streams from Appwrite Storage with the server API key. `Cache-Control: private, max-age=60`. |
-| `GET /api/v1/generation/[projectId]` | `requirePrincipal` | Polls and finalizes AI Draft generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Also called by the nightly cron sweep. |
+| `GET /api/v1/generation/[projectId]` | `requirePrincipal` | Polls and finalizes AI pipeline generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Also called by the nightly cron sweep. |
 
 **Uploads have no API route:** the browser uploads directly to Appwrite Storage (session-authenticated `storage.createFile`), then the `recordAssetUpload` server action creates the `assets` row (§10).
 
@@ -203,6 +203,7 @@ All `"use server"`, thin adapters over `src/server/services/*.service.ts` (layer
 | `getAllTasks` | ADMIN | All projects + brands + assets + revisions → `TaskJob[]` |
 | `adminSubmitProject` | ADMIN | Tx: precondition + per-asset link verification + archive prior models + link new + → COMPLETED (§6) |
 | `updateProjectDimensions` | BRAND owner or ADMIN | Overwrite the `dimensions` JSON on **any status** (generic 404 for missing/foreign — no enumeration); revalidates `/tasks`, `/dashboard`, `/admin/tasks` |
+| `deletePendingProject` | BRAND owner | Cascade-delete a **PENDING-only** project (in-tx status precondition): project + linked assets + revision_requests + analytics_events rows, then best-effort storage file deletes + one post-commit orphan re-sweep for assets a racing FAST finalize may re-create. **Credits are never refunded.** Generic 404 for missing/foreign |
 | `adminGetUsers` / `adminGetUser` | ADMIN | User list (JS search, 50/page) / user detail + counts + last-5 projects |
 | `adminUpdateUser` / `adminSetUserStatus` / `adminDeleteUser` | ADMIN (not self) | Update role/limits/tier / suspend+reason or activate / **explicit cascade delete** (TablesDB has no FK cascades: projects, assets, events, revision_requests, users row, Appwrite user) |
 | `getPlatformKPIs` / `getSignupsSeries` / `getProjectsByMonth` / `getTopBrands` | ADMIN | Platform aggregates for admin dashboard/analytics |
@@ -319,7 +320,7 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 - **`subscription-architecture.md`** — subscription tiers, credit renewal, contact requests, admin deal-setting, security.
 - **`file-storage-architecture.md`** — Appwrite Storage: buckets, browser-direct uploads, proxy, publish grants/revokes, archival.
 - **`deployment.md`** — production handbook: Appwrite Sites @ pekaar.tech, env vars, workflow, rollback, DNS, frozen Vercel mirror.
-- **`generation-architecture.md`** — AI Draft (Fast) generation: Hunyuan3D Modal API integration, image normalization, manifest builder, poll/finalize, cron sweep, credits.
+- **`generation-architecture.md`** — AI pipeline (Fast) generation: Hunyuan3D Modal API integration, image normalization, manifest builder, poll/finalize, cron sweep, credits.
 - **`pages/tasks.md`** — `/tasks` Kanban + list + the 4 status modals.
 - **`pages/dashboard.md`** — `/dashboard` metrics + 12-month chart.
 - **`pages/auth.md`** — `/auth*` flows + session plumbing + security properties.

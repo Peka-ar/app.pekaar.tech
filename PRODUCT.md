@@ -19,13 +19,13 @@ Peka AR turns standard product photography into interactive, web-optimized 3D as
 
 Peka AR sells a managed 3D team and workflow, not a filter. Two generation tiers serve different needs:
 
-**Premium (Artist-Finished)** — the flagship. Four claims stack into the offer:
+**Artist (Artist-Finished)** — the flagship. Four claims stack into the offer:
 1. **Hours, not weeks.** Where an agency engagement hires a 3D artist per model, Peka AR runs a full team + workflow management that completes a model in a few hours.
 2. **Artist-finished, not raw AI.** AI accelerates the pipeline, then each model is manually improved by a 3D artist and optimized for fast serving on the web. Never a raw AI-generated asset.
 3. **Zero-hassle delivery.** One iframe embed that works everywhere and runs without fuss — plus AR so customers view the product in their own house or office before buying.
 4. **Honest value.** A price-to-quality ratio that undercuts what a normal 3D studio plus web developer would charge.
 
-**Fast (AI Draft)** — quick AI-generated 3D model (~5-10 min). Clearly labeled "AI Draft" throughout the UI so brands know exactly what they're getting. Ideal for rapid prototyping, internal review, or quick previews before committing to the premium artist finish.
+**Fast (AI pipeline)** — quick AI-generated 3D model (~5-10 min). Clearly labeled "AI pipeline" throughout the UI so brands know exactly what they're getting. Ideal for rapid prototyping, internal review, or quick previews before committing to the Artist finish.
 
 The mechanism a neighboring competitor cannot copy-paste is the combination: AI-accelerated pipeline + human 3D craft + one-line embed + in-home AR, delivered as a managed service within hours.
 
@@ -51,7 +51,7 @@ The mechanism a neighboring competitor cannot copy-paste is the combination: AI-
 - **Name:** Peka AR. Rebranded from STUDIO.V / StudioV — do not reintroduce the old name on new surfaces. Domain: `pekar.tech`. Appwrite project already carries the name ("Peka.ar").
 - **Single brand accent:** one Peka Green family (lime `#9fe870`). No second brand hue; status colors are semantic, not brand.
 - **Themes:** light-only (v3, shipped); dark surfaces survive as components (ink bands, footer, embed viewer).
-- **Tone of truth:** Premium tier is always "artist-finished"; Fast tier is always labeled "AI Draft." Never conflate the two.
+- **Tone of truth:** Artist mode is always "artist-finished"; Fast mode is always labeled "AI pipeline." Never conflate the two.
 - The visual language is defined in `design.md` (v3, shipped — `WEBSITE.md` §12 is the as-built mirror); this file records product truth only.
 
 ## Evidence on Hand
@@ -61,8 +61,8 @@ The mechanism a neighboring competitor cannot copy-paste is the combination: AI-
 
 ## Product Principles
 
-1. **Artist-finished, not raw AI.** Protect the differentiator in every claim and in the actual pipeline. Premium tier is always artist-finished; Fast tier is clearly labeled "AI Draft."
-2. **Speed is a promise.** "Hours, not weeks" must stay visible and true — the pipeline stages surface progress, never a black box. AI Draft targets ~5-10 minutes.
+1. **Artist-finished, not raw AI.** Protect the differentiator in every claim and in the actual pipeline. Artist mode is always artist-finished; Fast mode is clearly labeled "AI pipeline."
+2. **Speed is a promise.** "Hours, not weeks" must stay visible and true — the pipeline stages surface progress, never a black box. AI pipeline targets ~5-10 minutes.
 3. **Zero hassle for both sides.** One embed for the seller; a viewer that just works for the shopper.
 4. **Proof over claims.** Wherever the site claims quality, show the real 3D/AR result.
 5. **Restraint.** Premium comes from precision and calm, not decoration — one accent, disciplined hierarchy.

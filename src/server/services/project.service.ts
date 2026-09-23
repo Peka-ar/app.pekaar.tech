@@ -24,6 +24,9 @@ import {
 } from "@/lib/project-augment";
 import { canTransition } from "@/server/domain/project-state-machine";
 import { setFilePublic } from "@/server/storage";
+import { Storage } from "node-appwrite";
+import { createAdminClient } from "@/server/appwrite";
+import { bucketForAssetType } from "@/lib/appwrite-config";
 import {
   createProjectSchema,
   adminSubmitSchema,
@@ -69,7 +72,7 @@ export async function createProjectService(
   const user = await getRowSafe<UsersRow>(DB.users, principal.userId);
   if (!user || !user.usageLimits || user.usageLimits < cost) {
     throw new QuotaExceededError(
-      `Not enough credits. ${parsed.data.generationMode === "FAST" ? "AI Draft" : "Premium"} requires ${cost} credits. Visit /pricing to upgrade.`,
+      `Not enough credits. ${parsed.data.generationMode === "FAST" ? "AI pipeline" : "Artist"} requires ${cost} credits. Visit /pricing to upgrade.`,
     );
   }
 
@@ -305,6 +308,106 @@ export async function brandSendForRevisionsService(
   });
 
   return { wasPublished };
+}
+
+/**
+ * Deletes a brand-owned PENDING project (cascade: assets, revision requests,
+ * analytics events) and best-effort removes the assets' storage files.
+ * Credits are intentionally NOT refunded.
+ */
+export async function deletePendingProjectService(projectId: string): Promise<{ success: true }> {
+  const parsed = projectIdSchema.safeParse(projectId);
+  if (!parsed.success) throw new AppError("VALIDATION", "Invalid project id");
+
+  const principal = await requirePrincipal({ roles: [Role.BRAND] });
+
+  const project = await getRowSafe<ProjectsRow>(DB.projects, parsed.data);
+  if (!project || project.brandId !== principal.userId) {
+    throw new NotFoundError("Project not found");
+  }
+
+  const deletedAssets = await runTransaction(async (db, txId) => {
+    const current = await getRowSafe<ProjectsRow>(DB.projects, parsed.data, txId);
+    if (!current || current.brandId !== principal.userId) {
+      throw new NotFoundError("Project not found");
+    }
+    if (current.status !== ProjectStatus.PENDING) {
+      throw new ConflictError("Only tasks still in processing can be deleted");
+    }
+
+    const assets = await db.listRows<AssetsRow>({
+      databaseId: DB.databaseId,
+      tableId: DB.assets,
+      queries: [Query.equal("projectId", parsed.data)],
+      transactionId: txId,
+    });
+
+    await db.deleteRows({
+      databaseId: DB.databaseId,
+      tableId: DB.assets,
+      queries: [Query.equal("projectId", parsed.data)],
+      transactionId: txId,
+    });
+    await db.deleteRows({
+      databaseId: DB.databaseId,
+      tableId: DB.revisionRequests,
+      queries: [Query.equal("projectId", parsed.data)],
+      transactionId: txId,
+    });
+    await db.deleteRows({
+      databaseId: DB.databaseId,
+      tableId: DB.analyticsEvents,
+      queries: [Query.equal("projectId", parsed.data)],
+      transactionId: txId,
+    });
+    await db.deleteRows({
+      databaseId: DB.databaseId,
+      tableId: DB.projects,
+      queries: [Query.equal("$id", parsed.data), Query.equal("brandId", principal.userId)],
+      transactionId: txId,
+    });
+
+    return assets.rows;
+  });
+
+  // Best-effort storage cleanup for the assets deleted in the transaction.
+  const storage = new Storage(createAdminClient());
+  const fileIds = deletedAssets.filter((a) => a.fileId);
+  await Promise.allSettled(
+    fileIds.map((a) =>
+      storage.deleteFile({ bucketId: bucketForAssetType(a.type), fileId: a.fileId as string }),
+    ),
+  );
+
+  // Re-sweep: a FAST finalize racing the delete can re-create an asset row
+  // with the now-dead projectId after the transaction committed. PENDING-only
+  // precondition means this can only catch finalize-created rows.
+  try {
+    const strays = await listAllRows<AssetsRow>(DB.assets, [Query.equal("projectId", parsed.data)]);
+    if (strays.length > 0) {
+      await getTablesDB().deleteRows({
+        databaseId: DB.databaseId,
+        tableId: DB.assets,
+        queries: [Query.equal("$id", strays.map((s) => s.$id))],
+      });
+      await Promise.allSettled(
+        strays.filter((s) => s.fileId).map((s) =>
+          storage.deleteFile({ bucketId: bucketForAssetType(s.type), fileId: s.fileId as string }),
+        ),
+      );
+      logger.warn("[projects] re-swept orphan assets after pending delete", {
+        projectId: parsed.data,
+        count: strays.length,
+      });
+    }
+  } catch (err) {
+    logger.warn("[projects] orphan re-sweep failed after pending delete", {
+      projectId: parsed.data,
+      error: err instanceof Error ? err.message : err,
+    });
+  }
+
+  return { success: true };
 }
 
 export async function updateProjectDimensionsService(

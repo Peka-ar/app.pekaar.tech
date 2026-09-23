@@ -26,7 +26,7 @@ type TaskJob = {
   referenceUrls: string[];              // derived: REFERENCE_IMAGE asset urls
   assetUrls: { glb: string; usdz?: string } | null;  // derived: proxy URL /api/v1/assets/{id}/file for live MODEL_GLB / MODEL_USDZ
   revisionRequests?: { id, note, createdAt }[];
-  // Generation fields (Fast/AI Draft)
+  // Generation fields (Fast / AI pipeline)
   generationMode?: "PREMIUM" | "FAST" | null;
   generationStatus?: string | null;
   generationError?: string | null;
@@ -106,9 +106,9 @@ Opened by the "New Task" button (BRAND only; also from the empty-board CTA). `Mo
 2. **Physical Dimensions (CM)** — width/height/depth (required, `min="1"`).
 3. **Reference Images + Generation Mode** — dashed dropzone, max **5 images**. Each upload calls `uploadFile(file, "REFERENCE_IMAGE")` via `useAppwriteUpload({ bucketId: "reference-images", maxSizeMB: 16 })`. Thumbnails (`unoptimized`) with remove buttons + click-to-enlarge lightbox.
 
-**Generation mode selector** (on the Photos step): radio-style toggle between "Premium" and "AI Draft". Premium = artist-finished (10 credits); AI Draft = fast generation (~5-10 min, 2 credits). Default is Premium.
+**Generation mode selector** (on the Photos step): radio-style toggle between "Artist" and "AI pipeline" (both option subtitles at `text-xs`). Artist = artist-finished (10 credits); AI pipeline = fast generation (~5-10 min, 2 credits). Default is Artist (enum `PREMIUM`).
 
-**FAST mode view tagging**: when AI Draft is selected, show 4 view slots (Front required, Left/Back/Right optional) in a 2-column grid at ≥`sm` (single column on mobile). Each slot has a dropdown assigning one uploaded image (an image can hold only one tag). Views are sent to the server as a **partial** JSON map — only tagged views are included.
+**FAST mode view tagging**: when AI pipeline is selected, show 4 view slots (Front required, Left/Back/Right optional) in a 2-column grid at ≥`sm` (single column on mobile). Each slot has a dropdown assigning one uploaded image (an image can hold only one tag). Views are sent to the server as a **partial** JSON map — only tagged views are included.
 
 **Submit** validates `uploadedAssets.length > 0` + all dimensions > 0 + (FAST) front tagged, then `createProject(name, assetIds, sku, instructions, dimensions, mode, views)`. For FAST mode, the server also checks credits (2) and kicks off the Modal API job. Success → clear state + `router.refresh()` inside `startTransition`; failure → error banner with `result.message`.
 
@@ -118,11 +118,13 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 ---
 
-## Drawer — Processing (PENDING, read-only)
+## Drawer — Processing (PENDING — read-only details + Delete Task)
 
 `StatusBanner` (inline styles, "In the production queue" subtext) + `SectionCard` with Project Details (`SectionHeading` + `MetaGrid`: name, SKU, brand, created) + `DimensionEditor` + `SectionCard` with Reference Images (`SectionHeading` + `ReferenceGrid`).
 
-**AI Draft mode**: when `generationMode === "FAST"`, the Processing drawer shows a generation status banner with current status (SUBMITTED/RUNNING/FINALIZING), elapsed time, and a "Check Status" button that polls the generation endpoint. On SUCCEEDED, the drawer auto-refreshes. On FAILED, shows error message + "Regenerate" button (1 credit).
+**Delete Task (BRAND only):** the drawer footer always shows a destructive "Delete Task" button for brands (side-by-side with the FAST primary action when present; hidden on `/admin/tasks`). It `window.confirm`s ("…Credits will not be refunded."), then calls `deletePendingProject` — in-tx PENDING + ownership precondition, cascade-deletes the project, linked asset/revision/analytics rows, and best-effort removes storage files. **Credits are never refunded.** Success closes the drawer + `router.refresh()`; failure renders `result.message` in the drawer's error banner. The Hunyuan job itself cannot be cancelled (no cancel API) — its result is discarded when the project row is gone; a post-commit re-sweep catches any asset a racing finalize re-creates.
+
+**AI pipeline mode**: when `generationMode === "FAST"`, the Processing drawer shows a generation status banner with current status (SUBMITTED/RUNNING/FINALIZING), elapsed time, and a "Check Status" button that polls the generation endpoint. On SUCCEEDED, the drawer auto-refreshes. On FAILED, shows error message + "Regenerate" button (1 credit).
 
 **Server side**: `pollGeneration` action calls `pollAndFinalize` from `generation.service.ts`. `regenerateGeneration` action calls `regenerateFastGeneration`.
 
@@ -165,6 +167,7 @@ All in `src/app/actions/project.ts` / `admin.ts`, thin adapters over `project.se
 - **`brandSendForRevisions`** — BRAND owner; in-tx precondition (ownership + status ∈ {COMPLETED, PUBLISHED} — not re-entrant from REVISIONS); if was PUBLISHED, revoke grants + revalidate embed.
 - **`getUserProjects`** — caller's projects, derived `referenceUrls`/`assetUrls` (proxy-rewritten in `src/lib/project-augment.ts`).
 - **`updateProjectDimensions`** — BRAND owner or ADMIN (generic 404 for missing/foreign projects), **any status**; single-row write of the `dimensions` JSON; revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
+- **`deletePendingProject`** — BRAND owner; PENDING-only (in-tx `ConflictError` otherwise); row cascade in one tx + best-effort storage deletes; **no credit refund**; revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
 - **`pollGeneration`** — BRAND/ADMIN; polls and finalizes a FAST generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`.
 - **`regenerateGeneration`** — BRAND/ADMIN; re-submits a FAILED/SUCCEEDED FAST generation (1 credit).
 - **`adminSubmitProject`** — ADMIN; tx with in-tx status precondition + per-asset link verification; archives prior READY models (kept in storage, no quota impact). See `./admin.md` §3.

@@ -7,6 +7,7 @@ import {
   createProjectService,
   brandPublishProjectService,
   brandSendForRevisionsService,
+  deletePendingProjectService,
   getUserProjectsService,
   listAppwriteModelAssetsForProject,
   updateProjectDimensionsService,
@@ -144,6 +145,16 @@ export async function regenerateGeneration(
     revalidatePath("/admin/tasks");
     return { success: true };
   });
+}
+
+export async function deletePendingProject(projectId: string): Promise<ActionResult<{ success: true }>> {
+  const result = await toActionResult(() => deletePendingProjectService(projectId));
+  if (result.ok) {
+    revalidatePath("/tasks");
+    revalidatePath("/dashboard");
+    revalidatePath("/admin/tasks");
+  }
+  return result;
 }
 
 export async function getUserProjects(): Promise<TaskJob[]> {

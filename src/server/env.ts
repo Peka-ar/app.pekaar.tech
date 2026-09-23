@@ -9,7 +9,7 @@ const EnvSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).optional(),
   ADMIN_NAME: z.string().optional(),
   CRON_SECRET: z.string().min(16).optional(),
-  // Fast (AI draft) generation — Hunyuan3D Modal HTTP API. Optional so local
+  // Fast (AI pipeline) generation — Hunyuan3D Modal HTTP API. Optional so local
   // dev / tests run without them; Fast mode surfaces a clear error when unset.
   HY3D_API_URL: z.string().url().optional(),
   HY3D_API_URL_2: z.string().url().optional(),

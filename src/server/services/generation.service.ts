@@ -136,7 +136,7 @@ export async function startFastGeneration(params: StartFastGenerationParams) {
   if (!project || project.brandId !== brandId) throw new NotFoundError("Project not found");
 
   if (project.generationMode !== GenerationMode.FAST) {
-    throw new ValidationError("This project is not in AI Draft mode");
+    throw new ValidationError("This project is not in AI pipeline mode");
   }
   if (project.status !== ProjectStatus.PENDING && project.status !== ProjectStatus.REVISIONS) {
     throw new ValidationError("Project is not in a startable state");
@@ -557,7 +557,7 @@ export async function regenerateFastGeneration(params: RegenerateParams) {
   if (!project) throw new NotFoundError("Project not found");
   if (!skipOwnershipCheck && project.brandId !== brandId) throw new NotFoundError("Project not found");
   if (project.generationMode !== GenerationMode.FAST) {
-    throw new ValidationError("This project is not in AI Draft mode");
+    throw new ValidationError("This project is not in AI pipeline mode");
   }
 
   const regenerableStates = [ProjectStatus.PENDING, ProjectStatus.COMPLETED];

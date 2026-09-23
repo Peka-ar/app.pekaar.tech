@@ -12,7 +12,7 @@ import type { Product } from "@/lib/types";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 const ThreeDConfigurator = dynamic(() => import('@/components/ThreeDConfigurator'), { ssr: false });
-import { createProject, brandPublishProject, brandSendForRevisions, pollGeneration, regenerateGeneration } from "@/app/actions/project";
+import { createProject, brandPublishProject, brandSendForRevisions, pollGeneration, regenerateGeneration, deletePendingProject } from "@/app/actions/project";
 import { useAppwriteUpload, type UploadedAsset } from "@/lib/use-appwrite-upload";
 import { APPWRITE_REFERENCE_IMAGES_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
@@ -120,6 +120,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const [viewTags, setViewTags] = useState<Record<string, string>>({});
   const [isPolling, setIsPolling] = useState(false);
   const [pollingProjectId, setPollingProjectId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const labelFor = useCallback((status: ProjectStatus) => (
     role === "ADMIN" ? ADMIN_LABEL[status] : BRAND_LABEL[status]
@@ -237,6 +238,20 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     }
   };
 
+  const deleteJob = async (projectId: string) => {
+    if (!window.confirm("Delete this task permanently? Its reference images will be removed. Credits will not be refunded.")) return;
+    setIsDeleting(true);
+    setActionError(null);
+    const result = await deletePendingProject(projectId);
+    if (result.ok) {
+      startTransition(() => { router.refresh(); });
+      closeAllDrawers();
+    } else {
+      setActionError(result.message);
+    }
+    setIsDeleting(false);
+  };
+
   const resetWizard = () => {
     setWizardStep(0);
     setProductName('');
@@ -281,12 +296,12 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
     if (generationMode === "FAST") {
       const tags = Object.keys(viewTags);
       if (tags.length === 0) {
-        setFormError("Please tag at least one image as Front for AI Draft mode.");
+        setFormError("Please tag at least one image as Front for AI pipeline mode.");
         setWizardStep(2);
         return;
       }
       if (!viewTags["front"]) {
-        setFormError("Front view is required for AI Draft mode.");
+        setFormError("Front view is required for AI pipeline mode.");
         setWizardStep(2);
         return;
       }
@@ -639,8 +654,8 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         : "border-[var(--color-border-default)] hover:border-[var(--color-text-primary)]/50"
                     }`}
                   >
-                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">Premium</span>
-                    <span className="mt-1 text-[10px] leading-relaxed text-[var(--color-text-muted)]">Artist-finished 3D model. 10 credits.</span>
+                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">Artist</span>
+                    <span className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">Hand-finished by a 3D artist. 10 credits.</span>
                   </button>
                   <button
                     type="button"
@@ -651,8 +666,8 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                         : "border-[var(--color-border-default)] hover:border-[var(--color-text-primary)]/50"
                     }`}
                   >
-                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">AI Draft</span>
-                    <span className="mt-1 text-[10px] leading-relaxed text-[var(--color-text-muted)]">AI-generated 3D model (~5-10 min). 2 credits.</span>
+                    <span className="text-sm font-semibold text-[var(--color-text-primary)]">AI pipeline</span>
+                    <span className="mt-1 text-xs leading-relaxed text-[var(--color-text-muted)]">AI-generated 3D model (~5-10 min). 2 credits.</span>
                   </button>
                 </div>
               </div>
@@ -738,7 +753,7 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
                 </div>
               )}
 
-              {/* View tag assignment for AI Draft mode */}
+              {/* View tag assignment for AI pipeline mode */}
               {generationMode === "FAST" && uploadedAssets.length > 0 && (
                 <div className="rounded-xl border border-[var(--color-border-default)] bg-[var(--color-canvas)] p-4">
                   <p className="mb-1 font-sans text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--color-text-secondary)]">
@@ -795,34 +810,59 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
         title={processingJob?.name ?? ""}
         subtitle={processingJob ? `${processingJob.id} · ${getSku(processingJob)}` : ""}
         badge={processingJob ? <Badge tone="info" icon={<Clock className="w-3 h-3" aria-hidden="true" />}>{labelFor("PENDING")}</Badge> : undefined}
-        footer={processingJob?.generationMode === "FAST" && processingJob?.generationStatus === "FAILED" ? (
-          <Button
-            onClick={() => processingJob && regenerateJob(processingJob.id)}
-            isLoading={isPolling && pollingProjectId === processingJob?.id}
-            leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
-            className="w-full"
-          >
-            Regenerate (1 credit)
-          </Button>
-        ) : processingJob?.generationMode === "FAST" && processingJob?.generationStatus !== "SUCCEEDED" ? (
-          <Button
-            variant="tertiary"
-            onClick={() => processingJob && pollJobGeneration(processingJob.id)}
-            isLoading={isPolling && pollingProjectId === processingJob?.id}
-            leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
-            className="w-full"
-          >
-            Check Status
-          </Button>
-        ) : undefined}
+        footer={(() => {
+          if (!processingJob) return undefined;
+          const primary = processingJob.generationMode === "FAST" && processingJob.generationStatus === "FAILED" ? (
+            <Button
+              onClick={() => regenerateJob(processingJob.id)}
+              isLoading={isPolling && pollingProjectId === processingJob.id}
+              leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
+              className="flex-1"
+            >
+              Regenerate (1 credit)
+            </Button>
+          ) : processingJob.generationMode === "FAST" && processingJob.generationStatus !== "SUCCEEDED" ? (
+            <Button
+              variant="tertiary"
+              onClick={() => pollJobGeneration(processingJob.id)}
+              isLoading={isPolling && pollingProjectId === processingJob.id}
+              leftIcon={<Loader2 className="w-4 h-4" aria-hidden="true" />}
+              className="flex-1"
+            >
+              Check Status
+            </Button>
+          ) : null;
+          const canDelete = role !== "ADMIN";
+          if (!primary && !canDelete) return undefined;
+          return (
+            <div className="flex items-center gap-3">
+              {canDelete && (
+                <Button
+                  variant="destructive"
+                  onClick={() => deleteJob(processingJob.id)}
+                  isLoading={isDeleting}
+                  className="flex-1"
+                >
+                  Delete Task
+                </Button>
+              )}
+              {primary}
+            </div>
+          );
+        })()}
       >
         {processingJob && (
           <div className="space-y-4">
+            {actionError && (
+              <div role="alert" className="rounded-xl border border-[var(--negative)]/40 bg-[var(--negative)]/10 px-4 py-3 text-sm text-[var(--negative-deep)]">
+                {actionError}
+              </div>
+            )}
             <StatusBanner status="PENDING" />
             {processingJob.generationMode === "FAST" && (
               <div className="rounded-xl border border-[var(--surface-sky)]/40 bg-[var(--surface-sky)]/10 px-4 py-3">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-[var(--surface-sky-deep)]">AI Draft</span>
+                  <span className="text-xs font-semibold text-[var(--surface-sky-deep)]">AI pipeline</span>
                   {processingJob.generationStatus && (
                     <Badge tone={processingJob.generationStatus === "FAILED" ? "danger" : "info"}>
                       {processingJob.generationStatus}

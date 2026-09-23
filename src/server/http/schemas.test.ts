@@ -83,7 +83,7 @@ describe("createProjectSchema", () => {
     });
     expect(out.success).toBe(false);
     expect(out.success ? "" : out.error.issues[0].message).toBe(
-      "At least one view (front, left, back, or right) is required for AI Draft mode",
+      "At least one view (front, left, back, or right) is required for AI pipeline mode",
     );
   });
 
@@ -95,7 +95,7 @@ describe("createProjectSchema", () => {
       generationViews: { left: validId },
     });
     expect(out.success).toBe(false);
-    expect(out.success ? "" : out.error.issues[0].message).toBe("Front view is required for AI Draft mode");
+    expect(out.success ? "" : out.error.issues[0].message).toBe("Front view is required for AI pipeline mode");
   });
 
   it("rejects unknown view tags", () => {
