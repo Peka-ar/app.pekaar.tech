@@ -27,6 +27,7 @@ downloads
 .DS_Store
 *.pem
 perf-server.log
+dev.log
 .agents/
 
 # agent/docs tooling — kept local only, never deploy-relevant
