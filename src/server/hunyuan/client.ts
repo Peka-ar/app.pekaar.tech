@@ -67,8 +67,39 @@ export interface Hy3dSubmitParams {
 }
 
 /**
- * Submits a generation job. Never retries — a lost response could mean the
- * request landed, and retrying would double-bill GPU time.
+ * Per-call fetch timeouts — a hung Modal connection must never pin the
+ * serverless function (and a mid-finalize kill is what strands FINALIZING rows).
+ */
+export const HY3D_TIMEOUTS = {
+  submitMs: 60_000,
+  pollMs: 15_000,
+  downloadMs: 180_000,
+} as const;
+
+export function isFetchAbort(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && (err.name === "TimeoutError" || err.name === "AbortError")) ||
+    (err instanceof Error && /aborted|timed? ?out/i.test(err.message))
+  );
+}
+
+/**
+ * Classifies a submit error as safe to re-POST to the fallback URL: only
+ * errors proving the request never reached the server (DNS failure, connection
+ * refused) qualify. A timeout or a reset mid-request could mean the job landed
+ * and re-submitting would double-bill GPU time.
+ */
+export function isSafeToResubmit(err: unknown): boolean {
+  if (err instanceof Hy3dNotConfiguredError) return false;
+  if (err instanceof Hy3dSubmissionError) return false;
+  if (isFetchAbort(err)) return false;
+  const cause = (err as { cause?: { code?: string } })?.cause?.code ?? "";
+  return cause === "ENOTFOUND" || cause === "ECONNREFUSED";
+}
+
+/**
+ * Submits a generation job. Never retried on the same URL — a lost response
+ * could mean the request landed, and retrying would double-bill GPU time.
  */
 export async function submitJob(
   config: Hy3dConfig,
@@ -97,6 +128,7 @@ export async function submitJob(
     method: "POST",
     headers: { Authorization: `Bearer ${config.token}` },
     body: formData,
+    signal: AbortSignal.timeout(HY3D_TIMEOUTS.submitMs),
   });
 
   if (res.status === 401) {
@@ -133,6 +165,7 @@ export async function pollJob(config: Hy3dConfig, jobId: string): Promise<Hy3dPo
   const res = await fetch(`${config.baseUrl}/jobs/${jobId}`, {
     headers: { Authorization: `Bearer ${config.token}` },
     cache: "no-store",
+    signal: AbortSignal.timeout(HY3D_TIMEOUTS.pollMs),
   });
 
   if (res.status === 202) {
@@ -167,6 +200,25 @@ export async function pollJob(config: Hy3dConfig, jobId: string): Promise<Hy3dPo
 }
 
 /**
+ * Job-summary `files[].path` values are OUTPUT_ROOT-relative (they start with
+ * `{runId}/`), but the download route joins the path onto the run dir. Passing
+ * the prefix through would double it (`/runs/{id}/files/{id}/…`) → 404. Strip
+ * it idempotently (paths from `GET /runs/{id}` are already run-dir-relative).
+ */
+export function toRunRelativePath(runId: string, path: string): string {
+  const normalized = path.replace(/\/+/g, "/").replace(/^\//, "");
+  const prefix = `${runId}/`;
+  return normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized;
+}
+
+/** Rejects artifact paths with traversal (..), current-dir (.), or empty segments. */
+export function hasTraversalSegments(path: string): boolean {
+  return path
+    .split("/")
+    .some((seg) => seg === ".." || seg === "." || seg === "");
+}
+
+/**
  * Downloads a single file from a completed run. Retries transient failures
  * since this is a read-only GET and won't double-bill.
  */
@@ -175,14 +227,22 @@ export async function downloadArtifact(
   runId: string,
   path: string,
 ): Promise<Uint8Array> {
-  const segments = path.split("/").map(encodeURIComponent).join("/");
-  const url = `${config.baseUrl}/runs/${runId}/files/${segments}`;
+  const relative = toRunRelativePath(runId, path);
+  if (hasTraversalSegments(relative) || hasTraversalSegments(runId)) {
+    throw new Error(`Artifact path rejected: ${path}`);
+  }
+  const segments = relative
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/");
+  const url = `${config.baseUrl}/runs/${encodeURIComponent(runId)}/files/${segments}`;
 
   const MAX_ATTEMPTS = 3;
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${config.token}` },
+      signal: AbortSignal.timeout(HY3D_TIMEOUTS.downloadMs),
     });
     if (res.ok) {
       const buf = await res.arrayBuffer();
@@ -207,14 +267,19 @@ export async function downloadArtifact(
 
 /**
  * Tries a config, falling back to the second URL on network/transient errors.
- * Submission (422/401) and expiry errors never fail over.
+ * Submission (422/401) and expiry errors never fail over. Pass `canFailover`
+ * for non-idempotent calls (POST /jobs): only errors proving the request never
+ * landed are allowed to fail over (see isSafeToResubmit) — everything else
+ * could double-bill GPU time.
  */
 export async function withFailover<T>(
   fn: (config: Hy3dConfig) => Promise<T>,
+  opts?: { canFailover?: (err: unknown) => boolean },
 ): Promise<T> {
   try {
     return await fn(getHy3dConfig(0));
   } catch (e) {
+    if (opts?.canFailover && !opts.canFailover(e)) throw e;
     if (
       e instanceof Hy3dNotConfiguredError ||
       e instanceof Hy3dSubmissionError ||

@@ -97,9 +97,25 @@ export async function enforceRateLimit(key: string, rule: RateLimitRule): Promis
 }
 
 export function clientIpFromRequest(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for");
-  if (xff) return xff.split(",")[0]?.trim() || "unknown";
+  // Prefer Cloudflare's validated header; fall back to x-forwarded-for first octet.
   const cf = request.headers.get("cf-connecting-ip");
-  if (cf) return cf;
+  if (cf && isValidIpFormat(cf)) return cf.trim();
+  const xff = request.headers.get("x-forwarded-for");
+  if (xff) {
+    const first = xff.split(",")[0]?.trim();
+    if (first && isValidIpFormat(first)) return first;
+  }
   return "unknown";
+}
+
+/** Very lightweight IP validation (prevents spoofed garbage). */
+function isValidIpFormat(ip: string): boolean {
+  // IPv4: digits + dots only, no leading/trailing dots
+  if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+    const parts = ip.split(".");
+    return parts.every((p) => Number(p) <= 255);
+  }
+  // IPv6: basic check — colon-separated hex segments
+  if (/^[a-fA-F0-9]*:[a-fA-F0-9:]*$/.test(ip)) return true;
+  return false;
 }

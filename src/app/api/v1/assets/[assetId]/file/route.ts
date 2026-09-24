@@ -3,6 +3,7 @@ import { APPWRITE_API_KEY } from "@/server/appwrite";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID, bucketForAssetType, defaultMimeTypeForAssetType } from "@/lib/appwrite-config";
 import { requirePrincipal, UnauthenticatedError, ForbiddenError, StaleSessionError, Role } from "@/server/auth-guards";
 import { AssetStatus, AssetsRow, DB, ProjectsRow, getRowSafe } from "@/server/db/client";
+import { isSafeExternalUrl } from "@/server/http/url-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -96,7 +97,14 @@ async function fetchAssetStream(asset: AssetsRow): Promise<{
   }
 
   // Seed (external) and legacy UploadThing rows: the stored URL is a plain public URL.
-  const res = await fetch(asset.url);
+  // SSRF guard: https-only and never a private/loopback/link-local host.
+  if (!isSafeExternalUrl(asset.url)) {
+    return { ok: false, body: new ReadableStream() };
+  }
+  const res = await fetch(asset.url, {
+    signal: AbortSignal.timeout(30_000),
+    redirect: "error",
+  });
   if (!res.ok || !res.body) {
     return { ok: false, body: new ReadableStream() };
   }

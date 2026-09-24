@@ -68,6 +68,7 @@ export type ProjectsRow = Models.Row & {
   generationStartedAt: string | null;
   generationCompletedAt: string | null;
   generationCreditCost: string | null;
+  generationClaimedAt: string | null;
 };
 
 export type AssetsRow = Models.Row & {

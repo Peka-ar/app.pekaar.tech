@@ -146,6 +146,7 @@ export async function createProjectService(
           generationStartedAt: null,
           generationCompletedAt: null,
           generationCreditCost: null,
+          generationClaimedAt: null,
         },
         transactionId: txId,
       });
@@ -232,16 +233,29 @@ export async function brandPublishProjectService(projectId: string): Promise<{ s
     }
   }
 
-  const result = await getTablesDB().updateRows<ProjectsRow>({
-    databaseId: DB.databaseId,
-    tableId: DB.projects,
-    queries: [
-      Query.equal("$id", parsed.data),
-      Query.equal("status", ProjectStatus.COMPLETED),
-      Query.equal("brandId", principal.userId),
-    ],
-    data: { status: ProjectStatus.PUBLISHED },
-  });
+  let result: { rows: ProjectsRow[] };
+  try {
+    result = await getTablesDB().updateRows<ProjectsRow>({
+      databaseId: DB.databaseId,
+      tableId: DB.projects,
+      queries: [
+        Query.equal("$id", parsed.data),
+        Query.equal("status", ProjectStatus.COMPLETED),
+        Query.equal("brandId", principal.userId),
+      ],
+      data: { status: ProjectStatus.PUBLISHED },
+    });
+  } catch (err) {
+    // The status flip THREW (transient network etc.) — grants are already in
+    // place. Compensate by revoking them so nothing stays public on a
+    // non-PUBLISHED project (the invariant is fail-closed in BOTH directions).
+    logger.error("[publish] status flip threw; revoking granted read:any", {
+      projectId: parsed.data,
+      err: err instanceof Error ? err.message : String(err),
+    });
+    await Promise.allSettled(modelAssets.map((a) => setFilePublic(a, false)));
+    throw new AppError("INTERNAL", "Publishing failed. Please try again.");
+  }
 
   if (result.rows.length === 0) {
     await Promise.allSettled(modelAssets.map((a) => setFilePublic(a, false)));

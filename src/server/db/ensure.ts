@@ -3,16 +3,18 @@ import { createAdminClient } from "@/server/appwrite";
 import { APPWRITE_DATABASE_ID } from "@/lib/appwrite-config";
 
 export const GENERATION_COLUMNS = [
-  { key: "generationMode", size: 20, required: false },
-  { key: "generationStatus", size: 20, required: false },
-  { key: "generationJobId", size: 255, required: false },
-  { key: "generationRunId", size: 255, required: false },
-  { key: "generationAssetId", size: 36, required: false },
-  { key: "generationError", size: 2000, required: false },
-  { key: "generationViews", size: 2000, required: false },
-  { key: "generationStartedAt", size: 30, required: false },
-  { key: "generationCompletedAt", size: 30, required: false },
-  { key: "generationCreditCost", size: 11, required: false },
+  { key: "generationMode", size: 20, required: false, type: "string" as const },
+  { key: "generationStatus", size: 20, required: false, type: "string" as const },
+  { key: "generationJobId", size: 255, required: false, type: "string" as const },
+  { key: "generationRunId", size: 255, required: false, type: "string" as const },
+  { key: "generationAssetId", size: 36, required: false, type: "string" as const },
+  { key: "generationError", size: 2000, required: false, type: "string" as const },
+  { key: "generationViews", size: 2000, required: false, type: "string" as const },
+  { key: "generationStartedAt", size: 30, required: false, type: "string" as const },
+  { key: "generationCompletedAt", size: 30, required: false, type: "string" as const },
+  { key: "generationCreditCost", size: 11, required: false, type: "string" as const },
+  // datetime (not string) so Query.lessThan works for the stale-claim recovery guard
+  { key: "generationClaimedAt", size: 30, required: false, type: "datetime" as const },
 ] as const;
 
 export const GENERATION_COLUMN_KEYS = new Set(GENERATION_COLUMNS.map((c) => c.key));
@@ -44,13 +46,17 @@ export async function ensureGenerationColumns(tablesDB?: TablesDB): Promise<void
   for (const col of GENERATION_COLUMNS) {
     if (existingKeys.has(col.key)) continue;
     try {
-      await db.createStringColumn({
-        databaseId,
-        tableId,
-        key: col.key,
-        size: col.size,
-        required: col.required,
-      });
+      if (col.type === "datetime") {
+        await db.createDatetimeColumn({ databaseId, tableId, key: col.key, required: col.required });
+      } else {
+        await db.createStringColumn({
+          databaseId,
+          tableId,
+          key: col.key,
+          size: col.size,
+          required: col.required,
+        });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/already exists/i.test(msg) || /409/.test(msg)) continue;

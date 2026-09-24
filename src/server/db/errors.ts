@@ -40,6 +40,7 @@ const GENERATION_ATTRIBUTE_KEYS = new Set([
   "generationViews",
   "generationStartedAt",
   "generationCompletedAt",
+  "generationClaimedAt",
 ]);
 
 /** Maps an Appwrite SDK failure to the AppError taxonomy. */

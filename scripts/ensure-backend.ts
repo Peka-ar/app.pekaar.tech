@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { Storage, TablesDB } from "node-appwrite";
+import { Query, Storage, TablesDB } from "node-appwrite";
 import { createAdminClient } from "../src/server/appwrite";
 import {
   APPWRITE_DATABASE_ID,
@@ -12,6 +12,7 @@ import { ensureGenerationColumns } from "../src/server/db/ensure";
 
 const DATABASE_ID = APPWRITE_DATABASE_ID;
 const CONTACT_REQUESTS_TABLE_ID = "contact_requests";
+const MAINTENANCE_LOCKS_TABLE_ID = "maintenance_locks";
 
 async function ensureTable(tablesDB: TablesDB, tableId: string, name: string) {
   try {
@@ -145,6 +146,38 @@ async function main(): Promise<void> {
 
   // Ensure contact_requests table exists with its columns.
   await ensureTable(tablesDB, CONTACT_REQUESTS_TABLE_ID, "Contact Requests");
+
+  // Ensure maintenance_locks table exists with its expiresAt column + a lock row.
+  await ensureTable(tablesDB, MAINTENANCE_LOCKS_TABLE_ID, "Maintenance Locks");
+  try {
+    await tablesDB.createStringColumn({
+      databaseId: DATABASE_ID,
+      tableId: MAINTENANCE_LOCKS_TABLE_ID,
+      key: "expiresAt",
+      size: 30,
+      required: false,
+    });
+  } catch {
+    // column already exists
+  }
+  try {
+    const lockRows = await tablesDB.listRows({
+      databaseId: DATABASE_ID,
+      tableId: MAINTENANCE_LOCKS_TABLE_ID,
+      queries: [Query.equal("$id", "nightly-lock")],
+    });
+    if (lockRows.rows.length === 0) {
+      await tablesDB.createRow({
+        databaseId: DATABASE_ID,
+        tableId: MAINTENANCE_LOCKS_TABLE_ID,
+        rowId: "nightly-lock",
+        data: { expiresAt: null },
+      });
+      console.log(`[ensure-backend] seeded lock row on ${MAINTENANCE_LOCKS_TABLE_ID}`);
+    }
+  } catch (e) {
+    console.warn(`[ensure-backend] could not seed maintenance lock row: ${(e as Error).message}`);
+  }
 
   // Ensure subscription columns exist on the users table.
   const subscriptionColumns = [

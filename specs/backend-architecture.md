@@ -69,11 +69,17 @@ Appwrite table **`rate_limits`** (db `studiov`, created by `scripts/ensure-backe
 | Endpoint / action                    | Key                   | Window | Limit |
 |--------------------------------------|-----------------------|--------|-------|
 | `POST /api/sdk/v1/events`            | IP                    | 60s    | 60    |
+| `GET /api/v1/generation/[projectId]` | principal userId      | 60s    | 30    |
+| `pollGeneration` (action)             | principal userId      | 60s    | 30    |
+| `regenerateGeneration` (action)      | principal userId      | 1h     | 6     |
+| `recordAssetUpload` (action)         | principal userId      | 60s    | 60    |
 | `registerUser`                       | IP                    | 1h     | 10    |
 | `resendVerificationEmail`            | email                 | 1h     | 5     |
 | `resendVerificationEmail`            | IP                    | 1h     | 10    |
 | `requestPasswordReset`               | email                 | 1h     | 3     |
 | `requestPasswordReset`               | IP                    | 1h     | 10    |
+
+**IP extraction** (`clientIpFromRequest` / `clientIpForAction`): prefers `cf-connecting-ip` (Cloudflare-validated), falls back to the first `x-forwarded-for` entry, and validates the format — spoofed garbage values degrade to `"unknown"` so they can't mint fresh rate-limit buckets.
 
 ## 5. Project state machine (`src/server/domain/project-state-machine.ts`)
 
@@ -123,15 +129,19 @@ Publish semantics (unchanged from prior behavior, now centralized):
 - `requirePrincipal(options)` — optional `roles`, `requireOnboarded`.
 - `requirePrincipalOrRedirect(options)` — redirects `/auth` on unauthenticated/stale, `/onboarding` when not onboarded, `/dashboard` on forbidden.
 
+**Session-secret tradeoff (known + accepted):** the `getSessionPrincipal` *server action* (`src/app/actions/auth.ts`) returns the raw session secret to client JS after SSR sign-in — required because browser-direct Storage uploads need `client.setSession(secret)` and the httpOnly cookie is unreadable by the SDK. This marginally defeats the httpOnly cookie's XSS protection (an XSS could exfiltrate the secret and hijack the session from anywhere, vs. only while the victim is on-page). Mitigations: never log the secret, keep the XSS surface small (no `dangerouslySetInnerHTML` on user data), and consider shortening the Appwrite password-session duration in the console.
+
 ## 10. Testing (`vitest`)
 
 `npm run test` — node environment, `src/server/**/*.test.ts`. Covers: state machine transitions, asset policy validation, Appwrite error mapping, zod schemas, ActionResult/toActionResult mapping, maintenance pure helpers (58 tests). Pure modules only; no network.
 
 ## 11. Nightly maintenance cron
 
-**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 60` (raise if the reconcile sweep grows). **Trigger source:** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
+**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 300`. **Trigger source:** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
 
-**Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match `Bearer ${env.CRON_SECRET}` → `401`. Any other failure goes through `handleApiError`.
+**Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. Comparison is **timing-safe** (`timingSafeEqual` from `node:crypto`, length-checked first). If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match → `401`. Any other failure goes through `handleApiError`.
+
+**Concurrency lock:** before running any work the route claims a single-row lock in the `maintenance_locks` table (`rowId: "nightly-lock"`, `expiresAt` + 6h TTL) via guarded `updateRows` (isNull-or-expired → claim). A second overlapping run gets `200 { ok: true, skipped: "lock-held" }` and exits — overlapping cron fires can never double-credit or double-sweep. **Fail-open:** if the lock table is missing/unreachable the run proceeds without the lock (the lock dedups, it must not gate the invariant sweeps); infra is provisioned by `ensure-backend`.
 
 **Work (`runMaintenance`, `src/server/services/maintenance.service.ts`) — runs the three steps in parallel:**
 
@@ -154,10 +164,11 @@ Pure helpers `hasPublicRead` and `shouldModelAssetBePublic` are unit-tested (see
 
 `npm run ensure-backend` (`scripts/ensure-backend.ts` + `src/server/db/ensure.ts`, tsx, needs `.env` with API key) — idempotent:
 - Creates `rate_limits` table + `remaining`/`windowStart`/`route` columns if missing.
+- Creates `maintenance_locks` table + `expiresAt` column + the `"nightly-lock"` row (cron concurrency lock).
 - Hardens buckets:
   - `reference-images`: perms `['create("label:BRAND")']` (no read), `fileSecurity: true`, antivirus + encryption on.
   - `models`: perms `['create("label:ADMIN")','read("label:ADMIN")']`, allowed extensions `["glb","usdz"]`, antivirus + encryption on.
-- Creates the 10 generation columns on `projects` (`generationMode`/`generationStatus`/`generationJobId`/`generationRunId`/`generationAssetId`/`generationError`/`generationViews`/`generationStartedAt`/`generationCompletedAt`/`generationCreditCost` — `src/server/db/ensure.ts`) and waits for `available`. `createProjectService` also auto-heals on the first Unknown-attribute, so a cold DB self-heals without a manual run; still run `ensure-backend` eagerly after any schema change and verify `GET /api/health` → `generationSchemaReady:true`.
+- Creates the 11 generation columns on `projects` (`generationMode`/`generationStatus`/`generationJobId`/`generationRunId`/`generationAssetId`/`generationError`/`generationViews`/`generationStartedAt`/`generationCompletedAt`/`generationCreditCost`/`generationClaimedAt` — `src/server/db/ensure.ts`). **`generationClaimedAt` is a datetime column** (not string) so `Query.lessThan` works for the stale-claim recovery guard. `createProjectService` also auto-heals on the first Unknown-attribute, so a cold DB self-heals without a manual run; still run `ensure-backend` eagerly after any schema change and verify `GET /api/health` → `generationSchemaReady:true`. **Deploy order matters**: run `ensure-backend` BEFORE deploying a build that writes `generationClaimedAt` (polls otherwise fail with Unknown-attribute errors until provisioned).
 
 ## 13. Module index
 

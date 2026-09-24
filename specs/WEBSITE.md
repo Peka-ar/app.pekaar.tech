@@ -138,7 +138,7 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | `POST /api/sdk/v1/events` | public, CORS `*` | Analytics ingest: `{ eventType: VIEW\|INTERACTION\|AR_LAUNCH, sessionId, projectId }` → `analytics_events` row. Rate-limited 60/min/IP. |
 | `GET /api/sdk/v1/config/[projectId]` | public, cached 60s | `{ assetUrls: { glb, usdz }, sdkConfig }` for PUBLISHED projects only (404 otherwise, prevents enumeration). URL derivation: `resolveAssetUrl` in the route file. |
 | `GET /api/v1/assets/[assetId]/file` | auth-gated | Streaming proxy for **all in-app asset reads** — `requirePrincipal` (BRAND passes if owner or linked-project brand), then streams from Appwrite Storage with the server API key. `Cache-Control: private, max-age=60`. |
-| `GET /api/v1/generation/[projectId]` | `requirePrincipal` | Polls and finalizes AI pipeline generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Also called by the nightly cron sweep. |
+| `GET /api/v1/generation/[projectId]` | `requirePrincipal` | Polls and finalizes AI pipeline generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`. Also called by the nightly cron sweep. Rate-limited 30/min/principal. |
 
 **Uploads have no API route:** the browser uploads directly to Appwrite Storage (session-authenticated `storage.createFile`), then the `recordAssetUpload` server action creates the `assets` row (§10).
 
@@ -232,6 +232,7 @@ Database `studiov` (id `studiov`); table ids in `src/lib/appwrite-config.ts`; ty
 - **`assets`** — `$id` (= storage fileId), `projectId` (null until linked), `ownerId`, `type` (REFERENCE_IMAGE/MODEL_GLB/MODEL_USDZ), `status` (READY/ARCHIVED — never UPLOADING/PUBLISHED/DELETED), `provider` (`"appwrite"`; legacy seed rows `"external"`), `fileId` (null for seed rows), `url` (absolute Appwrite `/view` URL; legacy rows keep external URLs), `originalName`, `mimeType`, `size`, `checksum`. Compound index: projectId+type+status.
 - **`analytics_events`** — `$id`, `eventType` (VIEW/INTERACTION/AR_LAUNCH), `sessionId`, `projectId`, `brandId`.
 - **`rate_limits`** — provisioned by `ensure-backend`; consumed by `consumeRateLimit` (`src/server/http/rate-limit.ts`). Fail-open.
+- **`maintenance_locks`** — provisioned by `ensure-backend`; single `"nightly-lock"` row + `expiresAt` (6h TTL) claims the nightly cron run so overlapping triggers skip instead of double-crediting (`src/app/api/cron/maintenance/route.ts`). Fail-open when missing.
 - **`contact_requests`** — provisioned by `ensure-backend`; name, email, company, message, interestedTier, status (NEW/CONTACTED/RESOLVED), sourceIp. Plan-request submissions from the billing popup, managed by admins at `/admin/requests`.
 
 Schema is console-managed (no code migrations) — after console schema changes, update this section.

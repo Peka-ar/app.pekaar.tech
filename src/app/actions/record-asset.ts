@@ -12,6 +12,10 @@ import {
 import { AssetStatus, AssetsRow, DB, getRowSafe, getTablesDB } from "@/server/db/client";
 import { recordAssetSchema } from "@/server/http/schemas";
 import { logger } from "@/server/logging";
+import { enforceRateLimit } from "@/server/http/rate-limit";
+
+/** Rate limit: 60 asset recordings/min per user — prevents spamming the models bucket. */
+const RECORD_ASSET_LIMIT = { limit: 60, windowSeconds: 60 };
 
 export type RecordedAsset = {
   id: string;
@@ -37,7 +41,7 @@ function toRecorded(a: AssetsRow): RecordedAsset {
 
 export async function recordAssetUpload(input: {
   fileId: string;
-  type: string;
+  type: string,
 }): Promise<{ asset: RecordedAsset }> {
   const parsed = recordAssetSchema.safeParse(input);
   if (!parsed.success) {
@@ -51,6 +55,10 @@ export async function recordAssetUpload(input: {
   const roles =
     type === "REFERENCE_IMAGE" ? [Role.BRAND] : [Role.ADMIN];
   const principal = await requirePrincipal({ roles });
+  
+  // Rate limit to prevent abuse of the models/reference-images buckets.
+  await enforceRateLimit(`record-asset:${principal.userId}`, RECORD_ASSET_LIMIT);
+  
   const policy = ASSET_POLICY[type];
 
   const storage = new Storage(createAdminClient());

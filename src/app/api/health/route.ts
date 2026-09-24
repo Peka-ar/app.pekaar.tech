@@ -28,7 +28,6 @@ export async function GET() {
       status: missingGenerationColumns.length > 0 ? "degraded" : "ok",
       appwrite: "ok",
       generationSchemaReady: missingGenerationColumns.length === 0,
-      missingGenerationColumns,
     });
   } catch (err) {
     logger.error("health check failed", {

@@ -19,20 +19,9 @@ Two-tier generation: **Artist** (enum `PREMIUM`; artist-finished, admin-managed)
 - `GenerationStatus`: `SUBMITTED | RUNNING | FINALIZING | SUCCEEDED | FAILED`
 - `ReferenceView`: `front | left | back | right`
 
-## Project columns (10 on `projects` table)
+## Generation columns (`projects` table)
 
-| Column | Type | Purpose |
-|---|---|---|
-| `generationMode` | string(20) | `PREMIUM` or `FAST` (null = Premium legacy) |
-| `generationStatus` | string(20) | Current generation state |
-| `generationJobId` | string(255) | Hunyuan3D Modal job ID |
-| `generationRunId` | string(255) | Modal run ID (set after success) |
-| `generationAssetId` | string(36) | Asset row ID of the generated GLB |
-| `generationError` | string(2000) | Last error message (if FAILED) |
-| `generationViews` | string(2000) | JSON map: `{front: assetId, left?: assetId, ...}` |
-| `generationStartedAt` | string(30) | ISO timestamp when job started |
-| `generationCompletedAt` | string(30) | ISO timestamp when job finished |
-| `generationCreditCost` | string(11) | Credits charged for this attempt (2 create / 1 regenerate); used for exact refund on failure |
+11 columns now: `generationMode`, `generationStatus`, `generationJobId`, `generationRunId`, `generationAssetId`, `generationError`, `generationViews`, `generationStartedAt`, `generationCompletedAt`, `generationCreditCost`, **`generationClaimedAt`** (datetime string; set when a poll/cron claims FINALIZING — enables crash recovery of stuck rows).
 
 ## Image normalization
 
@@ -56,10 +45,10 @@ Pure functions — no I/O, fully unit-tested.
 ### API client (`client.ts`)
 
 - `getHy3dConfig(fallbackIndex)` — reads `HY3D_API_URL`, `HY3D_API_URL_2`, `HY3D_API_TOKEN` from env.
-- `submitJob(config, params)` — POST `/jobs` with FormData. **Never retried** (double-bill risk).
-- `pollJob(config, jobId)` — GET `/jobs/{id}` → running/succeeded/failed/expired.
-- `downloadArtifact(config, runId, path)` — GET `/runs/{runId}/files/{path}` with 3 retries.
-- `withFailover(fn)` — tries primary config, falls back to secondary on network/auth errors.
+- `submitJob(config, params)` — POST `/jobs` with FormData. **Never retried** (double-bill risk). Uses `AbortSignal.timeout(60s)`. Failover to fallback URL only on errors proving the request never landed (ENOTFOUND/ECONNREFUSED); timeouts or resets mid-request are NOT safe to retry.
+- `pollJob(config, jobId)` — GET `/jobs/{id}` → running/succeeded/failed/expired. Uses `AbortSignal.timeout(15s)`.
+- `downloadArtifact(config, runId, path)` — GET `/runs/{runId}/files/{path}` with 3 retries. Job `files[].path` values from `GET /jobs/{id}` are OUTPUT_ROOT-relative and already include the `{runId}/` prefix — `toRunRelativePath(runId, path)` strips it (idempotent) before building the URL, otherwise the API 404s on a doubled run id (`runs/{runId}/files/{runId}/...`). **Rejects paths with `..`, `.`, or empty segments** (traversal guard). Uses `AbortSignal.timeout(180s)`.
+- `withFailover(fn, opts?)` — tries primary config, falls back to secondary on network/auth errors. For non-idempotent calls (`submitJob`), pass `canFailover: isSafeToResubmit` to restrict failover to connection-refused-class errors only.
 
 ### Error types
 
@@ -84,18 +73,19 @@ Pure functions — no I/O, fully unit-tested.
 
 ### pollAndFinalize
 
-1. Skip if already terminal (SUCCEEDED/FAILED/FINALIZING).
-2. Job timeout check (15 min from `generationStartedAt`, falls back to `$createdAt`).
-3. Stale `SUBMITTED` with no `generationJobId` past timeout → FAILED + refund.
+1. Skip if already terminal (SUCCEEDED/FAILED). FINALIZING rows are **not** skipped — they may be stale and need re-claiming.
+2. Job timeout check (30 min from `generationStartedAt`, falls back to `$createdAt`; `quality: "max"` jobs take ~15 min wall).
+3. Stale `SUBMITTED` with no `generationJobId` past timeout → FAILED + refund (guarded write, only one caller refunds).
 4. Poll Modal → running (return), failed (set FAILED + refund), succeeded → finalize.
-5. **Finalize**: claim via `RUNNING|SUBMITTED → FINALIZING` guard (single-row update, check affected rows). SUBMITTED is claimable because `withFailover` may succeed before the RUNNING flip lands.
-6. Download GLB, upload to storage with `read:any`, create asset row matching `AssetsRow` (`type: MODEL_GLB`, `status: READY`, `provider: appwrite`, `fileId`, `originalName`, `mimeType`, `size`), link via `generationAssetId`.
-7. Set `generationRunId` from Modal's `run_id`.
-8. Flip `status → COMPLETED` via `SYSTEM_ACTOR` transition when allowed (brand then publishes).
-9. On any finalize failure (no GLB, download, upload, asset row), set FAILED + refund `generationCreditCost`.
-10. Storage file is deleted if asset-row creation fails after upload (no orphan).
+5. **Claim**: atomic updateRows guard on RUNNING|SUBMITTED → FINALIZING; also sets `generationClaimedAt`. If claim fails (already claimed), attempt **re-claim of stale FINALIZING** (`claimedAt` older than 10 min or null) via two updateRows calls. Only the winner proceeds; losers return current state without refund.
+6. **Archive-on-claim**: prior READY GLB/USDZ rows for the project flip to ARCHIVED before creating a new asset row (prevents orphan models + wrong-model-after-publish bug).
+7. Download GLB (timing logs: `downloading GLB` / `GLB downloaded` with bytes+ms), upload to storage with `permissions: []` (private until publish — the publish flow grants `read("any")`, nightly reconcile enforces public-only-on-PUBLISHED; timing logs: `uploading GLB to storage` / `GLB uploaded`), create asset row matching `AssetsRow` (`type: MODEL_GLB`, `status: READY`, `provider: appwrite`, `fileId`, `originalName`, `mimeType`, `size`), link via `generationAssetId`.
+8. Set `generationRunId` from Modal's `run_id`.
+9. Flip `status → COMPLETED` via `SYSTEM_ACTOR` transition when allowed (brand then publishes). The final link update is wrapped in try/catch — on throw: cleanup asset row + storage file, guarded-FAILED + refund.
+10. On any finalize failure (no GLB, download, upload, asset row, final link), set FAILED + refund `generationCreditCost` (guarded write; only one caller refunds).
+11. Storage file is deleted if asset-row creation fails after upload (no orphan); final-link failures also delete both asset row and storage file.
 
-**Refunds**: every failure path after the charge refunds `generationCreditCost` (2 for create, 1 for regenerate) via `refundCredits`, which uses `incrementRowColumn` when available.
+**Refunds**: every failure path uses `refundCreditsLogged` (never throws; logs success at debug level, logs error on failure). Credit deduction retries up to 3 times with backoff; no read-modify-write fallbacks (lost-update risk). Guarded writes ensure only one caller refunds per failure event.
 
 ### regenerateFastGeneration
 
@@ -114,7 +104,7 @@ Helper to return credits to a user. Called by callers when Modal API submission 
 
 ### finalizeStaleGenerations (cron sweep)
 
-Called by `/api/cron/maintenance` nightly. Finds all projects in RUNNING/SUBMITTED status, polls/finalizes each. Idempotent. Does NOT handle credits.
+Called by `/api/cron/maintenance` nightly. Scans **three classes** of projects: RUNNING, SUBMITTED, and FINALIZING rows with `generationClaimedAt` older than 10 min or null (stale crash-recovery). Calls `pollAndFinalize` for each — the claim guard handles re-claiming stale FINALIZING rows. Idempotent; refunds logged, never thrown.
 
 ## State machine update (`src/server/domain/project-state-machine.ts`)
 
@@ -167,5 +157,6 @@ Premium is **paid-only** for default brands (8 < 10). Admin override can grant m
 - `Buffer.from(uint8array)` is required for Blob/File constructors in Node 24 (SharedArrayBuffer incompatibility).
 - **Credit deduction is caller-owned**: `startFastGeneration` and `regenerateFastGeneration` never touch credits. Callers (project service, action layer) handle check + deduct + refund. This prevents double-deduction and keeps auth context where it belongs. The service only *records* the charge in `generationCreditCost` for later refund.
 - **Admin bypass**: `adminRegenerateGeneration` uses `skipOwnershipCheck: true` and skips credit deduction entirely — admin can regenerate any FAST project without cost.
-- **Reconcile removed from finalize hot path**: `pollAndFinalize` no longer calls the full `reconcileStoragePermissions()` sweep after success (it was an unbounded `getFile`-per-asset scan on every generation). Publish permissions are set at upload time (`read:any`) and reconciled by the nightly cron.
+- **Reconcile removed from finalize hot path**: `pollAndFinalize` no longer calls the full `reconcileStoragePermissions()` sweep after success (it was an unbounded `getFile`-per-asset scan on every generation). Generated GLBs upload with `permissions: []` (private); the publish flow grants `read("any")` and the nightly cron reconciles public-only-on-PUBLISHED. Raw strings like `"read:any"` are invalid Appwrite permission values — use `read("any")` / the helpers in `src/server/storage.ts`.
+- **`projects` has no `updatedAt` column**: never write `updatedAt` in a row update (TablesDB auto-maintains `$updatedAt`). Doing so throws `row_invalid_structure` at the last step of finalize — after the storage upload and asset-row creation. The final link update is now wrapped in try/catch (cleans up the asset row + storage file and takes the guarded-FAILED path), and a crashed FINALIZING row is recovered by the nightly sweep via the stale-claim re-claim.
 - **Orphan cleanup**: if `createRow` for the generated asset fails after `storage.createFile` succeeded, the file is deleted before returning FAILED — no orphaned GLB in the `models` bucket.

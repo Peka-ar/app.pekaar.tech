@@ -1,9 +1,9 @@
-import { ID, Query } from "node-appwrite";
+import { ID, Query, TablesDB } from "node-appwrite";
 import { AssetStatus, AssetType, ReferenceView, GenerationMode, GenerationStatus, ProjectStatus } from "@/lib/enums";
 import { SYSTEM_ACTOR, canTransition } from "@/server/domain/project-state-machine";
 import { createAdminClient } from "@/server/appwrite";
-import { Permission, Role as AppwriteRole, Storage, ImageFormat } from "node-appwrite";
-import { getTablesDB, getRowSafe, type ProjectsRow, type UsersRow, type AssetsRow } from "@/server/db/client";
+import { Storage, ImageFormat } from "node-appwrite";
+import { getTablesDB, getRowSafe, type ProjectsRow, type AssetsRow } from "@/server/db/client";
 import { logger } from "@/server/logging";
 import { findGlbPath, GENERATION_QUALITY } from "@/server/hunyuan/manifest";
 import {
@@ -13,6 +13,7 @@ import {
   withFailover,
   Hy3dExpiredError,
   Hy3dTransientError,
+  isSafeToResubmit,
 } from "@/server/hunyuan/client";
 import { buildFileUrl, APPWRITE_MODELS_BUCKET_ID, APPWRITE_REFERENCE_IMAGES_BUCKET_ID } from "@/lib/appwrite-config";
 import { ValidationError, NotFoundError } from "@/server/http/errors";
@@ -37,37 +38,58 @@ export const GENERATION_COSTS: Record<string, number> = {
   REGENERATE: 1,
 };
 
-const JOB_TIMEOUT_MS = 15 * 60 * 1000;
+// quality:"max" jobs take ~15 min wall — 15 min previously left ~14 s of margin.
+const JOB_TIMEOUT_MS = 30 * 60 * 1000;
+const STALE_CLAIM_MS = 10 * 60 * 1000; // FINALIZING recovery threshold
 
 function nowISO(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Is a FINALIZING row stale? null/unparseable claimedAt = pre-deploy or
+ * crashed before write → stale (recoverable). Fresh claims are not.
+ */
+export function isStaleClaim(claimedAt?: string | null): boolean {
+  if (!claimedAt) return true;
+  const then = new Date(claimedAt).getTime();
+  if (!Number.isFinite(then)) return true;
+  return Date.now() - then > STALE_CLAIM_MS;
+}
+
 // ──────────────────────────── Credit refund ─────────────────────────────
 
-export async function refundCredits(userId: string, amount: number) {
+export async function refundCredits(userId: string, amount: number): Promise<void> {
   const tablesDB = getTablesDB();
+  let retries = 0;
+  while (retries < 3) {
+    try {
+      await tablesDB.incrementRowColumn({
+        databaseId: APPWRITE_DATABASE_ID,
+        tableId: TABLES.users,
+        rowId: userId,
+        column: "usageLimits",
+        value: amount,
+      });
+      return;
+    } catch (e) {
+      retries++;
+      if (retries < 3) await new Promise((r) => setTimeout(r, 250 * retries));
+      else throw e;
+    }
+  }
+}
+
+/**
+ * Logs every refund attempt; on failure logs an error but never throws.
+ */
+async function refundCreditsLogged(userId: string, amount: number, meta?: Record<string, unknown>): Promise<void> {
   try {
-    await tablesDB.incrementRowColumn({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.users,
-      rowId: userId,
-      column: "usageLimits",
-      value: amount,
-    });
-    return;
-  } catch {}
-  // Fallback for environments without incrementRowColumn
-  const user = await getRowSafe<UsersRow>(TABLES.users, userId);
-  if (!user) return;
-  await tablesDB.updateRow({
-    databaseId: APPWRITE_DATABASE_ID,
-    tableId: TABLES.users,
-    rowId: userId,
-    data: {
-      usageLimits: (user.usageLimits ?? 0) + amount,
-    },
-  });
+    await refundCredits(userId, amount);
+    log.debug("credits refunded", { ...meta, userId, amount });
+  } catch (e) {
+    log.error("credit refund failed", { ...meta, userId, amount, err: e instanceof Error ? e.message : String(e) });
+  }
 }
 
 // ──────────────────────────── Image normalization ────────────────────────
@@ -116,6 +138,82 @@ async function normalizeAllViews(
     result.set(tag, await normalizeImage(assetId));
   }
   return result;
+}
+
+// ──────────────────────────── Guarded failure ─────────────────────────────
+
+/**
+ * Guards a FAILED state write: only one caller can win (via status+jobId conditions).
+ * The winner logs/refunds; losers do nothing. Returns true if this call won.
+ */
+async function failGenerationGuarded(
+  tablesDB: TablesDB,
+  projectId: string,
+  jobIds: string[],
+  statuses: GenerationStatus[],
+  data: { generationError: string; generationCompletedAt?: string },
+  refundAmount: number,
+  brandId: string,
+  logg: ReturnType<typeof logger.child>,
+): Promise<boolean> {
+  const queries = [Query.equal("$id", projectId)];
+  if (jobIds.length > 0) {
+    queries.push(Query.or(jobIds.map((jid) => Query.equal("generationJobId", jid))));
+  } else {
+    queries.push(Query.isNull("generationJobId"));
+  }
+  // Status guard: must be in one of these states (prevents double-refund on concurrent polls)
+  if (statuses.length === 1) {
+    queries.push(Query.equal("generationStatus", statuses[0]));
+  } else {
+    queries.push(Query.or(statuses.map((s) => Query.equal("generationStatus", s))));
+  }
+
+  const updated = await tablesDB.updateRows({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: TABLES.projects,
+    queries,
+    data: { generationStatus: GenerationStatus.FAILED, generationError: data.generationError, generationCompletedAt: data.generationCompletedAt },
+  });
+  if (updated.rows.length === 0) {
+    logg.debug("failure-write lost the guard race (another poller already failed the project)", { projectId });
+    return false; // someone else already moved it
+  }
+  await refundCreditsLogged(brandId, refundAmount, { projectId });
+  return true;
+}
+
+/**
+ * Post-claim failure guard: also checks generationClaimedAt to prevent a re-claimer
+ * from stealing the claim mid-finalize and then both sides refunding.
+ */
+async function failPostClaimGuarded(
+  tablesDB: TablesDB,
+  projectId: string,
+  jobId: string,
+  claimedAt: string,
+  data: { generationError: string; generationCompletedAt?: string },
+  refundAmount: number,
+  brandId: string,
+  logg: ReturnType<typeof logger.child>,
+): Promise<boolean> {
+  const updated = await tablesDB.updateRows({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: TABLES.projects,
+    queries: [
+      Query.equal("$id", projectId),
+      Query.equal("generationJobId", jobId),
+      Query.equal("generationStatus", GenerationStatus.FINALIZING),
+      Query.equal("generationClaimedAt", claimedAt),
+    ],
+    data: { generationStatus: GenerationStatus.FAILED, generationError: data.generationError, generationCompletedAt: data.generationCompletedAt },
+  });
+  if (updated.rows.length === 0) {
+    logg.debug("post-claim failure-write lost the guard race (claim stolen or already terminal)", { projectId, claimedAt });
+    return false;
+  }
+  await refundCreditsLogged(brandId, refundAmount, { projectId });
+  return true;
 }
 
 // ──────────────────────────── Start (brand) ─────────────────────────────
@@ -193,13 +291,16 @@ export async function startFastGeneration(params: StartFastGenerationParams) {
 
   let jobId: string;
   try {
-    const result = await withFailover((config) =>
-      submitJob(config, {
-        mode: submission.mode,
-        files: submission.files,
-        manifest: submission.manifest,
-        options: { quality: GENERATION_QUALITY, remove_bg: true },
-      }),
+    const result = await withFailover(
+      (config) =>
+        submitJob(config, {
+          mode: submission.mode,
+          files: submission.files,
+          manifest: submission.manifest,
+          options: { quality: GENERATION_QUALITY, remove_bg: true },
+        }),
+      // POST /jobs is non-idempotent: fail over only when the request provably never landed.
+      { canFailover: isSafeToResubmit },
     );
     jobId = result.job_id;
     logg.info("job submitted", { jobId, mode: result.mode });
@@ -252,10 +353,8 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     return Number.isFinite(stored) && stored > 0 ? stored : GENERATION_COSTS[GenerationMode.FAST];
   };
 
-  if (
-    project.generationStatus !== GenerationStatus.RUNNING &&
-    project.generationStatus !== GenerationStatus.SUBMITTED
-  ) {
+  // Terminal states → return early (no refunds possible here)
+  if (project.generationStatus === GenerationStatus.SUCCEEDED || project.generationStatus === GenerationStatus.FAILED) {
     return {
       projectId,
       generationStatus: project.generationStatus as GenerationStatus,
@@ -264,48 +363,50 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     };
   }
 
-  const startedAt = project.generationStartedAt
-    ? new Date(project.generationStartedAt).getTime()
-    : (project.$createdAt ? new Date(project.$createdAt).getTime() : 0);
-  const jobId = project.generationJobId;
-  if (!jobId) {
-    if (project.generationStatus === GenerationStatus.SUBMITTED && startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
-      logg.warn("job missing or stale SUBMITTED, failing", { jobId });
+  // SUBMITTED without jobId → stale check
+  if (project.generationStatus === GenerationStatus.SUBMITTED && !project.generationJobId) {
+    const startedAt = project.generationStartedAt ? new Date(project.generationStartedAt).getTime() : (project.$createdAt ? new Date(project.$createdAt).getTime() : 0);
+    if (startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
+      logg.warn("job missing or stale SUBMITTED, failing", { jobId: null });
       const tablesDB0 = getTablesDB();
-      await tablesDB0.updateRow({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: TABLES.projects,
-        rowId: projectId,
-        data: {
-          generationStatus: GenerationStatus.FAILED,
-          generationError: "Generation failed to start — no job was created",
-          generationCompletedAt: nowISO(),
-        },
-      });
-      try { await refundCredits(project.brandId, refundCost()); } catch {}
-      return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation failed to start — no job was created" };
+      const won = await failGenerationGuarded(tablesDB0, projectId, [], ["SUBMITTED"], {
+        generationError: "Generation failed to start — no job was created",
+        generationCompletedAt: nowISO(),
+      }, refundCost(), project.brandId, logg);
+      if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation failed to start — no job was created" };
+      return { projectId, generationStatus: project.generationStatus as GenerationStatus };
     }
     return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
-  if (startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
+
+  // A FINALIZING (or odd-state) row with no jobId can't be polled. A stale
+  // FINALIZING with no jobId is unrecoverable → fail it via status guard.
+  const jobId = project.generationJobId;
+  if (!jobId) {
+    if (isStaleClaim(project.generationClaimedAt) && project.generationStatus === GenerationStatus.FINALIZING) {
+      const tablesDB0 = getTablesDB();
+      const won = await failGenerationGuarded(tablesDB0, projectId, [], ["FINALIZING"], {
+        generationError: "Finalization was interrupted and no job was recorded",
+        generationCompletedAt: nowISO(),
+      }, refundCost(), project.brandId, logg);
+      if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Finalization was interrupted" };
+    }
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
+  }
+
+  // Timeout check (with jobId present) — skipped for FINALIZING rows: the job
+  // already succeeded at Modal once, a stale claim just needs re-download.
+  const startedAt = project.generationStartedAt ? new Date(project.generationStartedAt).getTime() : (project.$createdAt ? new Date(project.$createdAt).getTime() : 0);
+  const isFinalizing = project.generationStatus === GenerationStatus.FINALIZING;
+  if (!isFinalizing && startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
     logg.warn("job timed out", { jobId });
     const tablesDB = getTablesDB();
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.projects,
-      rowId: projectId,
-      data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: "Generation timed out after 15 minutes",
-        generationCompletedAt: nowISO(),
-      },
-    });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return {
-      projectId,
-      generationStatus: GenerationStatus.FAILED,
-      generationError: "Generation timed out after 15 minutes",
-    };
+    const won = await failGenerationGuarded(tablesDB, projectId, [jobId], ["RUNNING", "SUBMITTED"], {
+      generationError: "Generation timed out after 30 minutes",
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation timed out after 30 minutes" };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
   let pollResult;
@@ -315,22 +416,12 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     if (e instanceof Hy3dExpiredError) {
       logg.warn("job expired on Modal", { jobId });
       const tablesDB = getTablesDB();
-      await tablesDB.updateRow({
-        databaseId: APPWRITE_DATABASE_ID,
-        tableId: TABLES.projects,
-        rowId: projectId,
-        data: {
-          generationStatus: GenerationStatus.FAILED,
-          generationError: "Generation results expired on Modal (7-day retention exceeded)",
-          generationCompletedAt: nowISO(),
-        },
-      });
-      try { await refundCredits(project.brandId, refundCost()); } catch {}
-      return {
-        projectId,
-        generationStatus: GenerationStatus.FAILED,
-        generationError: "Generation results expired",
-      };
+      const won = await failGenerationGuarded(tablesDB, projectId, [jobId], ["RUNNING", "SUBMITTED", "FINALIZING"], {
+        generationError: "Generation results expired on Modal (7-day retention exceeded)",
+        generationCompletedAt: nowISO(),
+      }, refundCost(), project.brandId, logg);
+      if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation results expired" };
+      return { projectId, generationStatus: project.generationStatus as GenerationStatus };
     }
     if (e instanceof Hy3dTransientError) {
       logg.debug("transient poll error, will retry", { error: (e as Error).message });
@@ -340,49 +431,57 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
   }
 
   if (pollResult.status === "running") {
-    return { projectId, generationStatus: GenerationStatus.RUNNING };
+    // Report the row's actual status — a stale FINALIZING re-poll that sees
+    // "running" must not misreport RUNNING (the claim already happened; the
+    // 7-day Modal expiry eventually resolves genuinely stuck rows).
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
   if (pollResult.status === "failed") {
     logg.error("Modal job failed", { jobId, error: pollResult.error });
     const tablesDB = getTablesDB();
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.projects,
-      rowId: projectId,
-      data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: pollResult.error.slice(0, 2000),
-        generationCompletedAt: nowISO(),
-      },
-    });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return {
-      projectId,
-      generationStatus: GenerationStatus.FAILED,
-      generationError: pollResult.error,
-    };
+    const won = await failGenerationGuarded(tablesDB, projectId, [jobId], ["RUNNING", "SUBMITTED", "FINALIZING"], {
+      generationError: pollResult.error.slice(0, 2000),
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: pollResult.error };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
   // ─── Success: finalize ───
   logg.info("Modal job succeeded, finalizing", { runId: pollResult.run_id });
 
   const tablesDB = getTablesDB();
+  const claimedAt = nowISO();
 
-  // Claim via RUNNING|SUBMITTED → FINALIZING guard (withFailover may succeed before status flips to RUNNING)
+  // Claim via RUNNING|SUBMITTED → FINALIZING, or stale FINALIZING → FINALIZING (re-claim)
   let claimed = false;
+  const claimData = { generationStatus: GenerationStatus.FINALIZING, generationClaimedAt: claimedAt };
   for (const claimStatus of [GenerationStatus.RUNNING, GenerationStatus.SUBMITTED] as const) {
     const updated = await tablesDB.updateRows({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: TABLES.projects,
-      queries: [
-        Query.equal("$id", projectId),
-        Query.equal("generationStatus", claimStatus),
-        Query.equal("generationJobId", jobId),
-      ],
-      data: { generationStatus: GenerationStatus.FINALIZING },
+      queries: [Query.equal("$id", projectId), Query.equal("generationStatus", claimStatus), Query.equal("generationJobId", jobId)],
+      data: claimData,
     });
     if (updated.rows.length > 0) { claimed = true; break; }
+  }
+  // If not claimed yet, try re-claiming a stale FINALIZING row
+  if (!claimed) {
+    const staleBefore = new Date(Date.now() - STALE_CLAIM_MS).toISOString();
+    const reupdate1 = await tablesDB.updateRows({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: TABLES.projects,
+      queries: [Query.equal("$id", projectId), Query.equal("generationStatus", GenerationStatus.FINALIZING), Query.equal("generationJobId", jobId), Query.lessThan("generationClaimedAt", staleBefore)],
+      data: { generationClaimedAt: claimedAt },
+    });
+    const reupdate2 = await tablesDB.updateRows({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: TABLES.projects,
+      queries: [Query.equal("$id", projectId), Query.equal("generationStatus", GenerationStatus.FINALIZING), Query.equal("generationJobId", jobId), Query.isNull("generationClaimedAt")],
+      data: { generationClaimedAt: claimedAt },
+    });
+    if (reupdate1.rows.length > 0 || reupdate2.rows.length > 0) { claimed = true; }
   }
   if (!claimed) {
     const fresh = await getRowSafe<ProjectsRow>(TABLES.projects, projectId);
@@ -393,88 +492,69 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     };
   }
 
+  // Archive prior READY model rows (GLB/USDZ) before creating the new one
+  try {
+    await tablesDB.updateRows({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: TABLES.assets,
+      queries: [Query.equal("projectId", projectId), Query.equal("status", AssetStatus.READY), Query.or([Query.equal("type", AssetType.MODEL_GLB), Query.equal("type", AssetType.MODEL_USDZ)])],
+      data: { status: AssetStatus.ARCHIVED },
+    });
+  } catch (e) {
+    logg.warn("archive-on-claim failed, proceeding anyway", { err: e instanceof Error ? e.message : String(e) });
+  }
+
   // Download GLB
   const glbPath = findGlbPath(pollResult.files);
   if (!glbPath) {
     logg.error("no textured GLB in job output", { files: pollResult.files });
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.projects,
-      rowId: projectId,
-      data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: "No textured GLB in job output",
-        generationCompletedAt: nowISO(),
-      },
-    });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return {
-      projectId,
-      generationStatus: GenerationStatus.FAILED,
+    const won = await failPostClaimGuarded(tablesDB, projectId, jobId, claimedAt, {
       generationError: "No textured GLB in job output",
-    };
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "No textured GLB in job output" };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
   let glbBytes: Uint8Array;
   try {
-    glbBytes = await withFailover((config) =>
-      downloadArtifact(config, pollResult.run_id, glbPath),
-    );
+    const t0 = Date.now();
+    logg.info("downloading GLB", { path: glbPath, runId: pollResult.run_id });
+    glbBytes = await withFailover((config) => downloadArtifact(config, pollResult.run_id, glbPath));
+    logg.info("GLB downloaded", { bytes: glbBytes.byteLength, ms: Date.now() - t0 });
   } catch (e) {
     logg.error("GLB download failed", { error: (e as Error).message });
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.projects,
-      rowId: projectId,
-      data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: `GLB download failed: ${(e as Error).message}`,
-        generationCompletedAt: nowISO(),
-      },
-    });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return {
-      projectId,
-      generationStatus: GenerationStatus.FAILED,
+    const won = await failPostClaimGuarded(tablesDB, projectId, jobId, claimedAt, {
       generationError: `GLB download failed: ${(e as Error).message}`,
-    };
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `GLB download failed: ${(e as Error).message}` };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
-  // Upload to storage
+  // Upload to storage — private at creation
   const assetId = ID.unique();
   let uploaded = false;
   try {
+    const t0 = Date.now();
+    logg.info("uploading GLB to storage", { assetId, bytes: glbBytes.byteLength });
     const storage = new Storage(createAdminClient());
     await storage.createFile({
       bucketId: BUCKETS.projectAsset,
       fileId: assetId,
       file: new File([Buffer.from(glbBytes)], `${assetId}.glb`, { type: "model/gltf-binary" }),
-      permissions: ["read:any"],
+      permissions: [],
     });
     uploaded = true;
-    await storage.updateFile({
-      bucketId: BUCKETS.projectAsset,
-      fileId: assetId,
-      permissions: [Permission.read(AppwriteRole.any())],
-    });
+    logg.info("GLB uploaded", { assetId, ms: Date.now() - t0 });
   } catch (e) {
     logg.error("storage upload failed", { error: (e as Error).message });
-    await tablesDB.updateRow({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.projects,
-      rowId: projectId,
-      data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: `Storage upload failed: ${(e as Error).message}`,
-        generationCompletedAt: nowISO(),
-      },
-    });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return {
-      projectId,
-      generationStatus: GenerationStatus.FAILED,
+    const won = await failPostClaimGuarded(tablesDB, projectId, jobId, claimedAt, {
       generationError: `Storage upload failed: ${(e as Error).message}`,
-    };
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `Storage upload failed: ${(e as Error).message}` };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
   // Create asset row — must match AssetsRow contract so publish/reconcile/proxy can find it
@@ -502,35 +582,42 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     if (uploaded) {
       try { await new Storage(createAdminClient()).deleteFile({ bucketId: BUCKETS.projectAsset, fileId: assetId }); } catch {}
     }
+    const won = await failPostClaimGuarded(tablesDB, projectId, jobId, claimedAt, {
+      generationError: `Asset row creation failed: ${(e as Error).message}`,
+      generationCompletedAt: nowISO(),
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `Asset row creation failed: ${(e as Error).message}` };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
+  }
+
+  // Link to project — SYSTEM_ACTOR completes the project so the brand can publish
+  // No `updatedAt` in data: the projects table has no such column (TablesDB maintains $updatedAt itself).
+  const shouldComplete = canTransition(project.status as ProjectStatus, ProjectStatus.COMPLETED, SYSTEM_ACTOR);
+  try {
     await tablesDB.updateRow({
       databaseId: APPWRITE_DATABASE_ID,
       tableId: TABLES.projects,
       rowId: projectId,
       data: {
-        generationStatus: GenerationStatus.FAILED,
-        generationError: `Asset row creation failed: ${(e as Error).message}`,
+        generationStatus: GenerationStatus.SUCCEEDED,
+        generationRunId: pollResult.run_id,
+        generationAssetId: assetId,
         generationCompletedAt: nowISO(),
+        ...(shouldComplete ? { status: ProjectStatus.COMPLETED } : {}),
       },
     });
-    try { await refundCredits(project.brandId, refundCost()); } catch {}
-    return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `Asset row creation failed: ${(e as Error).message}` };
-  }
-
-  // Link to project — SYSTEM_ACTOR completes the project so the brand can publish (brand chose this per §8 #2)
-  const shouldComplete = canTransition(project.status as ProjectStatus, ProjectStatus.COMPLETED, SYSTEM_ACTOR);
-  await tablesDB.updateRow({
-    databaseId: APPWRITE_DATABASE_ID,
-    tableId: TABLES.projects,
-    rowId: projectId,
-    data: {
-      generationStatus: GenerationStatus.SUCCEEDED,
-      generationRunId: pollResult.run_id,
-      generationAssetId: assetId,
+  } catch (e) {
+    // Final link update failed — cleanup and fail-guarded
+    logg.error("final link update failed", { assetId, error: (e as Error).message });
+    try { await new Storage(createAdminClient()).deleteFile({ bucketId: BUCKETS.projectAsset, fileId: assetId }); } catch {}
+    try { await tablesDB.deleteRow({ databaseId: APPWRITE_DATABASE_ID, tableId: TABLES.assets, rowId: assetId }); } catch {}
+    const won = await failPostClaimGuarded(tablesDB, projectId, jobId, claimedAt, {
+      generationError: `Finalization failed: ${(e as Error).message}`,
       generationCompletedAt: nowISO(),
-      ...(shouldComplete ? { status: ProjectStatus.COMPLETED } : {}),
-      updatedAt: nowISO(),
-    },
-  });
+    }, refundCost(), project.brandId, logg);
+    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `Finalization failed: ${(e as Error).message}` };
+    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
+  }
 
   logg.info("generation finalized", { assetId, elapsed: pollResult.elapsed_s, autoCompleted: shouldComplete });
 
@@ -610,13 +697,16 @@ export async function regenerateFastGeneration(params: RegenerateParams) {
 
   let jobId: string;
   try {
-    const result = await withFailover((config) =>
-      submitJob(config, {
-        mode: submission.mode,
-        files: submission.files,
-        manifest: submission.manifest,
-        options: { quality: GENERATION_QUALITY, remove_bg: true },
-      }),
+    const result = await withFailover(
+      (config) =>
+        submitJob(config, {
+          mode: submission.mode,
+          files: submission.files,
+          manifest: submission.manifest,
+          options: { quality: GENERATION_QUALITY, remove_bg: true },
+        }),
+      // POST /jobs is non-idempotent: fail over only when the request provably never landed.
+      { canFailover: isSafeToResubmit },
     );
     jobId = result.job_id;
   } catch (e) {
@@ -664,18 +754,26 @@ export async function finalizeStaleGenerations(): Promise<{
   const logg = log.child({ task: "cron-sweep" });
 
   const tablesDB = getTablesDB();
-  const { rows: projects } = await tablesDB.listRows({
+  
+  // RUNNING | SUBMITTED
+  const { rows: runningRows } = await tablesDB.listRows({
     databaseId: APPWRITE_DATABASE_ID,
     tableId: TABLES.projects,
-    queries: [
-      Query.or([
-        Query.equal("generationStatus", GenerationStatus.RUNNING),
-        Query.equal("generationStatus", GenerationStatus.SUBMITTED),
-      ]),
-    ],
+    queries: [Query.or([Query.equal("generationStatus", GenerationStatus.RUNNING), Query.equal("generationStatus", GenerationStatus.SUBMITTED)])],
   });
 
-  logg.info("sweep found projects", { count: projects.length });
+  // Stale FINALIZING — JS-filtered by claim age (fresh claims belong to an active finalizer)
+  const finalizingAll = await tablesDB.listRows({
+    databaseId: APPWRITE_DATABASE_ID,
+    tableId: TABLES.projects,
+    queries: [Query.equal("generationStatus", GenerationStatus.FINALIZING)],
+  });
+  const finalizingRows = finalizingAll.rows.filter((p) =>
+    isStaleClaim((p as { generationClaimedAt?: string | null }).generationClaimedAt),
+  );
+
+  const projects = [...runningRows, ...finalizingRows];
+  logg.info("sweep found projects", { count: projects.length, running: runningRows.length, finalizing: finalizingRows.length });
 
   let finalized = 0;
   let failed = 0;
