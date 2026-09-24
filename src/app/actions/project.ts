@@ -20,8 +20,10 @@ import {
 } from "@/server/services/generation.service";
 import { setFilePublicWithRetry } from "@/server/storage";
 import { requirePrincipal, Role } from "@/server/auth-guards";
-import { getRowSafe, DB, type UsersRow } from "@/server/db/client";
-import { QuotaExceededError } from "@/server/http/errors";
+import { getRowSafe, getTablesDB, DB, type UsersRow, type ProjectsRow } from "@/server/db/client";
+import { QuotaExceededError, NotFoundError } from "@/server/http/errors";
+import { GenerationMode, GenerationStatus } from "@/lib/enums";
+import { Query } from "node-appwrite";
 import { logger } from "@/server/logging";
 import { enforceRateLimit } from "@/server/http/rate-limit";
 
@@ -79,10 +81,63 @@ export async function pollGeneration(
 ): Promise<ActionResult<{ generationStatus: string; generationError?: string; generationCompletedAt?: string }>> {
   return toActionResult(async () => {
     const principal = await requirePrincipal();
-    // 30 polls/min per principal — leaves headroom for the UI heartbeat while
-    // blocking runaway loops that hammer Appwrite + the Modal API.
+    // Ownership: brands may only poll their own projects (admins: any).
+    // 404 (not 403) to avoid project-id enumeration — same as the API route.
+    const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
+    if (!project) throw new NotFoundError("Project not found");
+    if (principal.role !== Role.ADMIN && project.brandId !== principal.userId) {
+      throw new NotFoundError("Project not found");
+    }
+    // 30 polls/min per principal — shared by the Check Status button and the
+    // on-load auto-poll batch (which counts as a single call).
     await enforceRateLimit(`poll-gen:${principal.userId}`, { limit: 30, windowSeconds: 60 });
     return pollAndFinalize(projectId);
+  });
+}
+
+/**
+ * Auto-poll on /tasks mount: polls every non-terminal FAST generation the
+ * principal can see (brand: own projects; admin: latest 10) in one round trip,
+ * so the page refreshes into fresh statuses without a manual Check Status click.
+ * Server-side scoping means ownership holds by construction — no client ids.
+ * Returns polled=0 when nothing is active (client then skips the refresh).
+ */
+export async function pollActiveGenerations(): Promise<ActionResult<{ polled: number }>> {
+  return toActionResult(async () => {
+    const principal = await requirePrincipal();
+    await enforceRateLimit(`poll-gen:${principal.userId}`, { limit: 30, windowSeconds: 60 });
+
+    const ACTIVE = [
+      GenerationStatus.SUBMITTED,
+      GenerationStatus.RUNNING,
+      GenerationStatus.FINALIZING,
+    ] as const;
+    const queries = [
+      ...(principal.role === Role.ADMIN ? [] : [Query.equal("brandId", principal.userId)]),
+      Query.equal("generationMode", GenerationMode.FAST),
+      Query.equal("generationStatus", [...ACTIVE]),
+      Query.orderDesc("$createdAt"),
+      Query.limit(principal.role === Role.ADMIN ? 10 : 25),
+    ];
+    const { rows } = await getTablesDB().listRows<ProjectsRow>({
+      databaseId: DB.databaseId,
+      tableId: DB.projects,
+      queries,
+    });
+    if (rows.length === 0) return { polled: 0 };
+
+    // Claim guards + stale-claim re-claims make overlapping polls idempotent.
+    const results = await Promise.allSettled(rows.map((r) => pollAndFinalize(r.$id)));
+    const rejected = results.filter((r) => r.status === "rejected");
+    if (rejected.length > 0) {
+      logger.warn("pollActiveGenerations: some polls failed", {
+        count: rejected.length,
+        errors: rejected.map((r) => (r.status === "rejected" ? (r.reason instanceof Error ? r.reason.message : String(r.reason)) : "")),
+      });
+    }
+    // polled = completed polls — a fully-failed batch returns 0 so the client
+    // skips the pointless refresh.
+    return { polled: results.length - rejected.length };
   });
 }
 
@@ -93,6 +148,13 @@ export async function regenerateGeneration(
     const principal = await requirePrincipal({ roles: [Role.BRAND, Role.ADMIN] });
     // 6 regenerations/hour per user — prevents spamming GPU time.
     await enforceRateLimit(`regenerate:${principal.userId}`, { limit: 6, windowSeconds: 3600 });
+
+    // Ownership BEFORE any credit deduction (404, not 403 — no enumeration).
+    const project = await getRowSafe<ProjectsRow>(DB.projects, projectId);
+    if (!project) throw new NotFoundError("Project not found");
+    if (principal.role !== Role.ADMIN && project.brandId !== principal.userId) {
+      throw new NotFoundError("Project not found");
+    }
 
     const cost = GENERATION_COSTS.REGENERATE;
 
@@ -142,7 +204,12 @@ export async function regenerateGeneration(
     }
 
     try {
-      await regenerateFastGeneration({ projectId, brandId: principal.userId });
+      await regenerateFastGeneration({
+        projectId,
+        brandId: principal.userId,
+        // Ownership pre-verified above; admins act on other brands' projects.
+        skipOwnershipCheck: principal.role === Role.ADMIN,
+      });
     } catch (e) {
       // Refund credit on failure — logged, never throws
       try {

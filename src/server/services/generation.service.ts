@@ -143,6 +143,33 @@ async function normalizeAllViews(
 // ──────────────────────────── Guarded failure ─────────────────────────────
 
 /**
+ * Builds the WHERE conditions for a guarded failure write.
+ * Appwrite `Query.or` requires >= 2 conditions — a single jobId/status must
+ * be pushed as a plain `equal()` or the server rejects the whole update
+ * (which would silently break the failure+refund path).
+ */
+export function buildFailureGuardQueries(
+  projectId: string,
+  jobIds: string[],
+  statuses: GenerationStatus[],
+): string[] {
+  const queries = [Query.equal("$id", projectId)];
+  if (jobIds.length === 1) {
+    queries.push(Query.equal("generationJobId", jobIds[0]));
+  } else if (jobIds.length > 1) {
+    queries.push(Query.or(jobIds.map((jid) => Query.equal("generationJobId", jid))));
+  } else {
+    queries.push(Query.isNull("generationJobId"));
+  }
+  if (statuses.length === 1) {
+    queries.push(Query.equal("generationStatus", statuses[0]));
+  } else {
+    queries.push(Query.or(statuses.map((s) => Query.equal("generationStatus", s))));
+  }
+  return queries;
+}
+
+/**
  * Guards a FAILED state write: only one caller can win (via status+jobId conditions).
  * The winner logs/refunds; losers do nothing. Returns true if this call won.
  */
@@ -156,23 +183,10 @@ async function failGenerationGuarded(
   brandId: string,
   logg: ReturnType<typeof logger.child>,
 ): Promise<boolean> {
-  const queries = [Query.equal("$id", projectId)];
-  if (jobIds.length > 0) {
-    queries.push(Query.or(jobIds.map((jid) => Query.equal("generationJobId", jid))));
-  } else {
-    queries.push(Query.isNull("generationJobId"));
-  }
-  // Status guard: must be in one of these states (prevents double-refund on concurrent polls)
-  if (statuses.length === 1) {
-    queries.push(Query.equal("generationStatus", statuses[0]));
-  } else {
-    queries.push(Query.or(statuses.map((s) => Query.equal("generationStatus", s))));
-  }
-
   const updated = await tablesDB.updateRows({
     databaseId: APPWRITE_DATABASE_ID,
     tableId: TABLES.projects,
-    queries,
+    queries: buildFailureGuardQueries(projectId, jobIds, statuses),
     data: { generationStatus: GenerationStatus.FAILED, generationError: data.generationError, generationCompletedAt: data.generationCompletedAt },
   });
   if (updated.rows.length === 0) {
@@ -394,20 +408,11 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
-  // Timeout check (with jobId present) — skipped for FINALIZING rows: the job
-  // already succeeded at Modal once, a stale claim just needs re-download.
+  // Age of the generation — used for the timeout check ONLY after Modal
+  // confirms the job is still running (see the running branch below): a job
+  // that succeeded late must win over the age check, never be failed+refunded.
   const startedAt = project.generationStartedAt ? new Date(project.generationStartedAt).getTime() : (project.$createdAt ? new Date(project.$createdAt).getTime() : 0);
   const isFinalizing = project.generationStatus === GenerationStatus.FINALIZING;
-  if (!isFinalizing && startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
-    logg.warn("job timed out", { jobId });
-    const tablesDB = getTablesDB();
-    const won = await failGenerationGuarded(tablesDB, projectId, [jobId], ["RUNNING", "SUBMITTED"], {
-      generationError: "Generation timed out after 30 minutes",
-      generationCompletedAt: nowISO(),
-    }, refundCost(), project.brandId, logg);
-    if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation timed out after 30 minutes" };
-    return { projectId, generationStatus: project.generationStatus as GenerationStatus };
-  }
 
   let pollResult;
   try {
@@ -431,9 +436,21 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
   }
 
   if (pollResult.status === "running") {
+    // Hung-job timeout: still running past the 30-min budget → fail + refund.
+    // Skipped for FINALIZING rows (job already succeeded once; a stale claim
+    // just needs re-download — the 7-day Modal expiry resolves true lock-ups).
+    if (!isFinalizing && startedAt && Date.now() - startedAt > JOB_TIMEOUT_MS) {
+      logg.warn("job timed out", { jobId });
+      const tablesDB = getTablesDB();
+      const won = await failGenerationGuarded(tablesDB, projectId, [jobId], ["RUNNING", "SUBMITTED"], {
+        generationError: "Generation timed out after 30 minutes",
+        generationCompletedAt: nowISO(),
+      }, refundCost(), project.brandId, logg);
+      if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: "Generation timed out after 30 minutes" };
+      return { projectId, generationStatus: project.generationStatus as GenerationStatus };
+    }
     // Report the row's actual status — a stale FINALIZING re-poll that sees
-    // "running" must not misreport RUNNING (the claim already happened; the
-    // 7-day Modal expiry eventually resolves genuinely stuck rows).
+    // "running" must not misreport RUNNING (the claim already happened).
     return { projectId, generationStatus: project.generationStatus as GenerationStatus };
   }
 
@@ -490,18 +507,6 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
       projectId,
       generationStatus: (fresh?.generationStatus as GenerationStatus) ?? GenerationStatus.RUNNING,
     };
-  }
-
-  // Archive prior READY model rows (GLB/USDZ) before creating the new one
-  try {
-    await tablesDB.updateRows({
-      databaseId: APPWRITE_DATABASE_ID,
-      tableId: TABLES.assets,
-      queries: [Query.equal("projectId", projectId), Query.equal("status", AssetStatus.READY), Query.or([Query.equal("type", AssetType.MODEL_GLB), Query.equal("type", AssetType.MODEL_USDZ)])],
-      data: { status: AssetStatus.ARCHIVED },
-    });
-  } catch (e) {
-    logg.warn("archive-on-claim failed, proceeding anyway", { err: e instanceof Error ? e.message : String(e) });
   }
 
   // Download GLB
@@ -617,6 +622,26 @@ export async function pollAndFinalize(projectId: string): Promise<PollResult> {
     }, refundCost(), project.brandId, logg);
     if (won) return { projectId, generationStatus: GenerationStatus.FAILED, generationError: `Finalization failed: ${(e as Error).message}` };
     return { projectId, generationStatus: project.generationStatus as GenerationStatus };
+  }
+
+  // Archive prior READY model rows (GLB/USDZ) — AFTER the new model is linked.
+  // Archiving earlier left a PUBLISHED project with zero READY models whenever
+  // download/upload failed mid-finalize; here the new asset is already the
+  // generationAssetId, so old rows can never be the project's only model.
+  try {
+    await tablesDB.updateRows({
+      databaseId: APPWRITE_DATABASE_ID,
+      tableId: TABLES.assets,
+      queries: [
+        Query.equal("projectId", projectId),
+        Query.equal("status", AssetStatus.READY),
+        Query.or([Query.equal("type", AssetType.MODEL_GLB), Query.equal("type", AssetType.MODEL_USDZ)]),
+        Query.notEqual("$id", assetId),
+      ],
+      data: { status: AssetStatus.ARCHIVED },
+    });
+  } catch (e) {
+    logg.warn("archive-old-models failed, proceeding anyway", { err: e instanceof Error ? e.message : String(e) });
   }
 
   logg.info("generation finalized", { assetId, elapsed: pollResult.elapsed_s, autoCompleted: shouldComplete });

@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useTransition, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useTransition, useCallback, useRef, useMemo, useEffect } from 'react';
 import {
   Plus, UploadCloud, CheckCircle2, AlertCircle, Loader2, Ruler, Check,
   MessageSquareWarning, Edit3, Eye, Box as BoxIcon,
@@ -12,7 +12,7 @@ import type { Product } from "@/lib/types";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 
 const ThreeDConfigurator = dynamic(() => import('@/components/ThreeDConfigurator'), { ssr: false });
-import { createProject, brandPublishProject, brandSendForRevisions, pollGeneration, regenerateGeneration, deletePendingProject } from "@/app/actions/project";
+import { createProject, brandPublishProject, brandSendForRevisions, pollGeneration, pollActiveGenerations, regenerateGeneration, deletePendingProject } from "@/app/actions/project";
 import { useAppwriteUpload, type UploadedAsset } from "@/lib/use-appwrite-upload";
 import { APPWRITE_REFERENCE_IMAGES_BUCKET_ID } from "@/lib/appwrite-config";
 import { useRouter } from "next/navigation";
@@ -86,7 +86,7 @@ const EMPTY_HINTS: Record<ProjectStatus, string> = {
   PUBLISHED: "Approved models will show up here.",
 };
 
-export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJob[], role: string }) {
+export default function TasksClient({ initialJobs, role, autoPoll }: { initialJobs: TaskJob[], role: string, autoPoll: boolean }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -121,6 +121,23 @@ export default function TasksClient({ initialJobs, role }: { initialJobs: TaskJo
   const [isPolling, setIsPolling] = useState(false);
   const [pollingProjectId, setPollingProjectId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // One-shot auto-poll on mount: when the server flagged non-terminal FAST
+  // tasks (autoPoll), check their generation status once so the page refreshes
+  // into fresh statuses without a manual Check Status click. ranRef guards
+  // React StrictMode's double effect invocation in dev; polls share the same
+  // 30/min rate-limit bucket as the button (one batch call = one unit).
+  const autoPollRanRef = useRef(false);
+  useEffect(() => {
+    if (!autoPoll || autoPollRanRef.current) return;
+    autoPollRanRef.current = true;
+    void (async () => {
+      const result = await pollActiveGenerations();
+      if (result.ok && result.data.polled > 0) {
+        startTransition(() => { router.refresh(); });
+      }
+    })();
+  }, [autoPoll, router, startTransition]);
 
   const labelFor = useCallback((status: ProjectStatus) => (
     role === "ADMIN" ? ADMIN_LABEL[status] : BRAND_LABEL[status]

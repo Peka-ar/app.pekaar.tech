@@ -70,7 +70,7 @@ Appwrite table **`rate_limits`** (db `studiov`, created by `scripts/ensure-backe
 |--------------------------------------|-----------------------|--------|-------|
 | `POST /api/sdk/v1/events`            | IP                    | 60s    | 60    |
 | `GET /api/v1/generation/[projectId]` | principal userId      | 60s    | 30    |
-| `pollGeneration` (action)             | principal userId      | 60s    | 30    |
+| `pollGeneration` + `pollActiveGenerations` (actions) | principal userId (shared `poll-gen:` key) | 60s    | 30    |
 | `regenerateGeneration` (action)      | principal userId      | 1h     | 6     |
 | `recordAssetUpload` (action)         | principal userId      | 60s    | 60    |
 | `registerUser`                       | IP                    | 1h     | 10    |
@@ -141,7 +141,7 @@ Publish semantics (unchanged from prior behavior, now centralized):
 
 **Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. Comparison is **timing-safe** (`timingSafeEqual` from `node:crypto`, length-checked first). If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match → `401`. Any other failure goes through `handleApiError`.
 
-**Concurrency lock:** before running any work the route claims a single-row lock in the `maintenance_locks` table (`rowId: "nightly-lock"`, `expiresAt` + 6h TTL) via guarded `updateRows` (isNull-or-expired → claim). A second overlapping run gets `200 { ok: true, skipped: "lock-held" }` and exits — overlapping cron fires can never double-credit or double-sweep. **Fail-open:** if the lock table is missing/unreachable the run proceeds without the lock (the lock dedups, it must not gate the invariant sweeps); infra is provisioned by `ensure-backend`.
+**Concurrency lock:** before running any work the route calls `takeMaintenanceLock` (`maintenance.service.ts`), which claims a single-row lock in the `maintenance_locks` table (`rowId: "nightly-lock"`, `expiresAt` + 6h TTL) via guarded `updateRows` (isNull-or-expired → claim). A second overlapping run gets `200 { ok: true, skipped: "lock-held" }` and exits — overlapping cron fires can never double-credit or double-sweep. **Fail-open:** if the lock table is missing/unreachable the run proceeds without the lock (the lock dedups, it must not gate the invariant sweeps); infra is provisioned by `ensure-backend`.
 
 **Work (`runMaintenance`, `src/server/services/maintenance.service.ts`) — runs the three steps in parallel:**
 

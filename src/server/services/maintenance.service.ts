@@ -19,6 +19,51 @@ export const PUBLIC_READ_PERMISSION = 'read("any")';
 
 const DELETE_BATCH_SIZE = 100;
 
+const MAINTENANCE_LOCKS_TABLE_ID = "maintenance_locks";
+const LOCK_ROW_ID = "nightly-lock";
+const LOCK_TTL_MS = 6 * 60 * 60 * 1000; // 6h — long enough to dedup overlap, short enough to self-heal
+
+/**
+ * Single-row lock in `maintenance_locks` (provisioned by ensure-backend).
+ * Claims an expired/never-taken lock; returns false when another run holds it.
+ * Fail-open when the lock table is missing — the lock dedups, it must not
+ * gate the nightly invariant sweeps.
+ */
+export async function takeMaintenanceLock(): Promise<boolean> {
+  const db = getTablesDB();
+  const nowISO = new Date().toISOString();
+  const newExpiry = new Date(Date.now() + LOCK_TTL_MS).toISOString();
+  try {
+    const updated = await db.updateRows({
+      databaseId: DB.databaseId,
+      tableId: MAINTENANCE_LOCKS_TABLE_ID,
+      queries: [
+        Query.equal("$id", LOCK_ROW_ID),
+        Query.or([Query.isNull("expiresAt"), Query.lessThan("expiresAt", nowISO)]),
+      ],
+      data: { expiresAt: newExpiry },
+    });
+    if (updated.rows.length > 0) return true;
+    return false; // lock held by a concurrent/recent run
+  } catch {
+    // Table or row may not exist yet — claim the lock by creating the row.
+    try {
+      await db.createRow({
+        databaseId: DB.databaseId,
+        tableId: MAINTENANCE_LOCKS_TABLE_ID,
+        rowId: LOCK_ROW_ID,
+        data: { expiresAt: newExpiry },
+      });
+      return true;
+    } catch (e) {
+      logger.warn("[cron] maintenance lock unavailable; proceeding without lock", {
+        err: e instanceof Error ? e.message : String(e),
+      });
+      return true; // fail-open
+    }
+  }
+}
+
 const PUBLIC_CAPABLE_ASSET_STATUSES = [
   AssetStatus.READY,
   AssetStatus.PUBLISHED,

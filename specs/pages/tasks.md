@@ -126,7 +126,9 @@ Server side: `createProject` (BRAND) runs a TablesDB tx — atomic quota decreme
 
 **AI pipeline mode**: when `generationMode === "FAST"`, the Processing drawer shows a generation status banner with current status (SUBMITTED/RUNNING/FINALIZING), elapsed time, and a "Check Status" button that polls the generation endpoint. On SUCCEEDED, the drawer auto-refreshes. On FAILED, shows error message + "Regenerate" button (1 credit).
 
-**Server side**: `pollGeneration` action calls `pollAndFinalize` from `generation.service.ts`. `regenerateGeneration` action calls `regenerateFastGeneration`.
+**Auto-poll on load**: `page.tsx` computes `autoPoll` server-side (`generationMode === "FAST"` and status ∈ {SUBMITTED, RUNNING, FINALIZING}) and passes it to `TasksClient`, whose mount-only `useEffect` (StrictMode-guarded by a ref) calls `pollActiveGenerations()` once and `router.refresh()`es if `polled > 0`. When nothing is active the effect never fires — zero extra calls. One-shot on load/reload by design; a task finishing mid-session still needs the button or a reload. Batch and button share the `poll-gen:{userId}` 30/min bucket (one batch call = one unit). `page.tsx` sets `maxDuration = 300` — a batch poll runs `pollAndFinalize` (GLB download+upload, 60s+).
+
+**Server side**: `pollGeneration` action calls `pollAndFinalize` from `generation.service.ts` (ownership: brand → own project only, admin → any; generic 404, no id enumeration). `regenerateGeneration` action verifies ownership **before** deducting the credit and calls `regenerateFastGeneration` (admin passes `skipOwnershipCheck`). `pollActiveGenerations` batch action re-scopes server-side (brand: own, admin: latest 10) — no client-provided ids — and runs `pollAndFinalize` under `Promise.allSettled`; claim guards make overlapping polls idempotent. FAILED is excluded from auto-poll (Regenerate is the path).
 
 ## Drawer — Revisions (REVISIONS, read-only)
 
@@ -168,8 +170,9 @@ All in `src/app/actions/project.ts` / `admin.ts`, thin adapters over `project.se
 - **`getUserProjects`** — caller's projects, derived `referenceUrls`/`assetUrls` (proxy-rewritten in `src/lib/project-augment.ts`).
 - **`updateProjectDimensions`** — BRAND owner or ADMIN (generic 404 for missing/foreign projects), **any status**; single-row write of the `dimensions` JSON; revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
 - **`deletePendingProject`** — BRAND owner; PENDING-only (in-tx `ConflictError` otherwise); row cascade in one tx + best-effort storage deletes; **no credit refund**; revalidates `/tasks`, `/dashboard`, `/admin/tasks`.
-- **`pollGeneration`** — BRAND/ADMIN; polls and finalizes a FAST generation. Returns `{ generationStatus, generationError?, generationCompletedAt? }`.
-- **`regenerateGeneration`** — BRAND/ADMIN; re-submits a FAILED/SUCCEEDED FAST generation (1 credit).
+- **`pollGeneration`** — BRAND/ADMIN; polls and finalizes a FAST generation (own project only for BRAND; generic 404 otherwise). Returns `{ generationStatus, generationError?, generationCompletedAt? }`.
+- **`pollActiveGenerations`** — BRAND/ADMIN; auto-poll-on-load batch. Server-scoped query (BRAND: own; ADMIN: latest 10) for non-terminal FAST generations → `Promise.allSettled(pollAndFinalize)`; returns `{ polled }` (0 → client skips refresh). Shares the `poll-gen:` 30/min limit with `pollGeneration`.
+- **`regenerateGeneration`** — BRAND/ADMIN; re-submits a FAILED/SUCCEEDED FAST generation (1 credit). Ownership checked before the credit deduction; admin skips the service-level brand check.
 - **`adminSubmitProject`** — ADMIN; tx with in-tx status precondition + per-asset link verification; archives prior READY models (kept in storage, no quota impact). See `./admin.md` §3.
 
 ---

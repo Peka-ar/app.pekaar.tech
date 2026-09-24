@@ -204,6 +204,9 @@ All `"use server"`, thin adapters over `src/server/services/*.service.ts` (layer
 | `adminSubmitProject` | ADMIN | Tx: precondition + per-asset link verification + archive prior models + link new + → COMPLETED (§6) |
 | `updateProjectDimensions` | BRAND owner or ADMIN | Overwrite the `dimensions` JSON on **any status** (generic 404 for missing/foreign — no enumeration); revalidates `/tasks`, `/dashboard`, `/admin/tasks` |
 | `deletePendingProject` | BRAND owner | Cascade-delete a **PENDING-only** project (in-tx status precondition): project + linked assets + revision_requests + analytics_events rows, then best-effort storage file deletes + one post-commit orphan re-sweep for assets a racing FAST finalize may re-create. **Credits are never refunded.** Generic 404 for missing/foreign |
+| `pollGeneration` | BRAND owner or ADMIN, rate-limited 30/min (`poll-gen:`) | Poll + finalize one FAST generation (generic 404 for missing/foreign — no enumeration) |
+| `pollActiveGenerations` | BRAND owner or ADMIN, same `poll-gen:` bucket | Auto-poll-on-load batch (`/tasks`): server-scoped query for non-terminal FAST gens (BRAND own, ADMIN latest 10) → `Promise.allSettled(pollAndFinalize)` → `{ polled }` |
+| `regenerateGeneration` | BRAND owner or ADMIN, rate-limited 6/h | Re-submit a terminal FAST generation (1 credit, refund on failure); ownership checked **before** deduction |
 | `adminGetUsers` / `adminGetUser` | ADMIN | User list (JS search, 50/page) / user detail + counts + last-5 projects |
 | `adminUpdateUser` / `adminSetUserStatus` / `adminDeleteUser` | ADMIN (not self) | Update role/limits/tier / suspend+reason or activate / **explicit cascade delete** (TablesDB has no FK cascades: projects, assets, events, revision_requests, users row, Appwrite user) |
 | `getPlatformKPIs` / `getSignupsSeries` / `getProjectsByMonth` / `getTopBrands` | ADMIN | Platform aggregates for admin dashboard/analytics |
