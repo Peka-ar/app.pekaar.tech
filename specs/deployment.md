@@ -14,14 +14,14 @@ Production runtime for Peka AR. This document is the **operational handbook**: w
 
 | Field | Value |
 |---|---|
-| **Host** | Appwrite Sites — site `peka-ar`, project "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) |
+| **Host** | Appwrite Sites — site id `peka-ar`, display name **app.pekaar.tech**, project "Peka.ar" (`6a8562a20037b62075e1`, region `fra`) |
 | **Production URL** | **https://app.pekaar.tech** (custom subdomain, rule type: Active deployment) |
 | **Branch URL** | `https://branch-main-86d3a7e.appwrite.network` — constant, re-points to latest `main` deployment |
-| **GitHub repo** | `https://github.com/Peka-ar/app.pekaar.tech` (deploy remote `origin`; VCS integration must be re-pointed from the retired `Peka-ar/website` repo — §3 step 1), branch `main`, root `/` |
-| **Build config** | framework `nextjs`, adapter **ssr**, build runtime `node-22`, `npm install` / `npm run build`, output `./.next`, timeout 60s, spec `s-2vcpu-2gb` build / `s-0.5vcpu-512mb` runtime |
-| **Management** | Appwrite Console → Sites → peka-ar (Deployments / Settings / Variables / Domains / Logs) |
+| **GitHub repo** | `https://github.com/Peka-ar/app.pekaar.tech` (deploy remote `origin`), branch `main`, root `/`. **Gotcha:** the VCS integration tracks the repo by its immutable GitHub id (`1339382325`) — renaming `Peka-ar/website` → `Peka-ar/app.pekaar.tech` kept the site connected automatically; verify with MCP `sites_get {site_id:"peka-ar"}` (`providerRepositoryId`) instead of assuming a re-point is needed |
+| **Build config** | framework `nextjs`, adapter **ssr**, build runtime `node-24`, `npm install` / `npm run build`, output `./.next`, timeout 60s, spec `s-4vcpu-4gb` build / `s-2vcpu-2gb` runtime |
+| **Management** | Appwrite Console → Sites → app.pekaar.tech (site id `peka-ar`; Deployments / Settings / Variables / Domains / Logs) |
 
-Deploy = `git push origin main`. Build config lives in the console, not the repo. Build ~3.5–5 min (cache hit compiles in ~20s). Deployment URLs rotate per build — never reference them; use `app.pekaar.tech` or the branch URL.
+Deploy = `git push origin main`. Build config lives in the console, not the repo. Build ≈2–4 min (observed ~2 min warm). Deployment URLs rotate per build — never reference them; use `app.pekaar.tech` or the branch URL.
 
 **Deployment gotcha:** only **VCS deployments from `main` re-point the branch URL**; a manual "duplicate deployment" builds fresh but leaves the branch URL on the old deployment. To redeploy after env-var changes: MCP `sites_create_vcs_deployment {site_id:"peka-ar", type:"branch", reference:"main", activate:true}` (or push to `origin`).
 
@@ -29,10 +29,10 @@ Deploy = `git push origin main`. Build config lives in the console, not the repo
 
 | Field | Value |
 |---|---|
-| **Host** | Appwrite Sites — new site (console id **confirm**, created for the split; referenced here as `peka-ar-marketing`) in project "Peka.ar" |
+| **Host** | Appwrite Sites — site id `peka-ar-marketing`, display name **pekaar.tech**, project "Peka.ar" |
 | **Production URL** | **https://pekaar.tech** (apex, moved from the app site at cutover, rule type: Active deployment) |
 | **GitHub repo** | `https://github.com/Peka-ar/pekaar.tech`, branch `main`, root `/` |
-| **Build config** | framework `astro`, install `npm install`, build `npm run build`, output `./dist`, build runtime `node-22`, **"Server side rendering" checked** (the site is hybrid: static `dist/` + the on-demand `/embed/*` + `/api/sdk/*` redirects served by the `@astrojs/node` standalone adapter — Appwrite's Astro SSR docs list exactly this adapter as the SSR prerequisite) |
+| **Build config** | framework `astro`, install `npm install`, build `npm run build`, output `./dist`, build runtime `node-24`, spec `s-4vcpu-4gb` build / `s-1vcpu-1gb` runtime, **"Server side rendering" checked** (the site is hybrid: static `dist/` + the on-demand `/embed/*` + `/api/sdk/*` redirects served by the `@astrojs/node` standalone adapter — Appwrite's Astro SSR docs list exactly this adapter as the SSR prerequisite) |
 | **Management** | Appwrite Console → Sites → (marketing site) — same sections as the app site |
 
 Deploy = `git push origin main`. **No site variables required** — the app origin defaults to `https://app.pekaar.tech` (`PUBLIC_APP_URL` exists only as an override). This site never talks to Appwrite (no Auth/Storage/DB calls), so it needs no API key and no web platform.
@@ -72,17 +72,20 @@ Stripe is **not** wired — no webhook handler exists and no `STRIPE_*` vars are
 
 The repos and code are ready; these are the console/DNS actions that put traffic on the split. **Steps 1–3 before the DNS move; 4–7 with it; 8 verifies.**
 
-1. **App site → new repo.** Push app `main` to `Peka-ar/app.pekaar.tech`, then re-point site `peka-ar`'s VCS integration from `Peka-ar/website` to `Peka-ar/app.pekaar.tech` (console: site Settings → repository/build settings; the GitHub App must have access to the new repo). If the console cannot swap repositories on an existing site, recreate the site with the new repo **before** moving domains — note any site id change affects the branch URL and MCP commands.
+**Status: steps 1–6 and 8 are done and verified. Step 7 is delivered as `.github/workflows/nightly-maintenance.yml` + the `CRON_SECRET` site variable — two console steps remain: add the repo secret on GitHub and disable the frozen Vercel cron.** Until those land, the workflow fails fast (missing secret) and the Vercel cron keeps 404ing against the marketing apex (harmless but nightly maintenance does not run).
+
+1. **App site → new repo.** Push app `main` to `Peka-ar/app.pekaar.tech`. No console action needed: the site tracks the repo by its **immutable GitHub id** (`1339382325`), so the GitHub rename `Peka-ar/website` → `Peka-ar/app.pekaar.tech` kept the integration attached — confirm with MCP `sites_get {site_id:"peka-ar"}` → `providerRepositoryId == 1339382325`.
 2. **Create the marketing site.** Console → Sites → Create site → connect `Peka-ar/pekaar.tech` → framework Astro, output `./dist`, **Server side rendering on** → Deploy (§1 Marketing site).
 3. **App env var.** Site `peka-ar` → Variables → `NEXT_PUBLIC_APP_URL` = `https://app.pekaar.tech` → trigger a new deployment (values bake at build time).
-4. **DNS record.** Org → Domains → `pekaar.tech` → Manage Records → add **CNAME `app` → Appwrite site hostname** (what the console's domain dialog shows for site `peka-ar`); attach `app.pekaar.tech` to site `peka-ar` (Domains → Add, rule type Active deployment). TLS issues automatically.
+4. **DNS record.** Org → Domains → `pekaar.tech` → Manage Records → add **CNAME `app` → `appwrite.network`** (the target Appwrite shows for Sites; the zone's locked wildcard `* → appwrite.network` already resolves every subdomain, but the explicit record is what verification expects). Then attach `app.pekaar.tech` to site `peka-ar` (Domains → Add, rule type Active deployment; MCP `proxy_create_site_rule {domain:"app.pekaar.tech", site_id:"peka-ar"}`). TLS issues automatically.
 5. **Move the apex.** Site `peka-ar` → Domains → `pekaar.tech` → **remove** (record lives in the org zone — removing the site binding keeps the DNS record). Marketing site → Domains → add `pekaar.tech`, rule type Active deployment → Verify (§8 gotchas apply: resolver-cache false alarms right after propagation).
+   **Mechanics gotcha:** a hostname holds exactly one rule — creating it on the second site first fails `409 rule_already_exists`, so the move is delete-then-create: MCP `proxy_delete_rule {rule_id:"bb172a1a74c7e8aab97273869b4c7a87"}` then `proxy_create_site_rule {domain:"pekaar.tech", site_id:"peka-ar-marketing"}`. Deleting the apex rule does **not** touch the org zone (all DNS records survive — verified), and the recreated rule **reuses the same id** (that id equals the org-domain id) and re-issues TLS within seconds.
 6. **Web platform.** Project → Overview → Platforms → add hostname **`app.pekaar.tech`** (browser-direct Storage uploads + client SDK now run on that origin; without the platform every upload 403s `general_unknown_origin`). Keep `pekar-tech-web` (`pekaar.tech`) while it exists; the marketing site makes no Appwrite calls.
-7. **Cron.** Stand up an external scheduler (GitHub Actions cron or cron-job.org) hitting `https://app.pekaar.tech/api/cron/maintenance` with `Authorization: Bearer ${CRON_SECRET}` at 02:00 UTC; add `CRON_SECRET` as a site variable on `peka-ar` + redeploy. Then disable the frozen project's Vercel cron (Settings → Cron Jobs) so it stops 404ing against the marketing apex. Never route this through the apex (header stripping — §1).
-8. **Smoke test** (both origins + redirects):
-   - `https://pekaar.tech/` 200 (Astro landing) · `/pricing` 200 · `/sitemap-index.xml` 200 · `GET https://pekaar.tech/embed/<published-id>?x=1` → **301** to `app.pekaar.tech` with query preserved · `POST` same URL → **308**.
-   - `https://app.pekaar.tech/api/health` `{ok:true}` · `/auth` 200 · unauth'd `/admin/dashboard` → 307 `/auth` · a PUBLISHED project's `/api/sdk/v1/config/{id}` 200 + `/embed/{id}` 200 · sign-in works · **project image upload succeeds from the app origin** (proves step 6).
-   - After 02:00 UTC: the new scheduler's run shows 200 in its logs AND `GET /api/cron/maintenance` with no header returns 401 (fail-closed intact).
+7. **Cron — GitHub Actions.** `.github/workflows/nightly-maintenance.yml` GETs `https://app.pekaar.tech/api/cron/maintenance` with `Authorization: Bearer ${{ secrets.CRON_SECRET }}` at 02:00 UTC (plus `workflow_dispatch` for manual runs) and fails the job on any non-200. The `CRON_SECRET` site variable on `peka-ar` is set (secret, id `cron-secret`; the route fail-closes to **503** when unset, **401** on a bad token). **Two manual steps remain:** (a) add the same value as repo secret `CRON_SECRET` (GitHub → repo → Settings → Secrets and variables → Actions), (b) disable the frozen project's Vercel cron (Settings → Cron Jobs). Gotchas: GitHub auto-**pauses `schedule:` triggers after ~60 days without repo activity** — re-enable from the Actions tab. Never route this through the apex (header stripping — §1).
+8. **Smoke test** (both origins + redirects) — all curl-verified, except where noted:
+   - `https://pekaar.tech/` 200 (Astro landing, served by the marketing site's deployment — check `X-Appwrite-Deployment-Id`) · `/pricing` → **301 canonical trailing slash** → `/pricing/` 200 (Astro, not an error) · `/sitemap-index.xml` 200 · `GET https://pekaar.tech/embed/<published-id>?x=1` → **301** to `app.pekaar.tech` with query preserved · `POST` same URL → **308** · `GET /api/sdk/v1/config/<id>` → **301**, `POST` → **308**.
+   - `https://app.pekaar.tech/api/health` `{"status":"ok",...}` · `/auth` 200 · unauth'd `/admin/dashboard` → 307 `/auth` · a PUBLISHED project's `/api/sdk/v1/config/{id}` 200 + `/embed/{id}` 200 · app `/` responds **200 with a meta-refresh to the apex** (Next `permanentRedirect` streams the shell first, so the digest carries `NEXT_REDIRECT;…;308` instead of a `Location` header — browsers land on `pekaar.tech` immediately; don't "fix" this by expecting 308) · **sign-in works** and **project image upload succeeds from the app origin** (proves platform registration — manual browser checks).
+   - The workflow's run shows 200 in its logs AND `GET /api/cron/maintenance` with no header returns **401** (secret set; a **503** would mean the site variable vanished).
 
 ---
 
@@ -97,8 +100,8 @@ Site variables are set in Console → Sites → (site) → Settings → Variable
 | `STUDIOV_API_KEY` | Appwrite server API key (same value as local `APPWRITE_API_KEY`) | `studiov-api-key` |
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | `https://fra.cloud.appwrite.io/v1` | `next-public-endpoint` |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` | `next-public-project-id` |
-| `NEXT_PUBLIC_APP_URL` | **`https://app.pekaar.tech`** (was `https://pekaar.tech` — cutover step 3) | `next-public-app-url` |
-| `CRON_SECRET` | shared secret for the nightly cron (cutover step 7; not set until then) | — |
+| `NEXT_PUBLIC_APP_URL` | **`https://app.pekaar.tech`** | `next-public-app-url` |
+| `CRON_SECRET` | shared secret for the nightly cron — must equal the GitHub Actions repo secret `CRON_SECRET` (step 7) | `cron-secret` (secret) |
 
 - Sites **forbids user-set env vars with the `APPWRITE_` prefix** (reserved for Appwrite-injected vars) — hence the server key lives in `STUDIOV_API_KEY`, read as `process.env.STUDIOV_API_KEY ?? process.env.APPWRITE_API_KEY!` in `src/server/appwrite.ts`. All required vars are validated at boot by `src/server/env.ts`.
 - Local dev (`.env`, gitignored) uses `APPWRITE_API_KEY` — the fallback handles both. `ADMIN_*` vars are only needed by `npm run sync-admin` / `seed-appwrite` — **never set them as site variables** (anyone with console access could reset the admin password); run those scripts locally against the same Appwrite project.
@@ -120,7 +123,7 @@ Every origin that makes browser-direct Appwrite calls (Storage uploads, client S
 
 | Platform id | Hostname |
 |---|---|
-| **`app-pekaar-tech`** | **`app.pekaar.tech`** — the app origin (cutover step 6; **required or uploads break**) |
+| **`app-pekaar-tech`** | **`app.pekaar.tech`** — the app origin (**required or uploads break**) |
 | `pekar-tech-web` | `pekaar.tech` (legacy/apex — marketing makes no Appwrite calls; keep until confirmed removable) |
 | `web-production-site` | `studio-v-indol.vercel.app` |
 | `peka-ar-site` | `branch-main-86d3a7e.appwrite.network` |
@@ -130,7 +133,7 @@ Keep these in sync whenever a hostname changes.
 
 ### Domain & DNS (pekaar.tech)
 
-The domain is **NS-delegated** to Appwrite DNS (`ns1.appwrite.zone` / `ns2.appwrite.zone`) — Appwrite serves the zone (A records → Fastly, auto-applied CAA `0 issue "certainly.com"`) and auto-issues/renews the TLS certificate (Certainly). **All DNS records for pekaar.tech are managed in the Appwrite Console** (organization → Domains → Manage Records), not at get.tech. If email or other DNS-dependent services are ever added, their records must be created there. No MX/TXT records exist today (email not set up — intentional).
+The domain is **NS-delegated** to Appwrite DNS (`ns1.appwrite.zone` / `ns2.appwrite.zone`) — Appwrite serves the zone (A records → Fastly, auto-applied CAA `0 issue "certainly.com"`) and auto-issues/renews the TLS certificate (Certainly). **All DNS records for pekaar.tech are managed in the Appwrite Console** (organization → Domains → Manage Records), not at get.tech. Email **is** configured on this zone (Resend inbound): MX `contact` → `inbound-smtp.ap-northeast-1.amazonaws.com`, CNAMEs `rsend.contact`/`send.contact` → forge.rmta.net, DKIM TXT `resend._domainkey.contact`, `_dmarc` TXT `p=none` (**two duplicate records exist** — both harmless), plus a google-site-verification TXT at the apex. The apex `A`/`AAAA` and wildcard `*` CNAME are Appwrite-locked records — never delete them.
 
 **Post-split records:** apex `pekaar.tech` → marketing site; `app` (CNAME) → app site. Both are site-domain bindings of records that live in the org zone.
 
@@ -210,12 +213,12 @@ Trunk-based: `main` is the only long-lived branch. Feature branches can be pushe
 
 ### After every push
 
-1. Console → Sites → (the site you pushed to) → **Deployments** → watch the build (~3–5 min)
+1. Console → Sites → (the site you pushed to) → **Deployments** → watch the build (~2–4 min)
 2. **Wait for "Ready"** — failed builds never activate
 3. Open the build logs if it failed (deployment row → logs)
 4. Smoke-test **the origin you changed**:
-   - **App** — `https://app.pekaar.tech`: `/api/health` `{ok:true}` · `/auth` 200 · unauth'd `/admin/dashboard` → 307 `/auth` · a PUBLISHED project's `/api/sdk/v1/config/{id}` 200 + `/embed/{id}` 200 · sign-in works.
-   - **Marketing** — `https://pekaar.tech`: `/` 200 · `/pricing` 200 · `GET /embed/<id>` → 301 to `app.pekaar.tech` · `POST /embed/<id>` → 308.
+   - **App** — `https://app.pekaar.tech`: `/api/health` `{"status":"ok",...}` · `/auth` 200 · unauth'd `/admin/dashboard` → 307 `/auth` · a PUBLISHED project's `/api/sdk/v1/config/{id}` 200 + `/embed/{id}` 200 · sign-in works.
+   - **Marketing** — `https://pekaar.tech`: `/` 200 · `/pricing` 301 → `/pricing/` 200 (canonical slash) · `GET /embed/<id>` → 301 to `app.pekaar.tech` · `POST /embed/<id>` → 308.
 
 ---
 
@@ -272,14 +275,14 @@ No git revert, no rebuild, no DB changes — the domain + branch URL re-point at
 The apex is attached via **NS delegation** (Appwrite's recommended apex method — apex records cannot be CNAMEs per RFC, and get.tech/Namify has no CNAME flattening):
 
 1. Registrar get.tech (Namify; https://manage.get.tech) — nameservers `ns1.appwrite.zone` + `ns2.appwrite.zone` (**already done — unchanged by the split**).
-2. Console → Sites → **marketing** → Domains → `pekaar.tech`, rule type **Active deployment** (moved from site `peka-ar` at cutover step 5). Org → Domains holds the zone (where records are managed).
-3. Web platform on the project: hostname **`app.pekaar.tech`** registered (cutover step 6) for the app; `pekar.tech` kept.
-4. App site variable `NEXT_PUBLIC_APP_URL` → `https://app.pekaar.tech` + new deployment (cutover step 3).
+2. Console → Sites → **`peka-ar-marketing`** (display name `pekaar.tech`) → Domains → `pekaar.tech`, rule type **Active deployment** — the app site `peka-ar` no longer holds any apex binding. Org → Domains holds the zone (where records are managed).
+3. Web platform on the project: hostname **`app.pekaar.tech`** registered (platform id `app-pekaar-tech`) for the app; `pekar-tech-web` (`pekaar.tech`) kept.
+4. App site (`peka-ar`) variable `NEXT_PUBLIC_APP_URL` = `https://app.pekaar.tech` — values bake at build, so any change needs a new deployment.
 
 ### Subdomain (app.pekaar.tech → app site)
 
-1. Org → Domains → `pekaar.tech` → Manage Records → add CNAME `app` → the app site's hostname (the site's Domains tab shows the record to create).
-2. Sites → peka-ar → Domains → `app.pekaar.tech`, rule type Active deployment → Verify.
+1. Org → Domains → `pekaar.tech` → Manage Records → add CNAME `app` → **`appwrite.network`**.
+2. Sites → app.pekaar.tech (id `peka-ar`) → Domains → `app.pekaar.tech`, rule type Active deployment → Verify.
 3. Platform registration (step 3 above) **before** traffic moves.
 
 **Gotchas (do not repeat):**

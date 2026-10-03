@@ -56,7 +56,7 @@ Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
 | Layer | Tech | Notes |
 |---|---|---|
 | Framework | **Next.js 16** (App Router, Turbopack) | config in `next.config.mjs` |
-| Hosting | **Appwrite Sites** (site `peka-ar`) at **https://app.pekaar.tech** + frozen Vercel mirror (still serves old vercel.app embed URLs; its cron trigger died at the split — external scheduler now) | handbook: `specs/deployment.md` |
+| Hosting | **Appwrite Sites** (site id `peka-ar`, display name `app.pekaar.tech`) at **https://app.pekaar.tech** + frozen Vercel mirror (still serves old vercel.app embed URLs; its cron trigger died at the split — external scheduler now) | handbook: `specs/deployment.md` |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | tokens in `globals.css` |
 | 3D | **Google `<model-viewer>`** via `next/script` | no SSR — dynamically imported (in-app configurator) |
 | Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client + SSR helpers) + `node-appwrite` (server) | `src/server/auth-guards.ts`, `src/server/appwrite.ts` |
