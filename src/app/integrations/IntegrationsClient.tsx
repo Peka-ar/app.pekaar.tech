@@ -119,7 +119,7 @@ const PLATFORMS: PlatformDef[] = [
     key: "other",
     name: "Other",
     tagline: "Anywhere HTML is allowed",
-    steps: "For any other storefront, paste the iframe wherever custom HTML is supported. If your storefront enforces a content security policy, allow frame-src against your Peka AR origin (pekaar.tech).",
+    steps: "For any other storefront, paste the iframe wherever custom HTML is supported. If your storefront enforces a content security policy, allow frame-src against your Peka AR origin (app.pekaar.tech).",
     Logo: OtherLogo,
   },
 ];

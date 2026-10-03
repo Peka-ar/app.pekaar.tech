@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Providers } from "./providers";
-import { TopNav } from "@/components/TopNav";
 import { createNextServerHelpers } from "@appwrite.io/react/server/next";
 import { APPWRITE_ENDPOINT, APPWRITE_PROJECT_ID } from "@/lib/appwrite-config";
 
@@ -36,7 +35,7 @@ const instrumentSerif = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://pekaar.tech"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? "https://app.pekaar.tech"),
   title: "Peka AR — Product photos to interactive 3D",
   description:
     "Peka AR turns product photography into artist-finished, web-optimized 3D assets — live on your storefront in hours, with one-line embed and AR view-in-room.",
@@ -70,7 +69,6 @@ export default async function RootLayout({
       </head>
       <body className="min-h-full flex flex-col font-sans bg-[var(--color-canvas)] text-[var(--color-text-primary)] transition-colors duration-300" suppressHydrationWarning>
         <Providers session={session}>
-          <TopNav />
           {children}
         </Providers>
       </body>

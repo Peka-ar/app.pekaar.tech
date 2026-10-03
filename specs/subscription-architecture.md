@@ -13,7 +13,7 @@ Four tiers defined in `src/lib/plans.ts` (client-safe) with `SubscriptionTier` e
 | `BUSINESS` | $50/mo | 100 | No |
 | `ENTERPRISE` | Custom | Custom | Yes (`monthlyCreditOverride`) |
 
-Tier = credits + label only. No feature gating beyond credits. "Model hosting, CDN, AR" are available to all tiers; marketing features listed on `/pricing` page.
+Tier = credits + label only. No feature gating beyond credits. "Model hosting, CDN, AR" are available to all tiers; marketing features are listed on the marketing site's `/pricing` page (apex, sister repo `Peka-ar/pekaar.tech`).
 
 ## 2. Data model additions
 
@@ -73,7 +73,7 @@ Two intake paths; both end as `contact_requests` rows.
 - Zod validation (`contactRequestSchema`); `company` is injected server-side from `principal.companyName` — never client-supplied
 - Persists to `contact_requests` (status `NEW`), `sourceIp` null
 
-**General queries:** `/contact` page displays `kaizen3242@gmail.com` (mailto link + copy button). No form, no table write.
+**General queries:** the marketing site's `/contact` page (apex) displays `kaizen3242@gmail.com` (mailto link + copy button). No form, no table write — this app only receives structured `contact_requests` (billing plan requests, managed at `/admin/requests`).
 
 Admin inbox: `/admin/requests` — list, status transitions (NEW→CONTACTED→RESOLVED), delete.
 
@@ -81,9 +81,7 @@ Admin inbox: `/admin/requests` — list, status transitions (NEW→CONTACTED→R
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `/pricing` | Public | Marketing page: 4 plan cards, benefits + how-credits-work + included features + FAQ (copy-truth rules apply, proof attributed), paid cards link to `/billing` |
 | `/billing` | BRAND/ADMIN | Current plan card, credits remaining, plan comparison with per-plan Contact us → plan-request popup |
-| `/contact` | Public | Contact page: mailto `kaizen3242@gmail.com` + copy button |
 | `/admin/requests` | ADMIN | Contact request inbox with status management |
 
 ## 8. Server actions

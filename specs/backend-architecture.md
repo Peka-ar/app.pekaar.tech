@@ -137,7 +137,7 @@ Publish semantics (unchanged from prior behavior, now centralized):
 
 ## 11. Nightly maintenance cron
 
-**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). Registered in `vercel.json` at `0 2 * * *` (02:00 UTC daily). `maxDuration = 300`. **Trigger source:** Vercel Cron fires this against the **frozen Vercel deployment** (which holds `CRON_SECRET`) — Appwrite Sites has no scheduler. If the Vercel project is deleted, move the trigger to an external scheduler (GitHub Actions / cron-job.org) hitting `https://pekaar.tech/api/cron/maintenance` and set `CRON_SECRET` as an Appwrite site variable (see `deployment.md` §3).
+**Route:** `GET /api/cron/maintenance` (`src/app/api/cron/maintenance/route.ts`). `maxDuration = 300`. **Trigger source:** an **external scheduler** (GitHub Actions / cron-job.org) at 02:00 UTC hitting `https://app.pekaar.tech/api/cron/maintenance` with `Authorization: Bearer ${CRON_SECRET}` (site variable) — Appwrite Sites has no scheduler, and the frozen Vercel deployment's own cron **breaks at the site split** (its production domain `pekaar.tech` now serves the marketing site; an apex redirect would strip the `Authorization` header anyway). Setup: `deployment.md` §3 step 7. The route fails closed (401/503) without the secret.
 
 **Auth guard (fail closed):** the cron trigger sends `Authorization: Bearer ${CRON_SECRET}`. Comparison is **timing-safe** (`timingSafeEqual` from `node:crypto`, length-checked first). If `CRON_SECRET` is unset → `503 { ok: false, error: "not configured" }` (run skipped, logged). If the header does not match → `401`. Any other failure goes through `handleApiError`.
 

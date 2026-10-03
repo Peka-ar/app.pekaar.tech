@@ -23,7 +23,7 @@ Brand storefront
             └─ lazy-loads model-viewer.min.js from ajax.googleapis.com
 ```
 
-**No Next.js page render.** The embed never touches `app/layout.tsx`, never loads fonts, never hydrates `TopNav` or any React provider. The whole embed is a route handler that streams a static HTML template + vanilla JS.
+**No Next.js page render.** The embed never touches `app/layout.tsx`, never loads fonts, never hydrates any React shell or provider. The whole embed is a route handler that streams a static HTML template + vanilla JS.
 
 ---
 
@@ -36,7 +36,7 @@ GET, public. Flow: async `params.projectId` → `getRowSafe(projects)` with **PU
 
 ## Static template (`public/embed-viewer.html`)
 
-~12 KB, single file, no bundler. Contains: local tokens (`--bg`, `--border`, `--text-muted`, `--text-primary`, `--hover`, `--btn-bg`, `--grid-end`, `--grid-line`, `--ctl-active-bg/fg`, `--ar-bg/fg/…` — an intentional studio-backdrop exception to the app palette), a light-first `[data-theme="dark"]` override block + early-paint script, the model-viewer module script in `<head>` (4.2.0, matches the landing page), frame card + stage, loader (spinning `RefreshCw` + `LOADING… NN%` on `progress`), error line, top-right controls, inline module script.
+~12 KB, single file, no bundler. Contains: local tokens (`--bg`, `--border`, `--text-muted`, `--text-primary`, `--hover`, `--btn-bg`, `--grid-end`, `--grid-line`, `--ctl-active-bg/fg`, `--ar-bg/fg/…` — an intentional studio-backdrop exception to the app palette), a light-first `[data-theme="dark"]` override block + early-paint script, the model-viewer module script in `<head>` (`@google/model-viewer@4.2.0` from jsdelivr — **pinned identically in `ThreeDConfigurator.tsx` and the marketing repo's Sandbox/PipelineCard; bump all three together**), frame card + stage, loader (spinning `RefreshCw` + `LOADING… NN%` on `progress`), error line, top-right controls, inline module script.
 
 Inline script outline: `projectId` → `sessionId = crypto.randomUUID()` → theme button sync/toggle (below) → fetch config → on 404/no GLB show "This 3D model is not currently available." → build `<model-viewer>` with the hardcoded attribute set (+ `ios-src` when USDZ present) → `customElements.whenDefined(...)` applies initial camera + `jumpCameraToGoal()` (no fly-in) → wire rotate/reset buttons + loader progress → on `load` reveal controls (+ AR button if `canActivateAR`) → send events: `VIEW` immediately, `INTERACTION` on first `camera-change`, `AR_LAUNCH` on first `ar-status: session-started`/`object-placed` (each once per page view).
 
@@ -46,7 +46,7 @@ Inline script outline: `projectId` → `sessionId = crypto.randomUUID()` → the
 
 ## Hardcoded config
 
-Every embed uses the **same viewer config** — per-project `sdkConfig` is not read (kept in the schema/SDK response for forward-compat and third-party consumers). Values are lifted directly from `src/components/ThreeDConfigurator.tsx` so the embed and the landing page render identically. **User decision: fixed config, no per-model fetch** — the only per-project field is `assetUrls.glb`.
+Every embed uses the **same viewer config** — per-project `sdkConfig` is not read (kept in the schema/SDK response for forward-compat and third-party consumers). Values are lifted directly from `src/components/ThreeDConfigurator.tsx` so the embed and the in-app configurator (and the marketing Sandbox, which mirrors the same set) render identically. **User decision: fixed config, no per-model fetch** — the only per-project field is `assetUrls.glb`.
 
 | Attribute | Value |
 |---|---|
@@ -66,7 +66,7 @@ Every embed uses the **same viewer config** — per-project `sdkConfig` is not r
 
 ## Controls + AR button
 
-**Top-right control stack** (hidden until `load`): theme toggle (`#btn-theme` — first in the stack; moon/sun SVG swap via `aria-pressed` + `data-theme`), rotate toggle (`#btn-rotate` — spins its icon while `aria-pressed="true"`, matches landing's 8s rotation) and camera reset (`#btn-reset` — re-applies the initial orbit/target). All circular 40×40 (`--btn-bg`, hairline border, focus rings).
+**Top-right control stack** (hidden until `load`): theme toggle (`#btn-theme` — first in the stack; moon/sun SVG swap via `aria-pressed` + `data-theme`), rotate toggle (`#btn-rotate` — spins its icon while `aria-pressed="true"`, matches the configurator's 8s rotation) and camera reset (`#btn-reset` — re-applies the initial orbit/target). All circular 40×40 (`--btn-bg`, hairline border, focus rings).
 
 **Theme toggle fires no analytics event** — only `camera-change` maps to `INTERACTION`; the toggle is pure chrome.
 

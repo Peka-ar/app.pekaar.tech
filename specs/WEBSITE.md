@@ -47,6 +47,8 @@ Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
 
 **PUBLISHED is the only embed-servable state.** Sending a PUBLISHED project for revisions stops the embed immediately (embed route is `no-store` + `force-dynamic`). Revision notes are stored in the `revision_requests` table (one row per request) so the full back-and-forth is preserved.
 
+**Site split:** this repo is the **app** at `https://app.pekaar.tech`. The marketing site (landing, pricing, contact, terms, privacy, about, blog) lives at the apex `https://pekaar.tech` in the sister repo `Peka-ar/pekaar.tech` (Astro — its specs live there). The apex permanently 301/308-redirects `/embed/*` + `/api/sdk/*` here; this repo's root `/` permanently redirects to the apex.
+
 ---
 
 ## 2. Stack
@@ -54,10 +56,9 @@ Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
 | Layer | Tech | Notes |
 |---|---|---|
 | Framework | **Next.js 16** (App Router, Turbopack) | config in `next.config.mjs` |
-| Hosting | **Appwrite Sites** (primary, **https://pekaar.tech**) + frozen Vercel mirror (still serves old embed URLs + fires the nightly cron) | handbook: `specs/deployment.md` |
+| Hosting | **Appwrite Sites** (site `peka-ar`) at **https://app.pekaar.tech** + frozen Vercel mirror (still serves old vercel.app embed URLs; its cron trigger died at the split — external scheduler now) | handbook: `specs/deployment.md` |
 | UI | **React 19**, **Tailwind CSS v4**, **lucide-react** | tokens in `globals.css` |
-| 3D | **Google `<model-viewer>`** via `next/script` | no SSR — dynamically imported |
-| Motion | **framer-motion** (landing-only) | transform/opacity only, reduced-motion off-ramps |
+| 3D | **Google `<model-viewer>`** via `next/script` | no SSR — dynamically imported (in-app configurator) |
 | Auth | **Appwrite Cloud** (region `fra`) — `@appwrite.io/react` (client + SSR helpers) + `node-appwrite` (server) | `src/server/auth-guards.ts`, `src/server/appwrite.ts` |
 | DB | **Appwrite TablesDB** (database `studiov`, 6 tables) | `src/server/db/client.ts`, `src/lib/appwrite-config.ts` |
 | File storage | **Appwrite Storage** — buckets `models` (ADMIN-create, 150 MB) + `reference-images` (BRAND-create, 16 MB) | browser-direct uploads; full spec: `file-storage-architecture.md` |
@@ -76,12 +77,12 @@ Status labels differ by viewer (`getStatusLabel` in `src/lib/status.ts`):
 ## 3. Folder layout
 
 ```
-website/
+app.pekaar.tech/
 ├── public/embed-viewer.html   # static template served by the /embed route handler
 ├── public/peka_logo.png       # brand logo (image mark used by every header/footer; source for favicon set)
 ├── src/
 │   ├── app/                   # App Router pages + actions/ (server actions) + api/ (API routes)
-│   ├── components/            # ui/ (primitives), charts/ (ChartBars), landing/, auth/, dashboard/, admin/, ThreeDConfigurator
+│   ├── components/            # ui/ (primitives), charts/ (ChartBars), auth/, dashboard/, admin/, ThreeDConfigurator
 │   ├── lib/                   # client-safe: enums, appwrite-config, status, types, utils, hooks, project-augment
 │   ├── server/                # server-only: auth-guards, appwrite, env, storage, db/, http/, domain/, services/
 │   ├── assets/fonts/          # local woff2: Figtree 400+900 (display), Inter 300-600 (sans)
@@ -104,10 +105,7 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 
 | Route | Auth | Summary |
 |---|---|---|
-| `/` | Public | Marketing landing — see `pages/landing.md` |
-| `/pricing` | Public | Pricing page: plan cards, benefits (with attributed proof), how-credits-work, included features, FAQ, final CTA; paid cards → `/billing` — `subscription-architecture.md` |
-| `/contact` | Public | Contact page: mailto `kaizen3242@gmail.com` + copy button — `subscription-architecture.md` |
-| `/terms` `/privacy` | Public | Static placeholder legal pages (replace before launch) |
+| `/` | Public | `permanentRedirect("https://pekaar.tech")` — marketing owns the apex; this route exists only to land old root links there |
 | `/auth` | Public (session → role-aware redirect) | 3-view form: signin / signup / forgot-password |
 | `/auth/verify` | Public | Email verification link (`?userId&secret` → `updateVerification`) |
 | `/auth/reset-password` | Public | New-password form (`?userId&secret` → `updateRecovery`, 1-hr expiry) |
@@ -124,6 +122,8 @@ All `page.tsx` are server components; interactivity lives in `*Client.tsx`. Auth
 | `/admin/requests` | ADMIN | Contact request inbox — `subscription-architecture.md` |
 | `/admin/analytics` | ADMIN | Platform KPI cards, signups series, top brands |
 | `/embed/[projectId]` | Public | Static HTML iframe viewer — `pages/embed.md` |
+
+Marketing routes (`/pricing`, `/contact`, `/terms`, `/privacy`, `/about`, `/blog`) live on the apex — sister repo `Peka-ar/pekaar.tech`. Billing stays here: paid CTAs on the marketing pricing page link cross-origin into `/billing`.
 
 ---
 
@@ -270,7 +270,7 @@ Full spec: `file-storage-architecture.md`.
 Full spec: `pages/embed.md`.
 
 - **`/embed/[projectId]`** — route handler that reads `public/embed-viewer.html`, replaces `{PROJECT_ID}`, returns `no-store` + `force-dynamic` (PUBLISHED→REVISIONS stops serving immediately). Never touches `app/layout.tsx` — no fonts, no React, no providers.
-- **`GET /api/sdk/v1/config/[projectId]`** — public, 60s-cached. Only `assetUrls.glb`/`usdz` are per-project; **viewer config is hardcoded** (matches landing `ThreeDConfigurator` exactly, user decision). `sdkConfig` is kept for forward-compat.
+- **`GET /api/sdk/v1/config/[projectId]`** — public, 60s-cached. Only `assetUrls.glb`/`usdz` are per-project; **viewer config is hardcoded** (same values as the in-app `ThreeDConfigurator`, which both the embed template and the marketing Sandbox mirror, user decision). `sdkConfig` is kept for forward-compat.
 - **`POST /api/sdk/v1/events`** — VIEW on load, INTERACTION on first camera-change, AR_LAUNCH on first AR session-started/object-placed (once each per page view).
 - **Dark/light toggle** in the viewer: light default, applied pre-paint from `localStorage["peka-embed-theme"]` (per-origin — shared across all embeds); fires no analytics event. Themed via local tokens only — see `pages/embed.md` §Dark / light theme (incl. the `--text-primary` inversion trap).
 - **Embed liveness:** latest VIEW per project → "Last Seen" + amber (>7d) / red (>30d) badges on `/analytics` (`src/lib/embed-liveness.ts`).
@@ -289,13 +289,11 @@ Key invariants:
 - Tinted surfaces (sky/butter/accent-pale) are for capability/story bands and icon wells only — **never on interactive elements** (Peka Green owns interaction).
 - Status chips use fill tints of canonical tokens — `PROJECT_STATUS_META` in `src/lib/status.ts` maps status → tone/icon + role labels.
 - Figtree ships 400+900 only; every `.font-display` element is pinned to 900. App page headlines use the `.page-title` utility (`clamp(1.75rem,2.5vw,2rem)`).
-- `transition-all` is banned (use `transition-colors`, `transition-opacity`, or an explicit `transition-[property]`); gradients and hard-coded hex/rgba are banned in app markup (landing still carries sanctioned rgba scrims from the v3.2 landing pass).
+- `transition-all` is banned (use `transition-colors`, `transition-opacity`, or an explicit `transition-[property]`); gradients and hard-coded hex/rgba are banned in app markup.
 - Elevation shadows (`--shadow-1/2`) are reserved for floating layers (dropdowns, drawers, dark panels, hover lifts) — static white cards on sage are shadowless.
 - Radii: canonical card `24px` (`rounded-[24px]` = `rounded-3xl`); dense/mid-size cards may use `16px` (`rounded-2xl`).
 
 **v3.2 rollout state (all committed surfaces):** app shells (`DashboardLayout`/`AdminLayout` + mobile drawers) are a white sidebar with a sage `<main>`; there is no top header on desktop — mobile gets a slim top bar (hamburger + wordmark, below `md`) and page-level `action`s render right-aligned above content instead. Content cards are borderless white `24px` surfaces that pop on the sage canvas. Rolled-out pages: `/dashboard`, `/tasks`, `/notifications`, `/integrations`, `/analytics`, `/onboarding`, `/admin/*`; `/auth*` keeps its sanctioned white + ink-split layout with lime reserved for the dark panel. Dark ink panels survive only as component-level surfaces (`card inverted`, integrations embed section, review/published takeover modals, auth/onboarding split panels). Skeletons: pass `tone="sage"` for page-level white shapes; default (`canvas-soft`) is for bars on white card interiors.
-
-Landing-specific contracts (band rhythm, one primary CTA per viewport, copy truth): `pages/landing.md`.
 
 ---
 
@@ -308,7 +306,7 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 | `APPWRITE_API_KEY` | Server API key (local). On Appwrite Sites it's `STUDIOV_API_KEY` — read via the fallback in `src/server/appwrite.ts` |
 | `NEXT_PUBLIC_APPWRITE_ENDPOINT` | e.g. `https://fra.cloud.appwrite.io/v1` |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | `6a8562a20037b62075e1` |
-| `NEXT_PUBLIC_APP_URL` | App URL for auth email links + embed code (runtime-read) |
+| `NEXT_PUBLIC_APP_URL` | App URL for auth email links + embed code (runtime-read). **Production = `https://app.pekaar.tech`** — never the apex (that's the marketing site) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | For `sync-admin`/`seed:appwrite` — local only, never site variables |
 | `CRON_SECRET` | Optional; guards `/api/cron/maintenance` (held by the frozen Vercel mirror today) |
 | `HY3D_API_URL` | Optional; Hunyuan3D Modal API base URL (primary). Required for Fast mode. |
@@ -323,13 +321,12 @@ File: `.env.example` (local-only — gitignored via the `.env*` pattern). Valida
 - **`backend-architecture.md`** — server layering, error taxonomy, ActionResult, rate limiting, state machine, services, db client, auth guards, testing, cron, `ensure-backend`.
 - **`subscription-architecture.md`** — subscription tiers, credit renewal, contact requests, admin deal-setting, security.
 - **`file-storage-architecture.md`** — Appwrite Storage: buckets, browser-direct uploads, proxy, publish grants/revokes, archival.
-- **`deployment.md`** — production handbook: Appwrite Sites @ pekaar.tech, env vars, workflow, rollback, DNS, frozen Vercel mirror.
+- **`deployment.md`** — production handbook: two Appwrite Sites (app @ app.pekaar.tech + marketing @ apex pekaar.tech), cutover runbook, env vars, workflow, rollback, DNS, frozen Vercel mirror.
 - **`generation-architecture.md`** — AI pipeline (Fast) generation: Hunyuan3D Modal API integration, image normalization, manifest builder, poll/finalize, cron sweep, credits.
 - **`pages/tasks.md`** — `/tasks` Kanban + list + the 4 status modals.
 - **`pages/dashboard.md`** — `/dashboard` metrics + 12-month chart.
 - **`pages/auth.md`** — `/auth*` flows + session plumbing + security properties.
 - **`pages/admin.md`** — `/admin/*` pages + admin actions.
-- **`pages/landing.md`** — `/` landing: sections, copy truth, anchors, verification gates.
 - **`pages/embed.md`** — `/embed/[projectId]` + SDK endpoints + hardcoded config.
 
 ---

@@ -1,3 +1,6 @@
+// Product shape shared by the tasks pipeline and the shared configurator.
+// The demo catalog (PRODUCTS) moved to the marketing site — this file stays
+// because TasksClient and ThreeDConfigurator depend on the Product type.
 export interface Product {
   id: string;
   name: string;
@@ -14,17 +17,3 @@ export interface Product {
     depth: number;
   };
 }
-
-export const PRODUCTS: Product[] = [
-  {
-    id: 'sheen-armchair',
-    name: 'Velvet Sheen Armchair',
-    category: 'Sofas',
-    brand: 'Elysian Design',
-    price: 1290,
-    src: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/SheenChair/glTF-Binary/SheenChair.glb',
-    thumbnail: '/velvet_sheen_armchair.jpg',
-    description: 'Expertly designed to display the ultimate luxury of microfiber silk-velvet sheen shading. Fully customizable cushions and rear frame, paired with polished solid wood legs that elevate premium lounges.',
-    idealPhysicalDimensions: { width: 90, height: 95, depth: 88 }
-  }
-];
