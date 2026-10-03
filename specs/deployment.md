@@ -72,7 +72,7 @@ Stripe is **not** wired — no webhook handler exists and no `STRIPE_*` vars are
 
 The repos and code are ready; these are the console/DNS actions that put traffic on the split. **Steps 1–3 before the DNS move; 4–7 with it; 8 verifies.**
 
-**Status: steps 1–6 and 8 are done and verified. Step 7 is delivered as `.github/workflows/nightly-maintenance.yml` + the `CRON_SECRET` site variable — two console steps remain: add the repo secret on GitHub and disable the frozen Vercel cron.** Until those land, the workflow fails fast (missing secret) and the Vercel cron keeps 404ing against the marketing apex (harmless but nightly maintenance does not run).
+**Status: steps 1–6 and 8 are done and verified. Step 7 is delivered as `.github/workflows/nightly-maintenance.yml` + the `CRON_SECRET` site variable, and the endpoint is verified end-to-end (401 without token, 200 with). Two console steps remain: add the repo secret on GitHub and disable the frozen Vercel cron.** Until those land, the workflow fails fast (missing secret) and the Vercel cron keeps 404ing against the marketing apex (harmless but nightly maintenance does not run).
 
 1. **App site → new repo.** Push app `main` to `Peka-ar/app.pekaar.tech`. No console action needed: the site tracks the repo by its **immutable GitHub id** (`1339382325`), so the GitHub rename `Peka-ar/website` → `Peka-ar/app.pekaar.tech` kept the integration attached — confirm with MCP `sites_get {site_id:"peka-ar"}` → `providerRepositoryId == 1339382325`.
 2. **Create the marketing site.** Console → Sites → Create site → connect `Peka-ar/pekaar.tech` → framework Astro, output `./dist`, **Server side rendering on** → Deploy (§1 Marketing site).
@@ -85,7 +85,7 @@ The repos and code are ready; these are the console/DNS actions that put traffic
 8. **Smoke test** (both origins + redirects) — all curl-verified, except where noted:
    - `https://pekaar.tech/` 200 (Astro landing, served by the marketing site's deployment — check `X-Appwrite-Deployment-Id`) · `/pricing` → **301 canonical trailing slash** → `/pricing/` 200 (Astro, not an error) · `/sitemap-index.xml` 200 · `GET https://pekaar.tech/embed/<published-id>?x=1` → **301** to `app.pekaar.tech` with query preserved · `POST` same URL → **308** · `GET /api/sdk/v1/config/<id>` → **301**, `POST` → **308**.
    - `https://app.pekaar.tech/api/health` `{"status":"ok",...}` · `/auth` 200 · unauth'd `/admin/dashboard` → 307 `/auth` · a PUBLISHED project's `/api/sdk/v1/config/{id}` 200 + `/embed/{id}` 200 · app `/` responds **200 with a meta-refresh to the apex** (Next `permanentRedirect` streams the shell first, so the digest carries `NEXT_REDIRECT;…;308` instead of a `Location` header — browsers land on `pekaar.tech` immediately; don't "fix" this by expecting 308) · **sign-in works** and **project image upload succeeds from the app origin** (proves platform registration — manual browser checks).
-   - The workflow's run shows 200 in its logs AND `GET /api/cron/maintenance` with no header returns **401** (secret set; a **503** would mean the site variable vanished).
+   - The workflow's run shows 200 in its logs AND `GET /api/cron/maintenance` with no header returns **401**; with the correct `Bearer` token it returns **200** + a maintenance report (verified end-to-end after `70f7949`). A **503** would mean the site variable vanished.
 
 ---
 
@@ -213,6 +213,7 @@ Trunk-based: `main` is the only long-lived branch. Feature branches can be pushe
 
 ### After every push
 
+0. **Expect a brief origin outage per deploy.** While a new deployment builds and activates, the origin can answer `503 Backend unavailable, connection timeout` and the site's `live` flag flips false — including the window after editing site variables (any variable change marks the site not-live until the next deployment activates). Log shows build `ready` well before `Deployment finished` — edge distribution can take another ~5 min. Don't debug a 503 during that window as an app bug; wait for `X-Appwrite-Deployment-Id` to update, then retest.
 1. Console → Sites → (the site you pushed to) → **Deployments** → watch the build (~2–4 min)
 2. **Wait for "Ready"** — failed builds never activate
 3. Open the build logs if it failed (deployment row → logs)
